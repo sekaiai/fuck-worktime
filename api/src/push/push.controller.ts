@@ -1,40 +1,36 @@
-import { Body, Controller, Get, Post, Delete } from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 
-import { RegisterDeviceDto } from './dto/register-device.dto';
-import { SendMessageDto } from './dto/send-message.dto';
+import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { SendNotificationDto } from './dto/send-notification.dto';
 import { PushService } from './push.service';
 
 @Controller('push')
 export class PushController {
   constructor(private readonly pushService: PushService) {}
 
-  @Post('register')
-  register(@Body() dto: RegisterDeviceDto) {
-    return this.pushService.registerDevice(dto.cid, dto.platform, dto.userId);
+  @Get('public-key')
+  getPublicKey() {
+    return this.pushService.getPublicKey();
   }
 
-  @Delete('register/:cid')
-  unregister(cid: string) {
-    return this.pushService.unregisterDevice(cid);
-  }
-
-  @Get('registrations')
-  listRegistrations() {
-    return this.pushService.listRegistrations();
-  }
-
-  @Post('send')
-  sendMessage(@Body() dto: SendMessageDto) {
-    return this.pushService.sendMessage({
-      title: dto.title,
-      content: dto.content,
-      payload: dto.payload,
-      cids: dto.cids,
-    });
+  @Get('subscriptions')
+  getSubscriptions() {
+    return this.pushService.listSubscriptions();
   }
 
   @Get('diagnostic')
   getDiagnostic() {
     return this.pushService.getDiagnosticInfo();
   }
+
+  @Post('subscribe')
+  subscribe(@Body() subscription: CreateSubscriptionDto) {
+    return this.pushService.saveSubscription(subscription);
+  }
+
+  @Post('test')
+  sendTest(@Body() payload: SendNotificationDto) {
+    return this.pushService.sendTestNotification(payload);
+  }
 }
+

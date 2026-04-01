@@ -23,8 +23,8 @@ async function bootstrap() {
     }),
   );
 
-  const port = Number(process.env.PORT ?? 3000);
-  await app.listen(port);
+  // const port = Number(process.env.PORT ?? 3000);
+  await app.listen(10002);
 }
 
 bootstrap();
