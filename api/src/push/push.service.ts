@@ -1,163 +1,192 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as webpush from 'web-push';
+import axios from 'axios';
 
-import { CreateSubscriptionDto } from './dto/create-subscription.dto';
-import { StoredSubscription } from './push.types';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ProxyAgent = any;
+import { PushRegistration, PushMessage, PushResult } from './push.types';
 
 @Injectable()
 export class PushService {
   private readonly logger = new Logger(PushService.name);
-  private readonly subscriptions = new Map<string, StoredSubscription>();
+  private readonly registrations = new Map<string, PushRegistration>();
   private readonly requestTimeoutMs = 30000;
-  private readonly proxyAgent: ProxyAgent;
-  private readonly proxyUrl = 'http://127.0.0.1:7897';
+
+  private readonly appId: string;
+  private readonly appKey: string;
+  private readonly masterSecret: string;
+  private readonly apiUrl = 'https://restapi.getui.com/v2/$appId';
 
   constructor(private readonly configService: ConfigService) {
-    const subject = this.configService.get<string>('VAPID_SUBJECT');
-    const publicKey = this.configService.get<string>('VAPID_PUBLIC_KEY');
-    const privateKey = this.configService.get<string>('VAPID_PRIVATE_KEY');
+    this.appId = this.configService.get<string>('UNI_PUSH_APP_ID') ?? '';
+    this.appKey = this.configService.get<string>('UNI_PUSH_APP_KEY') ?? '';
+    this.masterSecret = this.configService.get<string>('UNI_PUSH_MASTER_SECRET') ?? '';
 
-    // 配置代理
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { HttpsProxyAgent } = require('https-proxy-agent');
-    this.proxyAgent = new HttpsProxyAgent(this.proxyUrl);
-    this.logger.log(`使用代理: ${this.proxyUrl}`);
-
-    if (subject && publicKey && privateKey) {
-      webpush.setVapidDetails(subject, publicKey, privateKey);
+    if (this.appId && this.appKey && this.masterSecret) {
+      this.logger.log('Uni-Push 配置已加载');
     } else {
-      this.logger.warn('VAPID keys are not configured. Push sending is disabled.');
+      this.logger.warn('Uni-Push 配置不完整，推送功能已禁用。请配置 UNI_PUSH_APP_ID, UNI_PUSH_APP_KEY, UNI_PUSH_MASTER_SECRET');
     }
   }
 
-  getPublicKey() {
-    return {
-      publicKey: this.configService.get<string>('VAPID_PUBLIC_KEY') ?? '',
-    };
-  }
-
-  saveSubscription(subscription: CreateSubscriptionDto) {
-    this.subscriptions.set(subscription.endpoint, subscription);
+  registerDevice(cid: string, platform: 'android' | 'ios' | 'web' = 'android', userId?: string): { success: boolean; count: number } {
+    this.registrations.set(cid, {
+      cid,
+      userId,
+      platform,
+      createdAt: new Date(),
+    });
 
     return {
       success: true,
-      count: this.subscriptions.size,
+      count: this.registrations.size,
     };
   }
 
-  listSubscriptions() {
-    return Array.from(this.subscriptions.values());
+  unregisterDevice(cid: string): { success: boolean; count: number } {
+    const deleted = this.registrations.delete(cid);
+
+    return {
+      success: deleted,
+      count: this.registrations.size,
+    };
+  }
+
+  listRegistrations(): PushRegistration[] {
+    return Array.from(this.registrations.values());
+  }
+
+  private async getAuthToken(): Promise<string> {
+    const url = `https://restapi.getui.com/v2/${this.appId}/auth`;
+    const timestamp = Date.now();
+    const sign = this.generateSign(timestamp);
+
+    const response = await axios.post(url, {
+      sign,
+      timestamp,
+      appkey: this.appKey,
+    }, {
+      timeout: this.requestTimeoutMs,
+    });
+
+    if (response.data.code === 0) {
+      return response.data.data.token;
+    }
+
+    throw new Error(`获取 Uni-Push Token 失败: ${response.data.msg}`);
+  }
+
+  private generateSign(timestamp: number): string {
+    const crypto = require('crypto');
+    const hash = crypto.createHash('sha256');
+    hash.update(this.appKey + timestamp + this.masterSecret);
+    return hash.digest('hex');
+  }
+
+  async sendMessage(message: PushMessage): Promise<PushResult> {
+    if (!this.appId || !this.appKey || !this.masterSecret) {
+      return {
+        success: false,
+        message: 'Uni-Push 配置不完整',
+        attempted: 0,
+        delivered: 0,
+        failed: 0,
+        errors: ['请配置 UNI_PUSH_APP_ID, UNI_PUSH_APP_KEY, UNI_PUSH_MASTER_SECRET'],
+      };
+    }
+
+    const cids = message.cids ?? Array.from(this.registrations.keys());
+
+    if (cids.length === 0) {
+      return {
+        success: false,
+        message: '没有已注册的设备',
+        attempted: 0,
+        delivered: 0,
+        failed: 0,
+        errors: ['请先注册设备 CID'],
+      };
+    }
+
+    this.logger.debug(`准备发送推送，设备数量: ${cids.length}`);
+
+    try {
+      const token = await this.getAuthToken();
+      const url = `https://restapi.getui.com/v2/${this.appId}/push/single/cid`;
+
+      const results = await Promise.allSettled(
+        cids.map(async (cid) => {
+          const response = await axios.post(url, {
+            request_id: `${Date.now()}_${cid.substring(0, 8)}`,
+            audience: {
+              cid: [cid],
+            },
+            push_message: {
+              notification: {
+                title: message.title,
+                body: message.content,
+                click_type: 'intent',
+                intent: message.payload?.url ?? '/',
+              },
+              transmission: message.payload ? JSON.stringify(message.payload) : undefined,
+            },
+          }, {
+            headers: {
+              'Content-Type': 'application/json',
+              token,
+            },
+            timeout: this.requestTimeoutMs,
+          });
+
+          return response.data;
+        }),
+      );
+
+      const delivered = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      const errors: string[] = [];
+
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const error = result.reason;
+          errors.push(`device[${index}]: ${error instanceof Error ? error.message : String(error)}`);
+          this.logger.warn(`Push delivery failed for device ${index}: ${String(error)}`);
+        }
+      });
+
+      return {
+        success: delivered > 0,
+        message: delivered > 0 ? '推送已发送' : '推送发送失败',
+        attempted: cids.length,
+        delivered,
+        failed,
+        errors,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Push sending failed: ${errorMessage}`);
+
+      return {
+        success: false,
+        message: '推送发送失败',
+        attempted: cids.length,
+        delivered: 0,
+        failed: cids.length,
+        errors: [errorMessage],
+      };
+    }
   }
 
   getDiagnosticInfo() {
-    const subscriptions = Array.from(this.subscriptions.values());
-    const endpointParts = subscriptions.map((sub) => {
-      try {
-        const url = new URL(sub.endpoint);
-        return {
-          origin: url.origin,
-          pathname: url.pathname,
-          protocol: url.protocol,
-        };
-      } catch {
-        return { raw: sub.endpoint };
-      }
-    });
+    const registrations = Array.from(this.registrations.values());
 
     return {
-      vapidConfigured: !!(
-        this.configService.get<string>('VAPID_SUBJECT') &&
-        this.configService.get<string>('VAPID_PUBLIC_KEY') &&
-        this.configService.get<string>('VAPID_PRIVATE_KEY')
-      ),
-      vapidSubject: this.configService.get<string>('VAPID_SUBJECT') ?? '',
-      subscriptionCount: subscriptions.length,
-      endpointOrigins: endpointParts,
+      configured: !!(this.appId && this.appKey && this.masterSecret),
+      appId: this.appId ? `${this.appId.substring(0, 8)}...` : '',
+      registrationCount: registrations.length,
+      platforms: registrations.reduce((acc, r) => {
+        acc[r.platform] = (acc[r.platform] ?? 0) + 1;
+        return acc;
+      }, {} as Record<string, number>),
       requestTimeoutMs: this.requestTimeoutMs,
-    };
-  }
-
-  async sendTestNotification(payload?: {
-    title?: string;
-    body?: string;
-    url?: string;
-  }) {
-    const subscriptions = Array.from(this.subscriptions.values());
-
-    // 记录订阅信息用于调试
-    this.logger.debug(`准备发送推送，订阅数量: ${subscriptions.length}`);
-    subscriptions.forEach((sub, index) => {
-      this.logger.debug(`订阅[${index}]: endpoint=${sub.endpoint.substring(0, 50)}...`);
-    });
-
-    const pushPayload = JSON.stringify({
-      title: payload?.title ?? '云上工时',
-      body: payload?.body ?? '这是一条测试通知。',
-      url: payload?.url ?? '/',
-    });
-
-    const results = await Promise.allSettled(
-      subscriptions.map((subscription) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const options: any = {
-          timeout: this.requestTimeoutMs,
-          TTL: 60,
-          urgency: 'high',
-          agent: this.proxyAgent,
-        };
-        return webpush.sendNotification(subscription as webpush.PushSubscription, pushPayload, options);
-      }),
-    );
-
-    let removed = 0;
-    const errors: string[] = [];
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        const reason = result.reason as Partial<webpush.WebPushError> | undefined;
-        const reasonText =
-          reason && typeof reason === 'object'
-            ? `status=${String(reason.statusCode ?? 'unknown')}, message=${String(reason.message ?? 'unknown')}`
-            : String(result.reason);
-        errors.push(`subscription[${index}]: ${reasonText}`);
-
-        // 清理无效订阅：404/410 表示订阅已过期
-        if (reason?.statusCode === 404 || reason?.statusCode === 410) {
-          const endpoint = subscriptions[index]?.endpoint;
-          if (endpoint && this.subscriptions.delete(endpoint)) {
-            removed += 1;
-          }
-        }
-
-        this.logger.warn(
-          `Push delivery failed for subscription ${index}: ${String(result.reason)}`,
-        );
-      }
-    });
-
-    const attempted = subscriptions.length;
-    const delivered = results.filter((result) => result.status === 'fulfilled').length;
-    const failed = results.filter((result) => result.status === 'rejected').length;
-    const success = attempted > 0 && delivered > 0;
-
-    let resultMessage = '推送已送达。';
-    if (attempted === 0) {
-      resultMessage = '当前没有可用订阅，请先创建订阅。';
-    } else if (delivered === 0) {
-      resultMessage = '推送请求已发出，但未送达任何订阅。请检查网络连接或重新创建订阅。';
-    }
-
-    return {
-      success,
-      message: resultMessage,
-      attempted,
-      delivered,
-      failed,
-      removed,
-      errors,
     };
   }
 }
