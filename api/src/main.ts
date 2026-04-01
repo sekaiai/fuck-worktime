@@ -23,7 +23,9 @@ async function bootstrap() {
     }),
   );
 
-  const port = Number(process.env.PORT ?? 10002);
+  const port = Number(10002);
+
+  console.log({ port });
   await app.listen(port, '0.0.0.0');
 }
 
