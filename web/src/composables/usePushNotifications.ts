@@ -11,7 +11,7 @@ interface ApiResponse {
   errors?: string[];
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'https://w2.logacg.com/api';
 const REQUEST_TIMEOUT_MS = 10000;
 const TEST_REQUEST_TIMEOUT_MS = 20000;
 const SW_READY_TIMEOUT_MS = 12000;
