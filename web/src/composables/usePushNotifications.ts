@@ -16,6 +16,59 @@ const REQUEST_TIMEOUT_MS = 10000;
 const TEST_REQUEST_TIMEOUT_MS = 20000;
 const SW_READY_TIMEOUT_MS = 12000;
 
+interface NavigatorWithStandalone extends Navigator {
+  standalone?: boolean;
+}
+
+function detectBrowserName(userAgent: string) {
+  if (/Edg\//i.test(userAgent)) {
+    return 'Edge';
+  }
+  if (/OPR\//i.test(userAgent)) {
+    return 'Opera';
+  }
+  if (/Firefox\//i.test(userAgent)) {
+    return 'Firefox';
+  }
+  if (/Safari\//i.test(userAgent) && !/Chrome\//i.test(userAgent) && !/CriOS\//i.test(userAgent)) {
+    return 'Safari';
+  }
+  if (/Chrome\//i.test(userAgent) || /CriOS\//i.test(userAgent)) {
+    return 'Chrome';
+  }
+
+  return '未知浏览器';
+}
+
+function isStandaloneDisplayMode() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const standaloneNavigator = navigator as NavigatorWithStandalone;
+
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    standaloneNavigator.standalone === true
+  );
+}
+
+function getEnvironmentHint(browserName: string, isStandalone: boolean) {
+  if (browserName === 'Safari' && !isStandalone) {
+    return 'Safari 需要先将页面添加到主屏幕，再从主屏图标打开应用后才能完整使用离线通知。';
+  }
+
+  if (browserName === 'Firefox') {
+    return 'Firefox 通常可直接测试 Web Push；若未收到通知，请先确认系统通知权限已开启。';
+  }
+
+  if (browserName === 'Chrome') {
+    return '当前阶段优先验证非 Chrome 浏览器，Chrome 可作为补充参考。';
+  }
+
+  return '请确认当前浏览器允许通知，并使用 HTTPS 或本地开发环境访问。';
+}
+
 function base64ToUint8Array(value: string) {
   const padded = `${value}${'='.repeat((4 - (value.length % 4)) % 4)}`;
   const normalized = padded.replace(/-/g, '+').replace(/_/g, '/');
@@ -75,6 +128,13 @@ export function usePushNotifications() {
     typeof Notification === 'undefined' ? 'default' : Notification.permission,
   );
   const currentSubscription = shallowRef<PushSubscription | null>(null);
+  const browserName = shallowRef(
+    typeof navigator === 'undefined' ? '未知浏览器' : detectBrowserName(navigator.userAgent),
+  );
+  const isStandalone = shallowRef(isStandaloneDisplayMode());
+  const environmentHint = shallowRef(
+    getEnvironmentHint(browserName.value, isStandalone.value),
+  );
 
   const isSupported = computed(
     () =>
@@ -85,6 +145,7 @@ export function usePushNotifications() {
   );
 
   const hasSubscription = computed(() => currentSubscription.value !== null);
+  const isNonChromeBrowser = computed(() => browserName.value !== 'Chrome');
   const canSubscribe = computed(
     () =>
       isSupported.value &&
@@ -93,6 +154,9 @@ export function usePushNotifications() {
   );
 
   const isPermissionDenied = computed(() => permissionState.value === 'denied');
+  const needsStandalone = computed(
+    () => browserName.value === 'Safari' && !isStandalone.value,
+  );
 
   async function getRegistration() {
     const existingRegistration = await navigator.serviceWorker.getRegistration();
@@ -124,10 +188,18 @@ export function usePushNotifications() {
       return;
     }
 
+    if (needsStandalone.value) {
+      statusMessage.value =
+        '请先将页面添加到主屏幕，并从主屏图标打开应用后再创建订阅。';
+      return;
+    }
+
     isLoading.value = true;
 
     try {
       permissionState.value = await Notification.requestPermission();
+      isStandalone.value = isStandaloneDisplayMode();
+      environmentHint.value = getEnvironmentHint(browserName.value, isStandalone.value);
 
       if (permissionState.value !== 'granted') {
         statusMessage.value = '未授予通知权限，无法创建订阅。';
@@ -192,6 +264,9 @@ export function usePushNotifications() {
   }
 
   onMounted(async () => {
+    isStandalone.value = isStandaloneDisplayMode();
+    environmentHint.value = getEnvironmentHint(browserName.value, isStandalone.value);
+
     if (!isSupported.value) {
       statusMessage.value = '当前浏览器不支持 Service Worker 或 Push API。';
       return;
@@ -199,6 +274,12 @@ export function usePushNotifications() {
 
     if (permissionState.value === 'denied') {
       statusMessage.value = '通知权限已被拒绝。请在浏览器地址栏左侧点击锁图标，将通知权限改为"允许"后刷新页面。';
+      return;
+    }
+
+    if (needsStandalone.value) {
+      statusMessage.value =
+        '请先将页面添加到主屏幕，并从主屏图标打开应用后再测试 Safari 的离线通知。';
       return;
     }
 
@@ -222,6 +303,8 @@ export function usePushNotifications() {
           statusMessage.value = '检测到本地订阅，但同步到后端失败，请重新创建订阅。';
           console.error('同步订阅失败:', syncError);
         }
+      } else {
+        statusMessage.value = '当前设备尚未创建订阅。请先授予通知权限，再创建订阅。';
       }
     } catch (error) {
       statusMessage.value = error instanceof Error ? error.message : '推送初始化失败。';
@@ -236,6 +319,11 @@ export function usePushNotifications() {
     canSubscribe,
     hasSubscription,
     isPermissionDenied,
+    browserName,
+    isStandalone,
+    isNonChromeBrowser,
+    needsStandalone,
+    environmentHint,
     subscribe,
     sendTestNotification,
   };

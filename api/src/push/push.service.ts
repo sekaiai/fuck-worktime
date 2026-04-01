@@ -5,27 +5,29 @@ import * as webpush from 'web-push';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { StoredSubscription } from './push.types';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ProxyAgent = any;
-
 @Injectable()
 export class PushService {
   private readonly logger = new Logger(PushService.name);
   private readonly subscriptions = new Map<string, StoredSubscription>();
   private readonly requestTimeoutMs = 30000;
-  private readonly proxyAgent: ProxyAgent;
-  private readonly proxyUrl = 'http://127.0.0.1:7897';
+  private readonly proxyUrl: string;
+  private readonly proxyAgent?: NonNullable<webpush.RequestOptions['agent']>;
 
   constructor(private readonly configService: ConfigService) {
     const subject = this.configService.get<string>('VAPID_SUBJECT');
     const publicKey = this.configService.get<string>('VAPID_PUBLIC_KEY');
     const privateKey = this.configService.get<string>('VAPID_PRIVATE_KEY');
+    this.proxyUrl = this.configService.get<string>('WEB_PUSH_PROXY_URL') ?? '';
 
-    // 配置代理
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { HttpsProxyAgent } = require('https-proxy-agent');
-    this.proxyAgent = new HttpsProxyAgent(this.proxyUrl);
-    this.logger.log(`使用代理: ${this.proxyUrl}`);
+    if (this.proxyUrl) {
+      const HttpsProxyAgentConstructor = require('https-proxy-agent').HttpsProxyAgent as new (
+        proxyUrl: string,
+      ) => NonNullable<webpush.RequestOptions['agent']>;
+      this.proxyAgent = new HttpsProxyAgentConstructor(this.proxyUrl);
+      this.logger.log(`使用 Web Push 代理: ${this.proxyUrl}`);
+    } else {
+      this.logger.log('未配置 Web Push 代理，发送请求将直连推送服务。');
+    }
 
     if (subject && publicKey && privateKey) {
       webpush.setVapidDetails(subject, publicKey, privateKey);
@@ -78,6 +80,7 @@ export class PushService {
       subscriptionCount: subscriptions.length,
       endpointOrigins: endpointParts,
       requestTimeoutMs: this.requestTimeoutMs,
+      proxyConfigured: !!this.proxyAgent,
     };
   }
 
@@ -102,13 +105,16 @@ export class PushService {
 
     const results = await Promise.allSettled(
       subscriptions.map((subscription) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const options: any = {
+        const options: webpush.RequestOptions = {
           timeout: this.requestTimeoutMs,
           TTL: 60,
           urgency: 'high',
-          agent: this.proxyAgent,
         };
+
+        if (this.proxyAgent) {
+          options.agent = this.proxyAgent;
+        }
+
         return webpush.sendNotification(subscription as webpush.PushSubscription, pushPayload, options);
       }),
     );
@@ -147,7 +153,7 @@ export class PushService {
     if (attempted === 0) {
       resultMessage = '当前没有可用订阅，请先创建订阅。';
     } else if (delivered === 0) {
-      resultMessage = '推送请求已发出，但未送达任何订阅。请检查网络连接或重新创建订阅。';
+      resultMessage = '推送请求已发出，但未送达任何订阅。请检查浏览器权限、PWA 安装条件或重新创建订阅。';
     }
 
     return {

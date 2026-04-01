@@ -9,6 +9,11 @@ const props = defineProps<{
   canSubscribe: boolean;
   hasSubscription: boolean;
   isPermissionDenied: boolean;
+  browserName: string;
+  isStandalone: boolean;
+  isNonChromeBrowser: boolean;
+  needsStandalone: boolean;
+  environmentHint: string;
 }>();
 
 const emit = defineEmits<{
@@ -48,14 +53,39 @@ const permissionText = computed(() => {
         <dt class="status-label">通知权限</dt>
         <dd class="status-value">{{ permissionText }}</dd>
       </div>
+      <div class="status-item">
+        <dt class="status-label">当前浏览器</dt>
+        <dd class="status-value">{{ browserName }}</dd>
+      </div>
+      <div class="status-item">
+        <dt class="status-label">PWA 打开方式</dt>
+        <dd class="status-value">{{ isStandalone ? '独立窗口' : '浏览器标签页' }}</dd>
+      </div>
     </dl>
 
     <p class="status-copy">{{ props.statusMessage }}</p>
+    <p class="status-hint">{{ props.environmentHint }}</p>
+
+    <div class="scope-note" :class="{ 'scope-note-ready': isNonChromeBrowser }">
+      <p class="scope-title">
+        {{ isNonChromeBrowser ? '当前浏览器在本阶段目标范围内' : '当前浏览器不在本阶段优先范围内' }}
+      </p>
+      <p class="scope-text">
+        {{ isNonChromeBrowser ? '可直接验证订阅与通知链路。' : '当前先以非 Chrome 浏览器为主进行验证，Chrome 仅作补充参考。' }}
+      </p>
+    </div>
 
     <div v-if="isPermissionDenied" class="permission-warning">
       <p class="warning-title">⚠️ 通知权限被拒绝</p>
       <p class="warning-text">
         请在浏览器地址栏左侧点击锁图标（或信息图标），将"通知"权限改为"允许"，然后刷新页面重试。
+      </p>
+    </div>
+
+    <div v-if="needsStandalone" class="permission-warning">
+      <p class="warning-title">需要以 PWA 方式打开</p>
+      <p class="warning-text">
+        请先将当前页面添加到主屏幕，再从主屏图标重新打开应用后创建订阅。
       </p>
     </div>
 
@@ -156,9 +186,40 @@ const permissionText = computed(() => {
 }
 
 .status-copy {
-  margin: 0 0 1.25rem;
+  margin: 0;
   color: #355254;
   line-height: 1.7;
+}
+
+.status-hint {
+  margin: 0.75rem 0 1.25rem;
+  color: #617879;
+  line-height: 1.7;
+}
+
+.scope-note {
+  margin: 0 0 1.25rem;
+  padding: 1rem;
+  border-radius: 16px;
+  background: #f4efe7;
+  border: 1px solid rgba(15, 61, 62, 0.12);
+}
+
+.scope-note-ready {
+  background: #eef7f0;
+  border-color: rgba(58, 125, 73, 0.2);
+}
+
+.scope-title {
+  margin: 0 0 0.4rem;
+  color: #183435;
+  font-weight: 700;
+}
+
+.scope-text {
+  margin: 0;
+  color: #4f6567;
+  line-height: 1.6;
 }
 
 .permission-warning {
