@@ -204,10 +204,24 @@ export function usePushNotifications() {
 
     try {
       const registration = await getRegistration();
-      currentSubscription.value = await registration.pushManager.getSubscription();
+      const existingSubscription = await registration.pushManager.getSubscription();
 
-      if (currentSubscription.value) {
-        statusMessage.value = '检测到当前设备已有订阅。';
+      if (existingSubscription) {
+        currentSubscription.value = existingSubscription;
+        // 同步订阅到后端（后端可能重启导致数据丢失）
+        try {
+          await fetchJson<ApiResponse>(`${API_BASE_URL}/push/subscribe`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(existingSubscription),
+          });
+          statusMessage.value = '检测到当前设备已有订阅，已同步到后端。';
+        } catch (syncError) {
+          statusMessage.value = '检测到本地订阅，但同步到后端失败，请重新创建订阅。';
+          console.error('同步订阅失败:', syncError);
+        }
       }
     } catch (error) {
       statusMessage.value = error instanceof Error ? error.message : '推送初始化失败。';
