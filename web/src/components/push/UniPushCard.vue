@@ -8,6 +8,7 @@ const props = defineProps<{
   cid: string;
   registrationCount: number;
   sdkReady: boolean;
+  sdkError: string;
 }>();
 
 const emit = defineEmits<{
@@ -72,7 +73,11 @@ function handleAutoRegister() {
       </div>
       <div class="status-item">
         <dt class="status-label">SDK 状态</dt>
-        <dd class="status-value">{{ sdkReady ? '已初始化' : '未初始化' }}</dd>
+        <dd class="status-value">
+          <span v-if="sdkReady" class="success-text">已初始化</span>
+          <span v-else-if="sdkError" class="error-text">初始化失败</span>
+          <span v-else>未初始化</span>
+        </dd>
       </div>
       <div class="status-item">
         <dt class="status-label">当前 CID</dt>
@@ -85,8 +90,14 @@ function handleAutoRegister() {
     <div v-if="!isConfigured" class="config-warning">
       <p class="warning-title">⚠️ Uni-Push 未配置</p>
       <p class="warning-text">
-        请在后端配置 UNI_PUSH_APP_ID、 UNI_PUSH_APP_KEY、 UNI_PUSH_MASTER_SECRET 环境变量。
+        请在后端配置 UNI_PUSH_APP_ID、UNI_PUSH_APP_KEY、UNI_PUSH_MASTER_SECRET 环境变量。
       </p>
+    </div>
+
+    <div v-if="sdkError" class="config-warning error">
+      <p class="warning-title">❌ SDK 错误</p>
+      <p class="warning-text">{{ sdkError }}</p>
+      <p class="warning-hint">您可以使用手动注册方式输入从 uni-app 获取的 CID。</p>
     </div>
 
     <div class="section-title">CID 获取</div>
@@ -105,17 +116,18 @@ function handleAutoRegister() {
           <span class="info-label">Web 应用 (当前)</span>
           <span class="info-value">
             <span v-if="sdkReady" class="success-text">✅ 已自动获取</span>
+            <span v-else-if="sdkError" class="error-text">❌ 需手动输入</span>
             <span v-else class="pending-text">⏳ 等待 SDK 初始化</span>
           </span>
         </div>
       </div>
     </div>
 
-    <div class="actions">
+    <div v-if="sdkReady" class="actions">
       <button
         class="button button-primary"
         type="button"
-        :disabled="!sdkReady || isLoading"
+        :disabled="isLoading"
         @click="handleAutoRegister"
       >
         {{ isLoading ? '处理中...' : '自动注册当前设备' }}
@@ -275,10 +287,19 @@ function handleAutoRegister() {
   border: 1px solid #ffc107;
 }
 
+.config-warning.error {
+  background: #f8d7da;
+  border-color: #f5c6cb;
+}
+
 .warning-title {
   margin: 0 0 0.5rem;
   color: #856404;
   font-weight: 700;
+}
+
+.config-warning.error .warning-title {
+  color: #721c24;
 }
 
 .warning-text {
@@ -286,6 +307,17 @@ function handleAutoRegister() {
   color: #856404;
   font-size: 0.9rem;
   line-height: 1.6;
+}
+
+.config-warning.error .warning-text {
+  color: #721c24;
+}
+
+.warning-hint {
+  margin: 0.5rem 0 0;
+  color: #6c757d;
+  font-size: 0.85rem;
+  font-style: italic;
 }
 
 .section-title {
@@ -352,6 +384,11 @@ function handleAutoRegister() {
 
 .success-text {
   color: #28a745;
+  font-weight: 600;
+}
+
+.error-text {
+  color: #dc3545;
   font-weight: 600;
 }
 

@@ -9,6 +9,7 @@ const {
   cid,
   registrationCount,
   sdkReady,
+  sdkError,
   registerDevice,
   unregisterDevice,
   sendMessage,
@@ -33,6 +34,7 @@ const {
       :cid="cid"
       :registration-count="registrationCount"
       :sdk-ready="sdkReady"
+      :sdk-error="sdkError"
       @register="registerDevice"
       @unregister="unregisterDevice"
       @send-message="sendMessage"

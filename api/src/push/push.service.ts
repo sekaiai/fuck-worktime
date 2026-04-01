@@ -180,7 +180,8 @@ export class PushService {
 
     return {
       configured: !!(this.appId && this.appKey && this.masterSecret),
-      appId: this.appId ? `${this.appId.substring(0, 8)}...` : '',
+      appId: this.appId,
+      appKey: this.appKey,
       registrationCount: registrations.length,
       platforms: registrations.reduce((acc, r) => {
         acc[r.platform] = (acc[r.platform] ?? 0) + 1;

@@ -1,4 +1,4 @@
-import { onMounted, shallowRef } from 'vue';
+import { onMounted, onUnmounted, shallowRef } from 'vue';
 
 interface ApiResponse {
   success?: boolean;
@@ -6,6 +6,7 @@ interface ApiResponse {
   count?: number;
   configured?: boolean;
   appId?: string;
+  appKey?: string;
   registrationCount?: number;
   platforms?: Record<string, number>;
   delivered?: number;
@@ -62,36 +63,53 @@ export function useUniPush() {
   const registrationCount = shallowRef(0);
   const isConfigured = shallowRef(false);
   const sdkReady = shallowRef(false);
+  const sdkError = shallowRef<string>('');
 
-  let getuiSDK: GetuiSDK | null = null;
-
-  async function fetchDiagnostic() {
+  async function fetchDiagnostic(): Promise<ApiResponse> {
     const data = await fetchJson<ApiResponse>(`${API_BASE_URL}/push/diagnostic`);
     isConfigured.value = data.configured ?? false;
     registrationCount.value = data.registrationCount ?? 0;
     return data;
   }
 
-  async function initGetuiSDK(appId: string, appKey: string) {
+  async function initGetuiSDK(appId: string, appKey: string): Promise<string> {
     return new Promise((resolve, reject) => {
       if (!window.GetuiSDK) {
-        reject(new Error('个推 Web SDK 未加载，请在 index.html 中引入 SDK 脚本'));
+        const error = '个推 Web SDK 未加载。请在 index.html 中引入 SDK 脚本，或使用手动注册方式。';
+        sdkError.value = error;
+        reject(new Error(error));
+        return;
+      }
+
+      if (!appId || !appKey) {
+        const error = 'AppId 或 AppKey 为空，无法初始化 SDK。';
+        sdkError.value = error;
+        reject(new Error(error));
         return;
       }
 
       try {
+        statusMessage.value = '正在初始化个推 Web SDK...';
+
         window.GetuiSDK.init(appId, appKey, 'default', (result: { cid: string }) => {
           if (result.cid) {
             cid.value = result.cid;
             sdkReady.value = true;
-            statusMessage.value = `个推 SDK 初始化成功，CID: ${result.cid.substring(0, 8)}...`;
+            sdkError.value = '';
+            statusMessage.value = `SDK 初始化成功，CID: ${result.cid.substring(0, 12)}...`;
             resolve(result.cid);
           } else {
-            reject(new Error('获取 CID 失败'));
+            const error = '获取 CID 失败，SDK 返回空值。';
+            sdkError.value = error;
+            statusMessage.value = error;
+            reject(new Error(error));
           }
         });
       } catch (error) {
-        reject(error);
+        const errorMessage = error instanceof Error ? error.message : 'SDK 初始化异常';
+        sdkError.value = errorMessage;
+        statusMessage.value = `SDK 初始化失败: ${errorMessage}`;
+        reject(new Error(errorMessage));
       }
     });
   }
@@ -104,12 +122,12 @@ export function useUniPush() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        cid: deviceCid,
-        platform,
-        userId,
-      }),
+        },
+        body: JSON.stringify({
+          cid: deviceCid,
+          platform,
+          userId,
+        }),
       });
 
       if (data.success) {
@@ -177,25 +195,55 @@ export function useUniPush() {
 
   async function autoRegister() {
     if (!cid.value) {
-      statusMessage.value = '无法自动注册：未获取到 CID。';
+      statusMessage.value = '无法自动注册：未获取到 CID。请尝试手动输入 CID。';
       return;
     }
 
     await registerDevice(cid.value, 'web');
   }
 
-  onMounted(async () => {
+  async function initialize() {
     try {
+      statusMessage.value = '正在连接推送服务...';
+
       const diagnostic = await fetchDiagnostic();
 
-      if (diagnostic.configured && diagnostic.appId) {
-        const fullAppId = diagnostic.appId.replace('...', '');
-        statusMessage.value = '正在初始化个推 Web SDK...';
-      } else {
+      if (!diagnostic.configured) {
         statusMessage.value = 'Uni-Push 服务未配置，请检查后端环境变量。';
+        return;
       }
+
+      if (!diagnostic.appId || !diagnostic.appKey) {
+        statusMessage.value = '后端配置不完整，缺少 AppId 或 AppKey。';
+        return;
+      }
+
+      if (!window.GetuiSDK) {
+        statusMessage.value = '个推 Web SDK 未加载，请使用手动注册方式输入 CID。';
+        sdkError.value = 'SDK 未加载';
+        return;
+      }
+
+      await initGetuiSDK(diagnostic.appId, diagnostic.appKey);
+
     } catch (error) {
-      statusMessage.value = error instanceof Error ? error.message : '服务连接失败。';
+      const errorMessage = error instanceof Error ? error.message : '初始化失败';
+      statusMessage.value = `初始化失败: ${errorMessage}`;
+      sdkError.value = errorMessage;
+    }
+  }
+
+  onMounted(() => {
+    initialize();
+  });
+
+  onUnmounted(() => {
+    if (window.GetuiSDK && sdkReady.value) {
+      try {
+        window.GetuiSDK.destroy();
+      } catch {
+        // ignore cleanup errors
+      }
     }
   });
 
@@ -206,9 +254,11 @@ export function useUniPush() {
     cid,
     registrationCount,
     sdkReady,
+    sdkError,
     registerDevice,
     unregisterDevice,
     sendMessage,
     autoRegister,
+    initialize,
   };
 }
