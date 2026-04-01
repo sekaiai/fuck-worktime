@@ -7,12 +7,14 @@ const props = defineProps<{
   statusMessage: string;
   cid: string;
   registrationCount: number;
+  sdkReady: boolean;
 }>();
 
 const emit = defineEmits<{
   register: [cid: string, platform: 'android' | 'ios' | 'web'];
   unregister: [cid: string];
   sendMessage: [title: string, content: string, payload?: Record<string, unknown>, cids?: string[]];
+  autoRegister: [];
 }>();
 
 const platformOptions = [
@@ -41,6 +43,10 @@ function handleUnregister() {
 function handleSendMessage() {
   emit('sendMessage', titleInput.value, contentInput.value);
 }
+
+function handleAutoRegister() {
+  emit('autoRegister');
+}
 </script>
 
 <template>
@@ -64,6 +70,14 @@ function handleSendMessage() {
         <dt class="status-label">已注册设备</dt>
         <dd class="status-value">{{ registrationCount }}</dd>
       </div>
+      <div class="status-item">
+        <dt class="status-label">SDK 状态</dt>
+        <dd class="status-value">{{ sdkReady ? '已初始化' : '未初始化' }}</dd>
+      </div>
+      <div class="status-item">
+        <dt class="status-label">当前 CID</dt>
+        <dd class="status-value">{{ cid ? `${cid.substring(0, 12)}...` : '未获取' }}</dd>
+      </div>
     </dl>
 
     <p class="status-copy">{{ props.statusMessage }}</p>
@@ -71,11 +85,11 @@ function handleSendMessage() {
     <div v-if="!isConfigured" class="config-warning">
       <p class="warning-title">⚠️ Uni-Push 未配置</p>
       <p class="warning-text">
-        请在后端配置 UNI_PUSH_APP_ID、UNI_PUSH_APP_KEY、UNI_PUSH_MASTER_SECRET 环境变量。
+        请在后端配置 UNI_PUSH_APP_ID、 UNI_PUSH_APP_KEY、 UNI_PUSH_MASTER_SECRET 环境变量。
       </p>
     </div>
 
-    <div class="section-title">设备注册</div>
+    <div class="section-title">CID 获取</div>
     
     <div class="cid-info">
       <p class="info-title">📌 CID 是什么？</p>
@@ -88,12 +102,27 @@ function handleSendMessage() {
           <span class="info-value">使用 <code>uni.getPushClientId()</code> 获取</span>
         </div>
         <div class="info-row">
-          <span class="info-label">Web 应用</span>
-          <span class="info-value">需要集成个推 Web SDK</span>
+          <span class="info-label">Web 应用 (当前)</span>
+          <span class="info-value">
+            <span v-if="sdkReady" class="success-text">✅ 已自动获取</span>
+            <span v-else class="pending-text">⏳ 等待 SDK 初始化</span>
+          </span>
         </div>
       </div>
     </div>
 
+    <div class="actions">
+      <button
+        class="button button-primary"
+        type="button"
+        :disabled="!sdkReady || isLoading"
+        @click="handleAutoRegister"
+      >
+        {{ isLoading ? '处理中...' : '自动注册当前设备' }}
+      </button>
+    </div>
+
+    <div class="section-title">手动注册设备</div>
     <div class="form-row">
       <input
         v-model="cidInput"
@@ -319,6 +348,16 @@ function handleSendMessage() {
   border-radius: 4px;
   font-family: monospace;
   font-size: 0.8rem;
+}
+
+.success-text {
+  color: #28a745;
+  font-weight: 600;
+}
+
+.pending-text {
+  color: #6c757d;
+  font-style: italic;
 }
 
 .form-row {

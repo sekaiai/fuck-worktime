@@ -8,9 +8,11 @@ const {
   statusMessage,
   cid,
   registrationCount,
+  sdkReady,
   registerDevice,
   unregisterDevice,
   sendMessage,
+  autoRegister,
 } = useUniPush();
 </script>
 
@@ -30,9 +32,11 @@ const {
       :status-message="statusMessage"
       :cid="cid"
       :registration-count="registrationCount"
+      :sdk-ready="sdkReady"
       @register="registerDevice"
       @unregister="unregisterDevice"
       @send-message="sendMessage"
+      @auto-register="autoRegister"
     />
   </main>
 </template>

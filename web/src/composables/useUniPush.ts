@@ -1,4 +1,4 @@
-import { computed, onMounted, shallowRef } from 'vue';
+import { onMounted, shallowRef } from 'vue';
 
 interface ApiResponse {
   success?: boolean;
@@ -12,6 +12,18 @@ interface ApiResponse {
   attempted?: number;
   failed?: number;
   errors?: string[];
+}
+
+interface GetuiSDK {
+  init: (appId: string, appKey: string, accountId: string, callback: (result: { cid: string }) => void) => void;
+  onMessage: (callback: (message: unknown) => void) => void;
+  destroy: () => void;
+}
+
+declare global {
+  interface Window {
+    GetuiSDK?: GetuiSDK;
+  }
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api';
@@ -48,8 +60,10 @@ export function useUniPush() {
   const statusMessage = shallowRef('准备就绪，请注册设备以接收推送。');
   const cid = shallowRef<string>('');
   const registrationCount = shallowRef(0);
-
   const isConfigured = shallowRef(false);
+  const sdkReady = shallowRef(false);
+
+  let getuiSDK: GetuiSDK | null = null;
 
   async function fetchDiagnostic() {
     const data = await fetchJson<ApiResponse>(`${API_BASE_URL}/push/diagnostic`);
@@ -58,7 +72,31 @@ export function useUniPush() {
     return data;
   }
 
-  async function registerDevice(deviceCid: string, platform: 'android' | 'ios' | 'web' = 'android', userId?: string) {
+  async function initGetuiSDK(appId: string, appKey: string) {
+    return new Promise((resolve, reject) => {
+      if (!window.GetuiSDK) {
+        reject(new Error('个推 Web SDK 未加载，请在 index.html 中引入 SDK 脚本'));
+        return;
+      }
+
+      try {
+        window.GetuiSDK.init(appId, appKey, 'default', (result: { cid: string }) => {
+          if (result.cid) {
+            cid.value = result.cid;
+            sdkReady.value = true;
+            statusMessage.value = `个推 SDK 初始化成功，CID: ${result.cid.substring(0, 8)}...`;
+            resolve(result.cid);
+          } else {
+            reject(new Error('获取 CID 失败'));
+          }
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  async function registerDevice(deviceCid: string, platform: 'android' | 'ios' | 'web' = 'web', userId?: string) {
     isLoading.value = true;
 
     try {
@@ -66,12 +104,12 @@ export function useUniPush() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          cid: deviceCid,
-          platform,
-          userId,
-        }),
+      },
+      body: JSON.stringify({
+        cid: deviceCid,
+        platform,
+        userId,
+      }),
       });
 
       if (data.success) {
@@ -79,7 +117,6 @@ export function useUniPush() {
         statusMessage.value = `设备已注册，当前共 ${data.count} 个设备。`;
       } else {
         statusMessage.value = '设备注册失败。';
-
       }
     } catch (error) {
       statusMessage.value = error instanceof Error ? error.message : '设备注册失败。';
@@ -101,7 +138,6 @@ export function useUniPush() {
         statusMessage.value = `设备已注销，当前共 ${data.count} 个设备。`;
       } else {
         statusMessage.value = '设备注销失败。';
-
       }
     } catch (error) {
       statusMessage.value = error instanceof Error ? error.message : '设备注销失败。';
@@ -110,7 +146,7 @@ export function useUniPush() {
     }
   }
 
-  async function sendMessage(title: string, content: string, payload?: Record<string, unknown>, cids?: string[]) {
+  async function sendMessage(title: string, content: string, payload?: Record<string, unknown>, targetCids?: string[]) {
     isLoading.value = true;
 
     try {
@@ -123,7 +159,7 @@ export function useUniPush() {
           title,
           content,
           payload,
-          cids,
+          cids: targetCids,
         }),
       });
 
@@ -139,12 +175,25 @@ export function useUniPush() {
     }
   }
 
+  async function autoRegister() {
+    if (!cid.value) {
+      statusMessage.value = '无法自动注册：未获取到 CID。';
+      return;
+    }
+
+    await registerDevice(cid.value, 'web');
+  }
+
   onMounted(async () => {
     try {
-      await fetchDiagnostic();
-      statusMessage.value = isConfigured.value
-        ? 'Uni-Push 服务已配置。'
-        : 'Uni-Push 服务未配置，请检查后端环境变量。';
+      const diagnostic = await fetchDiagnostic();
+
+      if (diagnostic.configured && diagnostic.appId) {
+        const fullAppId = diagnostic.appId.replace('...', '');
+        statusMessage.value = '正在初始化个推 Web SDK...';
+      } else {
+        statusMessage.value = 'Uni-Push 服务未配置，请检查后端环境变量。';
+      }
     } catch (error) {
       statusMessage.value = error instanceof Error ? error.message : '服务连接失败。';
     }
@@ -156,8 +205,10 @@ export function useUniPush() {
     statusMessage,
     cid,
     registrationCount,
+    sdkReady,
     registerDevice,
     unregisterDevice,
     sendMessage,
+    autoRegister,
   };
 }
