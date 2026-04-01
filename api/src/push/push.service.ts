@@ -13,7 +13,8 @@ export class PushService {
   private readonly logger = new Logger(PushService.name);
   private readonly subscriptions = new Map<string, StoredSubscription>();
   private readonly requestTimeoutMs = 30000;
-  private readonly proxyAgent: ProxyAgent | undefined;
+  private readonly proxyAgent: ProxyAgent;
+  private readonly proxyUrl = 'http://127.0.0.1:7897';
 
   constructor(private readonly configService: ConfigService) {
     const subject = this.configService.get<string>('VAPID_SUBJECT');
@@ -21,13 +22,10 @@ export class PushService {
     const privateKey = this.configService.get<string>('VAPID_PRIVATE_KEY');
 
     // 配置代理
-    const proxyUrl = process.env.https_proxy || process.env.HTTPS_PROXY;
-    if (proxyUrl) {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { HttpsProxyAgent } = require('https-proxy-agent');
-      this.proxyAgent = new HttpsProxyAgent(proxyUrl);
-      this.logger.log(`使用代理: ${proxyUrl}`);
-    }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { HttpsProxyAgent } = require('https-proxy-agent');
+    this.proxyAgent = new HttpsProxyAgent(this.proxyUrl);
+    this.logger.log(`使用代理: ${this.proxyUrl}`);
 
     if (subject && publicKey && privateKey) {
       webpush.setVapidDetails(subject, publicKey, privateKey);
@@ -104,16 +102,13 @@ export class PushService {
 
     const results = await Promise.allSettled(
       subscriptions.map((subscription) => {
-        const options: webpush.RequestOptions = {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const options: any = {
           timeout: this.requestTimeoutMs,
           TTL: 60,
           urgency: 'high',
+          agent: this.proxyAgent,
         };
-        // 如果有代理，添加 agent
-        if (this.proxyAgent) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (options as any).agent = this.proxyAgent;
-        }
         return webpush.sendNotification(subscription as webpush.PushSubscription, pushPayload, options);
       }),
     );
