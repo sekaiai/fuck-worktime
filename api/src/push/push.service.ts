@@ -9,7 +9,7 @@ import { StoredSubscription } from './push.types';
 export class PushService {
   private readonly logger = new Logger(PushService.name);
   private readonly subscriptions = new Map<string, StoredSubscription>();
-  private readonly requestTimeoutMs = 8000;
+  private readonly requestTimeoutMs = 30000;
 
   constructor(private readonly configService: ConfigService) {
     const subject = this.configService.get<string>('VAPID_SUBJECT');
@@ -75,6 +75,7 @@ export class PushService {
             : String(result.reason);
         errors.push(`subscription[${index}]: ${reasonText}`);
 
+        // 清理无效订阅：404/410 表示订阅已过期，socket timeout 可能是网络问题
         if (reason?.statusCode === 404 || reason?.statusCode === 410) {
           const endpoint = subscriptions[index]?.endpoint;
           if (endpoint && this.subscriptions.delete(endpoint)) {
