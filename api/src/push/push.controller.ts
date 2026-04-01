@@ -18,6 +18,11 @@ export class PushController {
     return this.pushService.listSubscriptions();
   }
 
+  @Get('diagnostic')
+  getDiagnostic() {
+    return this.pushService.getDiagnosticInfo();
+  }
+
   @Post('subscribe')
   subscribe(@Body() subscription: CreateSubscriptionDto) {
     return this.pushService.saveSubscription(subscription);

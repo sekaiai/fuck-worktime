@@ -42,12 +42,47 @@ export class PushService {
     return Array.from(this.subscriptions.values());
   }
 
+  getDiagnosticInfo() {
+    const subscriptions = Array.from(this.subscriptions.values());
+    const endpointParts = subscriptions.map((sub) => {
+      try {
+        const url = new URL(sub.endpoint);
+        return {
+          origin: url.origin,
+          pathname: url.pathname,
+          protocol: url.protocol,
+        };
+      } catch {
+        return { raw: sub.endpoint };
+      }
+    });
+
+    return {
+      vapidConfigured: !!(
+        this.configService.get<string>('VAPID_SUBJECT') &&
+        this.configService.get<string>('VAPID_PUBLIC_KEY') &&
+        this.configService.get<string>('VAPID_PRIVATE_KEY')
+      ),
+      vapidSubject: this.configService.get<string>('VAPID_SUBJECT') ?? '',
+      subscriptionCount: subscriptions.length,
+      endpointOrigins: endpointParts,
+      requestTimeoutMs: this.requestTimeoutMs,
+    };
+  }
+
   async sendTestNotification(payload?: {
     title?: string;
     body?: string;
     url?: string;
   }) {
     const subscriptions = Array.from(this.subscriptions.values());
+
+    // 记录订阅信息用于调试
+    this.logger.debug(`准备发送推送，订阅数量: ${subscriptions.length}`);
+    subscriptions.forEach((sub, index) => {
+      this.logger.debug(`订阅[${index}]: endpoint=${sub.endpoint.substring(0, 50)}...`);
+    });
+
     const pushPayload = JSON.stringify({
       title: payload?.title ?? '云上工时',
       body: payload?.body ?? '这是一条测试通知。',
@@ -75,7 +110,7 @@ export class PushService {
             : String(result.reason);
         errors.push(`subscription[${index}]: ${reasonText}`);
 
-        // 清理无效订阅：404/410 表示订阅已过期，socket timeout 可能是网络问题
+        // 清理无效订阅：404/410 表示订阅已过期
         if (reason?.statusCode === 404 || reason?.statusCode === 410) {
           const endpoint = subscriptions[index]?.endpoint;
           if (endpoint && this.subscriptions.delete(endpoint)) {
@@ -98,7 +133,7 @@ export class PushService {
     if (attempted === 0) {
       resultMessage = '当前没有可用订阅，请先创建订阅。';
     } else if (delivered === 0) {
-      resultMessage = '推送请求已发出，但未送达任何订阅。';
+      resultMessage = '推送请求已发出，但未送达任何订阅。请检查网络连接或重新创建订阅。';
     }
 
     return {
