@@ -5,16 +5,29 @@ import * as webpush from 'web-push';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { StoredSubscription } from './push.types';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ProxyAgent = any;
+
 @Injectable()
 export class PushService {
   private readonly logger = new Logger(PushService.name);
   private readonly subscriptions = new Map<string, StoredSubscription>();
   private readonly requestTimeoutMs = 30000;
+  private readonly proxyAgent: ProxyAgent | undefined;
 
   constructor(private readonly configService: ConfigService) {
     const subject = this.configService.get<string>('VAPID_SUBJECT');
     const publicKey = this.configService.get<string>('VAPID_PUBLIC_KEY');
     const privateKey = this.configService.get<string>('VAPID_PRIVATE_KEY');
+
+    // 配置代理
+    const proxyUrl = process.env.https_proxy || process.env.HTTPS_PROXY;
+    if (proxyUrl) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { HttpsProxyAgent } = require('https-proxy-agent');
+      this.proxyAgent = new HttpsProxyAgent(proxyUrl);
+      this.logger.log(`使用代理: ${proxyUrl}`);
+    }
 
     if (subject && publicKey && privateKey) {
       webpush.setVapidDetails(subject, publicKey, privateKey);
@@ -90,13 +103,19 @@ export class PushService {
     });
 
     const results = await Promise.allSettled(
-      subscriptions.map((subscription) =>
-        webpush.sendNotification(subscription as webpush.PushSubscription, pushPayload, {
+      subscriptions.map((subscription) => {
+        const options: webpush.RequestOptions = {
           timeout: this.requestTimeoutMs,
           TTL: 60,
           urgency: 'high',
-        }),
-      ),
+        };
+        // 如果有代理，添加 agent
+        if (this.proxyAgent) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (options as any).agent = this.proxyAgent;
+        }
+        return webpush.sendNotification(subscription as webpush.PushSubscription, pushPayload, options);
+      }),
     );
 
     let removed = 0;
