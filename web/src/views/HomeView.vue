@@ -1,41 +1,24 @@
 <script setup lang="ts">
-import PushSubscriptionCard from '../components/push/PushSubscriptionCard.vue';
-import { usePushNotifications } from '../composables/usePushNotifications';
+import { useRouter } from 'vue-router';
 
-const {
-  isSupported,
-  permissionState,
-  isLoading,
-  statusMessage,
-  canSubscribe,
-  hasSubscription,
-  isPermissionDenied,
-  subscribe,
-  sendTestNotification,
-} = usePushNotifications();
+const router = useRouter();
+
+const goToNotifications = () => {
+  router.push('/notifications');
+};
 </script>
 
 <template>
   <main class="page-shell">
     <section class="hero-panel">
-      <p class="eyebrow">PWA + Web Push 起步模板</p>
-      <h1 class="hero-title">前端工作区已就绪</h1>
+      <h1 class="hero-title">云上工时</h1>
       <p class="hero-copy">
-        当前模板已完成 PWA Manifest、Service Worker 注册、通知权限流程以及后端订阅接口接入。
+        欢迎使用云上工时管理系统
       </p>
+      <button class="nav-button" @click="goToNotifications">
+        前往消息提醒
+      </button>
     </section>
-
-    <PushSubscriptionCard
-      :is-supported="isSupported"
-      :permission-state="permissionState"
-      :is-loading="isLoading"
-      :status-message="statusMessage"
-      :can-subscribe="canSubscribe"
-      :has-subscription="hasSubscription"
-      :is-permission-denied="isPermissionDenied"
-      @subscribe="subscribe"
-      @test-notification="sendTestNotification"
-    />
   </main>
 </template>
 
@@ -52,15 +35,6 @@ const {
   max-width: 720px;
 }
 
-.eyebrow {
-  margin: 0 0 0.5rem;
-  color: #0f3d3e;
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
 .hero-title {
   margin: 0;
   font-size: clamp(2.4rem, 5vw, 4.5rem);
@@ -69,9 +43,24 @@ const {
 
 .hero-copy {
   max-width: 56ch;
-  margin: 1rem 0 0;
+  margin: 1rem 0 2rem;
   color: #355254;
   font-size: 1.05rem;
   line-height: 1.7;
+}
+
+.nav-button {
+  padding: 0.75rem 1.5rem;
+  background: #0f3d3e;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.nav-button:hover {
+  background: #1a5a5b;
 }
 </style>
