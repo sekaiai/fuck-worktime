@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import type { AuthorizedUserProfile } from '../../api/user';
+import { onMounted, ref } from 'vue';
+
+import { getGzdataToken, getProjects, setGzdataToken } from '../../api/timesheet';
 
 import HomeTokenHelp from './HomeTokenHelp.vue';
 
@@ -20,9 +23,64 @@ interface Emits {
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
+const gzdataTokenInput = ref<string>('');
+const gzdataTokenStatus = ref<'idle' | 'saved' | 'verifying' | 'valid' | 'invalid'>('idle');
+const gzdataTokenMessage = ref<string>('');
+
+onMounted(() => {
+  const savedToken = getGzdataToken();
+  if (savedToken) {
+    gzdataTokenInput.value = savedToken;
+    gzdataTokenStatus.value = 'saved';
+    gzdataTokenMessage.value = 'Token 已保存';
+  }
+});
+
 const handleInput = (event: Event) => {
   const target = event.target as HTMLInputElement;
   emit('update:token', target.value);
+};
+
+const handleGzdataTokenInput = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  gzdataTokenInput.value = target.value;
+};
+
+const saveGzdataToken = () => {
+  if (!gzdataTokenInput.value.trim()) {
+    gzdataTokenStatus.value = 'invalid';
+    gzdataTokenMessage.value = 'Token 不能为空';
+    return;
+  }
+  
+  setGzdataToken(gzdataTokenInput.value.trim());
+  gzdataTokenStatus.value = 'saved';
+  gzdataTokenMessage.value = 'Token 已保存到本地存储';
+};
+
+const verifyGzdataToken = async () => {
+  if (!gzdataTokenInput.value.trim()) {
+    gzdataTokenStatus.value = 'invalid';
+    gzdataTokenMessage.value = 'Token 不能为空';
+    return;
+  }
+  
+  gzdataTokenStatus.value = 'verifying';
+  gzdataTokenMessage.value = '正在验证 Token...';
+  
+  try {
+    const savedToken = getGzdataToken();
+    if (!savedToken || savedToken !== gzdataTokenInput.value.trim()) {
+      setGzdataToken(gzdataTokenInput.value.trim());
+    }
+    
+    await getProjects();
+    gzdataTokenStatus.value = 'valid';
+    gzdataTokenMessage.value = 'Token 验证成功，可以正常访问项目列表';
+  } catch (error) {
+    gzdataTokenStatus.value = 'invalid';
+    gzdataTokenMessage.value = `Token 验证失败: ${error instanceof Error ? error.message : '未知错误'}`;
+  }
 };
 
 const submit = () => {
@@ -103,6 +161,54 @@ const statusClassMap = {
       <button class="danger-button" :disabled="isSubmitting" @click="$emit('clear-auth')">
         {{ isSubmitting ? '处理中...' : '清除授权' }}
       </button>
+    </section>
+
+    <section class="gzdata-token-panel" aria-label="Gzdata Token 管理">
+      <header class="gzdata-head">
+        <div>
+          <p class="gzdata-eyebrow">Gzdata API</p>
+          <h3 class="gzdata-title">Gzdata Token 配置</h3>
+        </div>
+        <p class="gzdata-note">
+          请输入 gzdata 系统的 Token，用于访问工时填报相关接口。
+        </p>
+      </header>
+
+      <label class="gzdata-input-wrap">
+        <span class="gzdata-label">Gzdata Token</span>
+        <input
+          v-model="gzdataTokenInput"
+          class="gzdata-input"
+          type="text"
+          placeholder="请输入 Gzdata Token"
+          autocomplete="off"
+          @input="handleGzdataTokenInput"
+        />
+      </label>
+
+      <div class="gzdata-actions">
+        <button 
+          class="secondary-button" 
+          :disabled="gzdataTokenStatus === 'verifying' || !gzdataTokenInput.trim()"
+          @click="saveGzdataToken"
+        >
+          保存 Token
+        </button>
+        <button 
+          class="primary-button" 
+          :disabled="gzdataTokenStatus === 'verifying' || !gzdataTokenInput.trim()"
+          @click="verifyGzdataToken"
+        >
+          {{ gzdataTokenStatus === 'verifying' ? '验证中...' : '验证 Token' }}
+        </button>
+      </div>
+
+      <div 
+        v-if="gzdataTokenMessage" 
+        :class="['gzdata-status-card', `gzdata-status-${gzdataTokenStatus}`]"
+      >
+        <p class="gzdata-status-text">{{ gzdataTokenMessage }}</p>
+      </div>
     </section>
 
     <HomeTokenHelp v-if="!authorizedUser" />
@@ -330,6 +436,142 @@ const statusClassMap = {
   border: 1px solid #efc2bc;
   background: rgba(255, 240, 238, 0.95);
   color: #9d4337;
+}
+
+.gzdata-token-panel {
+  margin-top: 1.2rem;
+  border: 1px solid rgba(20, 88, 72, 0.12);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.65);
+  padding: 1rem;
+}
+
+.gzdata-head {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.gzdata-eyebrow {
+  margin: 0;
+  color: #587169;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.gzdata-title {
+  margin: 0;
+  color: #14362f;
+  font-size: clamp(1.1rem, 2.8vw, 1.5rem);
+  line-height: 1.1;
+}
+
+.gzdata-note {
+  margin: 0;
+  max-width: 54ch;
+  color: #4c6760;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.gzdata-input-wrap {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 1rem;
+}
+
+.gzdata-label {
+  color: #21443d;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.gzdata-input {
+  width: 100%;
+  border: 1px solid #c9d8d2;
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.92);
+  color: #163932;
+  padding: 0.9rem 1rem;
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.gzdata-input:focus {
+  border-color: #2d7d67;
+  box-shadow: 0 0 0 4px rgba(45, 125, 103, 0.12);
+  transform: translateY(-1px);
+}
+
+.gzdata-actions {
+  margin-top: 0.85rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.secondary-button {
+  border-radius: 0.85rem;
+  padding: 0.82rem 1rem;
+  border: 1px solid #c9d8d2;
+  background: rgba(255, 255, 255, 0.92);
+  color: #21443d;
+  font-weight: 700;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.secondary-button:not(:disabled):hover {
+  transform: translateY(-1px);
+  background: rgba(247, 251, 249, 0.95);
+}
+
+.gzdata-status-card {
+  margin-top: 0.9rem;
+  border-radius: 0.95rem;
+  padding: 0.85rem 0.95rem;
+}
+
+.gzdata-status-idle {
+  background: rgba(247, 251, 249, 0.95);
+  border: 1px solid #d6e2dd;
+}
+
+.gzdata-status-saved {
+  background: rgba(229, 246, 239, 0.95);
+  border: 1px solid #a9d5c2;
+}
+
+.gzdata-status-verifying {
+  background: rgba(255, 250, 240, 0.95);
+  border: 1px solid #e5d5b5;
+}
+
+.gzdata-status-valid {
+  background: rgba(229, 246, 239, 0.95);
+  border: 1px solid #a9d5c2;
+}
+
+.gzdata-status-invalid {
+  background: rgba(255, 240, 238, 0.95);
+  border: 1px solid #efc2bc;
+}
+
+.gzdata-status-text {
+  margin: 0;
+  color: #4c6760;
+  font-size: 0.88rem;
+  line-height: 1.6;
 }
 
 @media (min-width: 900px) {
