@@ -66,35 +66,19 @@ export class UserService {
       throw new Error('远程接口返回格式无效。');
     }
 
-    const responseCode = envelope.code;
-    if (
-      responseCode !== undefined &&
-      responseCode !== 200 &&
-      responseCode !== '200' &&
-      responseCode !== 0 &&
-      responseCode !== '0'
-    ) {
+    if (envelope.code !== 200) {
       const message = this.pickString(envelope, ['msg', 'message']) ?? 'Token 无效或获取用户信息失败。';
       throw new Error(message);
     }
 
-    const candidates = this.collectCandidateRecords(envelope);
-    const phone =
-      this.pickStringFromCandidates(candidates, [
-        'phone',
-        'phonenumber',
-        'phoneNumber',
-        'mobile',
-        'mobilePhone',
-      ]) ?? '';
-    const nickname =
-      this.pickStringFromCandidates(candidates, [
-        'nickName',
-        'nickname',
-        'userName',
-        'name',
-        'realName',
-      ]) ?? '';
+    const user = this.asRecord(envelope.user);
+
+    if (!user) {
+      throw new Error('未获取到用户信息。');
+    }
+
+    const phone = this.pickString(user, ['phonenumber', 'userName', 'phone']) ?? '';
+    const nickname = this.pickString(user, ['nickName', 'nickname', 'userName']) ?? '';
 
     if (!phone || !nickname) {
       throw new Error('已获取到远程响应，但未解析到手机号或昵称。');
@@ -104,48 +88,6 @@ export class UserService {
       phone,
       nickname,
     };
-  }
-
-  private collectCandidateRecords(source: Record<string, unknown>) {
-    const queue: Record<string, unknown>[] = [source];
-    const visited = new Set<Record<string, unknown>>();
-    const candidates: Record<string, unknown>[] = [];
-
-    while (queue.length > 0) {
-      const current = queue.shift();
-
-      if (!current || visited.has(current)) {
-        continue;
-      }
-
-      visited.add(current);
-      candidates.push(current);
-
-      for (const value of Object.values(current)) {
-        const nestedRecord = this.asRecord(value);
-
-        if (nestedRecord) {
-          queue.push(nestedRecord);
-        }
-      }
-    }
-
-    return candidates;
-  }
-
-  private pickStringFromCandidates(
-    candidates: Record<string, unknown>[],
-    fields: string[],
-  ) {
-    for (const candidate of candidates) {
-      const value = this.pickString(candidate, fields);
-
-      if (value) {
-        return value;
-      }
-    }
-
-    return null;
   }
 
   private pickString(record: Record<string, unknown>, fields: string[]) {
