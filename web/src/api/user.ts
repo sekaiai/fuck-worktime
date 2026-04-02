@@ -1,6 +1,7 @@
 export interface AuthorizedUserProfile {
   phone: string;
   nickname: string;
+  status: 'active' | 'expired';
 }
 
 export interface SaveAuthResponse {
@@ -9,10 +10,16 @@ export interface SaveAuthResponse {
   data?: AuthorizedUserProfile;
 }
 
+export interface UserLookupResponse {
+  success: boolean;
+  message: string;
+  data?: AuthorizedUserProfile;
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api';
 
 export async function saveAuthorizationToken(token: string): Promise<SaveAuthResponse> {
-  const response = await fetch(`${API_BASE_URL}/user/save-auth`, {
+  return requestJson<SaveAuthResponse>(`${API_BASE_URL}/user/save-auth`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -20,6 +27,26 @@ export async function saveAuthorizationToken(token: string): Promise<SaveAuthRes
     body: JSON.stringify({
       token,
     }),
+  });
+}
+
+export async function fetchAuthorizedUser(phone: string): Promise<UserLookupResponse> {
+  const searchParams = new URLSearchParams({ phone });
+  return requestJson<UserLookupResponse>(`${API_BASE_URL}/user/profile?${searchParams.toString()}`);
+}
+
+export async function clearAuthorizedUser(phone: string): Promise<UserLookupResponse> {
+  return requestJson<UserLookupResponse>(
+    `${API_BASE_URL}/user/auth/${encodeURIComponent(phone)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+}
+
+async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, {
+    ...init,
   });
 
   let data: SaveAuthResponse | null = null;
@@ -38,5 +65,5 @@ export async function saveAuthorizationToken(token: string): Promise<SaveAuthRes
     throw new Error('接口返回为空。');
   }
 
-  return data;
+  return data as T;
 }

@@ -6,7 +6,6 @@ import HomeTokenHelp from './HomeTokenHelp.vue';
 interface Props {
   token: string;
   isSubmitting: boolean;
-  tutorialVisible: boolean;
   submitStatus: 'idle' | 'success' | 'error';
   statusMessage: string;
   authorizedUser: AuthorizedUserProfile | null;
@@ -15,7 +14,7 @@ interface Props {
 interface Emits {
   (event: 'update:token', value: string): void;
   (event: 'submit'): void;
-  (event: 'toggle-tutorial'): void;
+  (event: 'clear-auth'): void;
 }
 
 const props = defineProps<Props>();
@@ -53,7 +52,7 @@ const statusClassMap = {
       </p>
     </header>
 
-    <label class="token-input-wrap">
+    <label v-if="!authorizedUser" class="token-input-wrap">
       <span class="token-label">授权 Token</span>
       <input
         :value="token"
@@ -65,12 +64,9 @@ const statusClassMap = {
       />
     </label>
 
-    <div class="token-actions">
+    <div v-if="!authorizedUser" class="token-actions">
       <button class="primary-button" :disabled="isSubmitting" @click="submit">
         {{ isSubmitting ? '授权中...' : '保存授权并获取用户信息' }}
-      </button>
-      <button class="ghost-button" type="button" @click="$emit('toggle-tutorial')">
-        {{ tutorialVisible ? '收起教程' : '如何获取 Token？' }}
       </button>
     </div>
 
@@ -82,7 +78,17 @@ const statusClassMap = {
     </div>
 
     <section v-if="authorizedUser" class="user-panel" aria-label="已保存用户信息">
-      <p class="user-label">已保存用户</p>
+      <div class="user-head">
+        <p class="user-label">已授权用户</p>
+        <span
+          :class="[
+            'user-status',
+            authorizedUser.status === 'expired' ? 'user-status-expired' : 'user-status-active',
+          ]"
+        >
+          {{ authorizedUser.status === 'expired' ? '授权已过期' : '授权有效' }}
+        </span>
+      </div>
       <div class="user-grid">
         <article class="user-item">
           <span>昵称</span>
@@ -93,9 +99,13 @@ const statusClassMap = {
           <strong>{{ authorizedUser.phone }}</strong>
         </article>
       </div>
+
+      <button class="danger-button" :disabled="isSubmitting" @click="$emit('clear-auth')">
+        {{ isSubmitting ? '处理中...' : '清除授权' }}
+      </button>
     </section>
 
-    <HomeTokenHelp v-if="tutorialVisible" />
+    <HomeTokenHelp v-if="!authorizedUser" />
   </section>
 </template>
 
@@ -179,7 +189,7 @@ const statusClassMap = {
 }
 
 .primary-button,
-.ghost-button {
+.danger-button {
   border-radius: 0.85rem;
   padding: 0.82rem 1rem;
   font-weight: 700;
@@ -201,14 +211,8 @@ const statusClassMap = {
   opacity: 0.75;
 }
 
-.ghost-button {
-  border: 1px solid #c6d6d0;
-  background: rgba(255, 255, 255, 0.76);
-  color: #22453d;
-}
-
 .primary-button:not(:disabled):hover,
-.ghost-button:hover {
+.danger-button:not(:disabled):hover {
   transform: translateY(-1px);
 }
 
@@ -260,11 +264,35 @@ const statusClassMap = {
   padding: 0.9rem;
 }
 
+.user-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .user-label {
   color: #587169;
   font-size: 0.74rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.user-status {
+  border-radius: 999px;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.user-status-active {
+  background: rgba(229, 246, 239, 0.95);
+  color: #1d654f;
+}
+
+.user-status-expired {
+  background: rgba(255, 240, 238, 0.95);
+  color: #a34a3f;
 }
 
 .user-grid {
@@ -296,14 +324,21 @@ const statusClassMap = {
   font-size: 0.98rem;
 }
 
+.danger-button {
+  width: 100%;
+  margin-top: 0.8rem;
+  border: 1px solid #efc2bc;
+  background: rgba(255, 240, 238, 0.95);
+  color: #9d4337;
+}
+
 @media (min-width: 900px) {
   .token-card {
     padding: 1.15rem;
   }
 
   .token-actions {
-    grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.8fr);
-    align-items: center;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .user-grid {

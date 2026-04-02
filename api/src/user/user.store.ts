@@ -51,7 +51,12 @@ export class UserStore {
         return [];
       }
 
-      return parsedContent.filter(this.isStoredUser);
+      return parsedContent
+        .filter(this.isStoredUser)
+        .map((user) => ({
+          ...user,
+          status: user.status ?? 'active',
+        }));
     } catch (error) {
       this.logger.error(
         `Failed to parse user.json at ${this.filePath}`,
@@ -72,6 +77,38 @@ export class UserStore {
     }
 
     await this.writeUsers(users);
+  }
+
+  async getUserByPhone(phone: string) {
+    const users = await this.readUsers();
+    return users.find((item) => item.phone === phone) ?? null;
+  }
+
+  async deleteUserByPhone(phone: string) {
+    const users = await this.readUsers();
+    const nextUsers = users.filter((item) => item.phone !== phone);
+
+    if (nextUsers.length === users.length) {
+      return false;
+    }
+
+    await this.writeUsers(nextUsers);
+    return true;
+  }
+
+  async updateUserStatus(phone: string, status: StoredUser['status']) {
+    const user = await this.getUserByPhone(phone);
+
+    if (!user) {
+      return false;
+    }
+
+    await this.upsertUser({
+      ...user,
+      status,
+      updateTime: new Date().toISOString(),
+    });
+    return true;
   }
 
   private async writeUsers(users: StoredUser[]) {

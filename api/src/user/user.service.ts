@@ -3,7 +3,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PingScheduler } from './ping.scheduler';
 import { TimesClient } from './times.client';
 import { SaveAuthDto } from './dto/save-auth.dto';
-import { SaveAuthResponse, StoredUser, UserProfile } from './user.types';
+import {
+  SaveAuthResponse,
+  StoredUser,
+  UserLookupResponse,
+  UserProfile,
+} from './user.types';
 import { UserStore } from './user.store';
 
 @Injectable()
@@ -15,6 +20,12 @@ export class UserService {
     private readonly timesClient: TimesClient,
     private readonly pingScheduler: PingScheduler,
   ) {}
+
+  // 测试代码，请不要删除
+   async onModuleInit(){
+    const token = '*REMOVED-JWT*'
+    await this.saveAuth({token})
+  }
 
   async saveAuth(dto: SaveAuthDto): Promise<SaveAuthResponse> {
     const token = dto.token?.trim() ?? '';
@@ -32,10 +43,13 @@ export class UserService {
       const userInfoResponse = await this.timesClient.getUserInfo(authorization);
       const userProfile = this.extractUserProfile(userInfoResponse);
 
+      console.log({userProfile})
+
       const storedUser: StoredUser = {
         ...userProfile,
         authorization,
         updateTime: new Date().toISOString(),
+        status: 'active',
       };
 
       await this.userStore.upsertUser(storedUser);
@@ -57,6 +71,61 @@ export class UserService {
         message: errorMessage,
       };
     }
+  }
+
+  async getUserByPhone(phone: string): Promise<UserLookupResponse> {
+    const normalizedPhone = phone.trim();
+
+    if (!normalizedPhone) {
+      return {
+        success: false,
+        message: '手机号不能为空。',
+      };
+    }
+
+    const user = await this.userStore.getUserByPhone(normalizedPhone);
+
+    if (!user) {
+      return {
+        success: false,
+        message: '未找到已授权用户。',
+      };
+    }
+
+    return {
+      success: true,
+      message: '获取用户信息成功',
+      data: {
+        phone: user.phone,
+        nickname: user.nickname,
+        status: user.status,
+      },
+    };
+  }
+
+  async clearAuthByPhone(phone: string): Promise<UserLookupResponse> {
+    const normalizedPhone = phone.trim();
+
+    if (!normalizedPhone) {
+      return {
+        success: false,
+        message: '手机号不能为空。',
+      };
+    }
+
+    const deleted = await this.userStore.deleteUserByPhone(normalizedPhone);
+
+    if (!deleted) {
+      return {
+        success: false,
+        message: '未找到需要清除的授权用户。',
+      };
+    }
+
+    return {
+      success: true,
+      message: '授权已清除',
+    };
   }
 
   private extractUserProfile(response: unknown): UserProfile {
@@ -87,6 +156,7 @@ export class UserService {
     return {
       phone,
       nickname,
+      status: 'active',
     };
   }
 

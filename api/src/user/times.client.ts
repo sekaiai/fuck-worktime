@@ -2,6 +2,15 @@ import { Injectable } from '@nestjs/common';
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { Agent } from 'https';
 
+export class TimesClientError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode?: number,
+  ) {
+    super(message);
+  }
+}
+
 @Injectable()
 export class TimesClient {
   private readonly client: AxiosInstance = axios.create({
@@ -32,7 +41,7 @@ export class TimesClient {
 
       return response.data;
     } catch (error) {
-      throw new Error(this.formatErrorMessage(error, '获取用户信息失败'));
+      throw this.createClientError(error, '获取用户信息失败');
     }
   }
 
@@ -44,20 +53,20 @@ export class TimesClient {
         },
       });
     } catch (error) {
-      throw new Error(this.formatErrorMessage(error, '心跳请求失败'));
+      throw this.createClientError(error, '心跳请求失败');
     }
   }
 
-  private formatErrorMessage(error: unknown, fallbackMessage: string) {
+  private createClientError(error: unknown, fallbackMessage: string) {
     if (axios.isAxiosError(error)) {
       return this.formatAxiosError(error, fallbackMessage);
     }
 
     if (error instanceof Error && error.message) {
-      return error.message;
+      return new TimesClientError(error.message);
     }
 
-    return fallbackMessage;
+    return new TimesClientError(fallbackMessage);
   }
 
   private formatAxiosError(error: AxiosError, fallbackMessage: string) {
@@ -65,7 +74,10 @@ export class TimesClient {
     const responseData = error.response?.data;
 
     if (typeof responseData === 'string' && responseData.trim()) {
-      return status ? `${fallbackMessage}（HTTP ${status}）：${responseData}` : responseData;
+      return new TimesClientError(
+        status ? `${fallbackMessage}（HTTP ${status}）：${responseData}` : responseData,
+        status,
+      );
     }
 
     if (responseData && typeof responseData === 'object') {
@@ -79,16 +91,22 @@ export class TimesClient {
             : null;
 
       if (serverMessage) {
-        return status
-          ? `${fallbackMessage}（HTTP ${status}）：${serverMessage}`
-          : `${fallbackMessage}：${serverMessage}`;
+        return new TimesClientError(
+          status
+            ? `${fallbackMessage}（HTTP ${status}）：${serverMessage}`
+            : `${fallbackMessage}：${serverMessage}`,
+          status,
+        );
       }
     }
 
     if (error.message) {
-      return status ? `${fallbackMessage}（HTTP ${status}）：${error.message}` : error.message;
+      return new TimesClientError(
+        status ? `${fallbackMessage}（HTTP ${status}）：${error.message}` : error.message,
+        status,
+      );
     }
 
-    return fallbackMessage;
+    return new TimesClientError(fallbackMessage, status);
   }
 }

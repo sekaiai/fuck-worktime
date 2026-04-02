@@ -20,12 +20,11 @@ const {
 const {
   token,
   isSubmitting,
-  tutorialVisible,
   submitStatus,
   statusMessage,
   authorizedUser,
   submitToken,
-  toggleTutorial,
+  clearAuth,
 } = useUserAuthorization();
 
 const updateToken = (value: string) => {
@@ -42,13 +41,12 @@ const goToNotifications = () => {
     <HomeAuthTokenCard
       :token="token"
       :is-submitting="isSubmitting"
-      :tutorial-visible="tutorialVisible"
       :submit-status="submitStatus"
       :status-message="statusMessage"
       :authorized-user="authorizedUser"
       @update:token="updateToken"
       @submit="submitToken"
-      @toggle-tutorial="toggleTutorial"
+      @clear-auth="clearAuth"
     />
 
     <HomeOverviewCards

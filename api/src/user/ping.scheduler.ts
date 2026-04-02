@@ -5,7 +5,7 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 
-import { TimesClient } from './times.client';
+import { TimesClient, TimesClientError } from './times.client';
 import { UserStore } from './user.store';
 
 @Injectable()
@@ -38,7 +38,9 @@ export class PingScheduler implements OnApplicationBootstrap, OnModuleDestroy {
 
     const users = await this.userStore.readUsers();
 
-    if (users.length === 0) {
+    const activeUsers = users.filter((user) => user.status !== 'expired');
+
+    if (activeUsers.length === 0) {
       this.logger.log('No authorized users found. Ping scheduler is idle.');
       return;
     }
@@ -53,18 +55,23 @@ export class PingScheduler implements OnApplicationBootstrap, OnModuleDestroy {
 
   private async runHeartbeatCycle() {
     const users = await this.userStore.readUsers();
+    const activeUsers = users.filter((user) => user.status !== 'expired');
 
-    if (users.length === 0) {
+    if (activeUsers.length === 0) {
       this.logger.debug('Skip heartbeat cycle because user.json is empty.');
       return;
     }
 
-    for (const user of users) {
+    for (const user of activeUsers) {
       try {
         await this.timesClient.ping(user.authorization);
         this.logger.log(`Heartbeat success for ${user.phone}.`);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown heartbeat error';
+        if (error instanceof TimesClientError && error.statusCode === 401) {
+          await this.userStore.updateUserStatus(user.phone, 'expired');
+          this.logger.warn(`Authorization expired for ${user.phone}.`);
+        }
         this.logger.warn(`Heartbeat failed for ${user.phone}: ${errorMessage}`);
       }
     }
