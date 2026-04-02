@@ -1,7 +1,9 @@
 ﻿<script setup lang="ts">
 import { useRouter } from 'vue-router';
+import HomeAuthTokenCard from '../components/home/HomeAuthTokenCard.vue';
 import HomeOverviewCards from '../components/home/HomeOverviewCards.vue';
 import HomeWeekTimeline from '../components/home/HomeWeekTimeline.vue';
+import { useUserAuthorization } from '../composables/useUserAuthorization';
 import { useWeeklyReportMock } from '../composables/useWeeklyReportMock';
 
 const router = useRouter();
@@ -15,6 +17,21 @@ const {
   selectDay,
 } = useWeeklyReportMock();
 
+const {
+  token,
+  isSubmitting,
+  tutorialVisible,
+  submitStatus,
+  statusMessage,
+  authorizedUser,
+  submitToken,
+  toggleTutorial,
+} = useUserAuthorization();
+
+const updateToken = (value: string) => {
+  token.value = value;
+};
+
 const goToNotifications = () => {
   router.push('/notifications');
 };
@@ -22,6 +39,18 @@ const goToNotifications = () => {
 
 <template>
   <main class="home-shell">
+    <HomeAuthTokenCard
+      :token="token"
+      :is-submitting="isSubmitting"
+      :tutorial-visible="tutorialVisible"
+      :submit-status="submitStatus"
+      :status-message="statusMessage"
+      :authorized-user="authorizedUser"
+      @update:token="updateToken"
+      @submit="submitToken"
+      @toggle-tutorial="toggleTutorial"
+    />
+
     <HomeOverviewCards
       :report="report"
       :active-week="activeWeek"
@@ -69,11 +98,12 @@ const goToNotifications = () => {
 .home-shell {
   width: min(1040px, 100%);
   margin: 0 auto;
+  display: grid;
+  gap: 0.95rem;
   padding: 0.85rem 0.75rem 1.4rem;
 }
 
 .detail-panel {
-  margin-top: 0.9rem;
   border: 1px solid #d2e0da;
   border-radius: 1rem;
   background: rgba(255, 255, 255, 0.82);
@@ -155,7 +185,6 @@ const goToNotifications = () => {
 
 .notify-button {
   width: 100%;
-  margin-top: 0.9rem;
   border: none;
   border-radius: 0.75rem;
   background: #145848;
