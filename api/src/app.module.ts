@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 
 import { HealthModule } from './health/health.module';
 import { PushModule } from './push/push.module';
+import { TimesheetModule } from './timesheet/timesheet.module';
 import { UserModule } from './user/user.module';
 
 @Module({
@@ -14,6 +15,7 @@ import { UserModule } from './user/user.module';
     HealthModule,
     PushModule,
     UserModule,
+    TimesheetModule,
   ],
 })
 export class AppModule {}
