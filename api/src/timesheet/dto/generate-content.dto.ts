@@ -4,7 +4,7 @@ export class GenerateContentDto {
   @IsInt()
   @Min(1)
   @Max(7)
-  dayCount: number;
+  dayCount!: number;
 
   @IsInt()
   @Min(50)
@@ -13,5 +13,5 @@ export class GenerateContentDto {
   maxChars?: number = 200;
 
   @IsString()
-  description: string;
+  description!: string;
 }

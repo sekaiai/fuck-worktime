@@ -2,27 +2,27 @@ import { IsDateString, IsNotEmpty, IsNumber, IsString, MaxLength } from 'class-v
 
 export class SubmitTimesheetDto {
   @IsDateString()
-  reportDate: string;
+  reportDate!: string;
 
   @IsString()
   @IsNotEmpty()
-  projectId: string;
+  projectId!: string;
 
   @IsString()
   @IsNotEmpty()
-  projectTitle: string;
+  projectTitle!: string;
 
   @IsNumber()
   projectStatus: number = 30;
 
   @IsString()
   @IsNotEmpty()
-  itemId: string;
+  itemId!: string;
 
   @IsString()
   @MaxLength(200)
-  content: string;
+  content!: string;
 
   @IsNumber()
-  hours: number;
+  hours!: number;
 }
