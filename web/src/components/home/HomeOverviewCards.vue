@@ -10,7 +10,7 @@ interface Emits {
   (event: 'switch-week', week: WeekTab): void;
 }
 
-const props = defineProps<Props>();
+defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 const weekButtons: Array<{ key: WeekTab; label: string }> = [
@@ -20,10 +20,6 @@ const weekButtons: Array<{ key: WeekTab; label: string }> = [
 ];
 
 const switchWeek = (week: WeekTab) => {
-  if (week === props.activeWeek) {
-    return;
-  }
-
   emit('switch-week', week);
 };
 </script>
@@ -33,7 +29,7 @@ const switchWeek = (week: WeekTab) => {
     <header class="overview-head">
       <div>
         <p class="overview-label">云上工时</p>
-        <h1 class="overview-title">本周工时 {{ report.totalHours }}h</h1>
+        <h1 class="overview-title">{{ report.currentWeek }}工时 {{ report.totalHours }}h</h1>
         <p class="overview-period">{{ report.reportPeriod }}</p>
       </div>
 

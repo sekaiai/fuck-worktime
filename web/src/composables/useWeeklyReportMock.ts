@@ -1,4 +1,4 @@
-﻿import { computed, shallowRef } from 'vue';
+import { computed, shallowRef } from 'vue';
 
 export interface WorkDetail {
   id: string;
@@ -37,7 +37,10 @@ export interface WeeklyReportMock {
 
 export type WeekTab = 'prev' | 'current' | 'next';
 
-const currentWeekReport: WeeklyReportMock = {
+const DAY_OF_WEEK_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] as const;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const currentWeekTemplate: WeeklyReportMock = {
   currentWeek: '2026年3月第13周',
   weekRange: '2026-03-23 ~ 2026-03-29',
   monday: '2026-03-23',
@@ -177,225 +180,123 @@ const currentWeekReport: WeeklyReportMock = {
   averageHours: 9.6,
 };
 
-const previousWeekReport: WeeklyReportMock = {
-  currentWeek: '2026年3月第12周',
-  weekRange: '2026-03-16 ~ 2026-03-22',
-  monday: '2026-03-16',
-  sunday: '2026-03-22',
-  days: [
-    {
-      dayOfWeek: '周一',
-      date: '2026-03-16',
-      totalHours: 8,
-      status: '已达标审批通过',
-      displayText: '8h',
-      isWeekend: false,
-      details: [
-        {
-          id: 'mock-prev-1',
-          period: '全天',
-          hours: 8,
-          content: '完成周例会与需求拆解，推进任务排期。',
-          status: '审批通过',
-          statusDesc: '审批通过',
-        },
-      ],
-      displayStatus: '8小时·已达标审批通过',
-    },
-    {
-      dayOfWeek: '周二',
-      date: '2026-03-17',
-      totalHours: 8,
-      status: '已达标审批通过',
-      displayText: '8h',
-      isWeekend: false,
-      details: [
-        {
-          id: 'mock-prev-2',
-          period: '全天',
-          hours: 8,
-          content: '完成接口联调与错误修复。',
-          status: '审批通过',
-          statusDesc: '审批通过',
-        },
-      ],
-      displayStatus: '8小时·已达标审批通过',
-    },
-    {
-      dayOfWeek: '周三',
-      date: '2026-03-18',
-      totalHours: 0,
-      status: '未填报',
-      displayText: '未填',
-      isWeekend: false,
-      details: [],
-      displayStatus: '未填报',
-    },
-    {
-      dayOfWeek: '周四',
-      date: '2026-03-19',
-      totalHours: 8,
-      status: '已达标审批通过',
-      displayText: '8h',
-      isWeekend: false,
-      details: [
-        {
-          id: 'mock-prev-4',
-          period: '全天',
-          hours: 8,
-          content: '补充边界测试并完成文档更新。',
-          status: '审批通过',
-          statusDesc: '审批通过',
-        },
-      ],
-      displayStatus: '8小时·已达标审批通过',
-    },
-    {
-      dayOfWeek: '周五',
-      date: '2026-03-20',
-      totalHours: 6,
-      status: '未达标待补充',
-      displayText: '6h',
-      isWeekend: false,
-      details: [
-        {
-          id: 'mock-prev-5',
-          period: '下午',
-          hours: 6,
-          content: '推进缺陷修复，剩余工时待补充。',
-          status: '待审批',
-          statusDesc: '待审批',
-        },
-      ],
-      displayStatus: '6小时·未达标待补充',
-    },
-    {
-      dayOfWeek: '周六',
-      date: '2026-03-21',
-      totalHours: 0,
-      status: '休息日',
-      displayText: '休息日',
-      isWeekend: true,
-      details: [],
-      displayStatus: '休息日',
-    },
-    {
-      dayOfWeek: '周日',
-      date: '2026-03-22',
-      totalHours: 0,
-      status: '休息日',
-      displayText: '休息日',
-      isWeekend: true,
-      details: [],
-      displayStatus: '休息日',
-    },
-  ],
-  userName: '*REMOVED-PHONE*',
-  deptName: '运维服务部',
-  reportPeriod: '2026-03-16 - 2026-03-22',
-  weekNumber: 12,
-  totalHours: 30,
-  workDays: 4,
-  averageHours: 7.5,
+const pad = (value: number) => String(value).padStart(2, '0');
+
+const addDays = (date: Date, days: number) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate() + days, 12, 0, 0, 0);
+
+const formatIsoDate = (date: Date) =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+const getWeekStart = (date: Date) => {
+  const day = date.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  return addDays(date, offset);
 };
 
-const nextWeekReport: WeeklyReportMock = {
-  currentWeek: '2026年4月第14周',
-  weekRange: '2026-03-30 ~ 2026-04-05',
-  monday: '2026-03-30',
-  sunday: '2026-04-05',
-  days: [
-    {
-      dayOfWeek: '周一',
-      date: '2026-03-30',
-      totalHours: 0,
-      status: '未填报',
-      displayText: '未填',
-      isWeekend: false,
-      details: [],
-      displayStatus: '未填报',
-    },
-    {
-      dayOfWeek: '周二',
-      date: '2026-03-31',
-      totalHours: 0,
-      status: '未填报',
-      displayText: '未填',
-      isWeekend: false,
-      details: [],
-      displayStatus: '未填报',
-    },
-    {
-      dayOfWeek: '周三',
-      date: '2026-04-01',
-      totalHours: 0,
-      status: '未填报',
-      displayText: '未填',
-      isWeekend: false,
-      details: [],
-      displayStatus: '未填报',
-    },
-    {
-      dayOfWeek: '周四',
-      date: '2026-04-02',
-      totalHours: 0,
-      status: '未填报',
-      displayText: '未填',
-      isWeekend: false,
-      details: [],
-      displayStatus: '未填报',
-    },
-    {
-      dayOfWeek: '周五',
-      date: '2026-04-03',
-      totalHours: 0,
-      status: '未填报',
-      displayText: '未填',
-      isWeekend: false,
-      details: [],
-      displayStatus: '未填报',
-    },
-    {
-      dayOfWeek: '周六',
-      date: '2026-04-04',
-      totalHours: 0,
-      status: '休息日',
-      displayText: '休息日',
-      isWeekend: true,
-      details: [],
-      displayStatus: '休息日',
-    },
-    {
-      dayOfWeek: '周日',
-      date: '2026-04-05',
-      totalHours: 0,
-      status: '休息日',
-      displayText: '休息日',
-      isWeekend: true,
-      details: [],
-      displayStatus: '休息日',
-    },
-  ],
-  userName: '*REMOVED-PHONE*',
-  deptName: '运维服务部',
-  reportPeriod: '2026-03-30 - 2026-04-05',
-  weekNumber: 14,
-  totalHours: 0,
-  workDays: 0,
-  averageHours: 0,
+const getIsoWeekNumber = (date: Date) => {
+  const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0);
+  const day = normalized.getDay() || 7;
+  normalized.setDate(normalized.getDate() + 4 - day);
+  const yearStart = new Date(normalized.getFullYear(), 0, 1, 12, 0, 0, 0);
+
+  return Math.ceil((((normalized.getTime() - yearStart.getTime()) / DAY_MS) + 1) / 7);
 };
 
-const weekReports: Record<WeekTab, WeeklyReportMock> = {
-  prev: previousWeekReport,
-  current: currentWeekReport,
-  next: nextWeekReport,
+const createFutureDay = (date: string, dayOfWeek: string, isWeekend: boolean): WorkDay => {
+  if (isWeekend) {
+    return {
+      dayOfWeek,
+      date,
+      totalHours: 0,
+      status: '休息日',
+      displayText: '休息日',
+      isWeekend: true,
+      details: [],
+      displayStatus: '休息日',
+    };
+  }
+
+  return {
+    dayOfWeek,
+    date,
+    totalHours: 0,
+    status: '未填报',
+    displayText: '未填',
+    isWeekend: false,
+    details: [],
+    displayStatus: '未填报',
+  };
+};
+
+const cloneDetails = (details: readonly WorkDetail[], date: string) =>
+  details.map((detail, index) => ({
+    ...detail,
+    id: `${detail.id}-${date}-${index}`,
+  }));
+
+const actualCurrentWeekStart = getWeekStart(new Date());
+
+const buildWeekReport = (weekOffset: number): WeeklyReportMock => {
+  const targetMonday = addDays(actualCurrentWeekStart, weekOffset * 7);
+  const days = currentWeekTemplate.days.map((templateDay, index) => {
+    const targetDate = formatIsoDate(addDays(targetMonday, index));
+    const dayOfWeek = DAY_OF_WEEK_LABELS[index];
+
+    if (weekOffset > 0) {
+      return createFutureDay(targetDate, dayOfWeek, templateDay.isWeekend);
+    }
+
+    return {
+      ...templateDay,
+      dayOfWeek,
+      date: targetDate,
+      details: cloneDetails(templateDay.details, targetDate),
+    };
+  });
+
+  const totalHours = days.reduce((sum, day) => sum + day.totalHours, 0);
+  const workDays = days.filter((day) => !day.isWeekend && day.totalHours > 0).length;
+  const averageHours = workDays > 0 ? Number((totalHours / workDays).toFixed(1)) : 0;
+  const sunday = addDays(targetMonday, 6);
+  const weekNumber = getIsoWeekNumber(targetMonday);
+  const displayMonth = targetMonday.getMonth() + 1;
+  const monday = formatIsoDate(targetMonday);
+  const sundayText = formatIsoDate(sunday);
+
+  return {
+    currentWeek: `${targetMonday.getFullYear()}年${displayMonth}月第${weekNumber}周`,
+    weekRange: `${monday} ~ ${sundayText}`,
+    monday,
+    sunday: sundayText,
+    days,
+    userName: currentWeekTemplate.userName,
+    deptName: currentWeekTemplate.deptName,
+    reportPeriod: `${monday} - ${sundayText}`,
+    weekNumber,
+    totalHours,
+    workDays,
+    averageHours,
+  };
 };
 
 export function useWeeklyReportMock() {
-  const activeWeek = shallowRef<WeekTab>('current');
+  const weekOffset = shallowRef(0);
   const selectedDate = shallowRef<string | null>(null);
 
-  const report = computed<WeeklyReportMock>(() => weekReports[activeWeek.value]);
+  const activeWeek = computed<WeekTab>(() => {
+    if (weekOffset.value < 0) {
+      return 'prev';
+    }
+
+    if (weekOffset.value > 0) {
+      return 'next';
+    }
+
+    return 'current';
+  });
+
+  const report = computed<WeeklyReportMock>(() => buildWeekReport(weekOffset.value));
 
   const filledDays = computed(() =>
     report.value.days.filter((day) => !day.isWeekend && day.totalHours > 0).length,
@@ -432,7 +333,14 @@ export function useWeeklyReportMock() {
   });
 
   const selectWeek = (week: WeekTab) => {
-    activeWeek.value = week;
+    if (week === 'current') {
+      weekOffset.value = 0;
+    } else if (week === 'prev') {
+      weekOffset.value -= 1;
+    } else {
+      weekOffset.value += 1;
+    }
+
     selectedDate.value = null;
   };
 
