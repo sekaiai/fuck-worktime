@@ -4,6 +4,8 @@ import * as path from 'path';
 
 import { StoredUser } from './user.types';
 
+const TOKEN_FILE = 'gzdata-token.json';
+
 @Injectable()
 export class UserStore {
   private readonly logger = new Logger(UserStore.name);
@@ -109,6 +111,29 @@ export class UserStore {
       updateTime: new Date().toISOString(),
     });
     return true;
+  }
+
+  async saveToken(token: string): Promise<void> {
+    const tokenPath = path.resolve(this.apiRootPath, TOKEN_FILE);
+    await fs.mkdir(path.dirname(tokenPath), { recursive: true });
+    await fs.writeFile(tokenPath, JSON.stringify({ token }, null, 2), 'utf-8');
+  }
+
+  async getToken(): Promise<string | null> {
+    const tokenPath = path.resolve(this.apiRootPath, TOKEN_FILE);
+
+    try {
+      const content = await fs.readFile(tokenPath, 'utf-8');
+      const parsed = JSON.parse(content) as unknown;
+
+      if (typeof parsed === 'object' && parsed !== null && 'token' in parsed) {
+        return (parsed as { token: string }).token;
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   private async writeUsers(users: StoredUser[]) {

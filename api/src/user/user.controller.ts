@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 
 import { SaveAuthDto } from './dto/save-auth.dto';
+import { SaveTokenDto } from './dto/save-token.dto';
 import { UserService } from './user.service';
 
 @Controller('user')
@@ -20,5 +21,15 @@ export class UserController {
   @Delete('auth/:phone')
   clearAuth(@Param('phone') phone: string) {
     return this.userService.clearAuthByPhone(phone);
+  }
+
+  @Post('token')
+  saveToken(@Body() dto: SaveTokenDto) {
+    return this.userService.saveToken(dto.token);
+  }
+
+  @Get('token')
+  getToken() {
+    return this.userService.getToken();
   }
 }

@@ -6,6 +6,7 @@ import { SaveAuthDto } from './dto/save-auth.dto';
 import {
   SaveAuthResponse,
   StoredUser,
+  TokenResponse,
   UserLookupResponse,
   UserProfile,
 } from './user.types';
@@ -125,6 +126,46 @@ export class UserService {
     return {
       success: true,
       message: '授权已清除',
+    };
+  }
+
+  async saveToken(token: string): Promise<TokenResponse> {
+    const normalizedToken = token?.trim() ?? '';
+
+    if (!normalizedToken) {
+      return {
+        success: false,
+        message: 'Token 不能为空。',
+      };
+    }
+
+    await this.userStore.saveToken(normalizedToken);
+
+    return {
+      success: true,
+      message: 'Token 保存成功',
+      data: {
+        token: normalizedToken,
+      },
+    };
+  }
+
+  async getToken(): Promise<TokenResponse> {
+    const token = await this.userStore.getToken();
+
+    if (!token) {
+      return {
+        success: false,
+        message: '未找到已保存的 Token。',
+      };
+    }
+
+    return {
+      success: true,
+      message: '获取 Token 成功',
+      data: {
+        token,
+      },
     };
   }
 
