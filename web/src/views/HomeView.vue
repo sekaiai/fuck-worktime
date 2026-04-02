@@ -34,6 +34,10 @@ const updateToken = (value: string) => {
 const goToNotifications = () => {
   router.push('/notifications');
 };
+
+const goToTimesheet = () => {
+  router.push('/timesheet');
+};
 </script>
 
 <template>
@@ -89,6 +93,7 @@ const goToNotifications = () => {
     </section>
 
     <button class="notify-button" @click="goToNotifications">前往消息提醒</button>
+    <button class="timesheet-button" @click="goToTimesheet">前往工时填报</button>
   </main>
 </template>
 
@@ -192,6 +197,17 @@ const goToNotifications = () => {
   padding: 0.75rem;
 }
 
+.timesheet-button {
+  width: 100%;
+  border: 1px solid #145848;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  color: #145848;
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding: 0.75rem;
+}
+
 @media (min-width: 900px) {
   .home-shell {
     padding: 1.2rem 1rem 2rem;
@@ -202,6 +218,12 @@ const goToNotifications = () => {
   }
 
   .notify-button {
+    width: auto;
+    min-width: 180px;
+    padding: 0.75rem 1.15rem;
+  }
+
+  .timesheet-button {
     width: auto;
     min-width: 180px;
     padding: 0.75rem 1.15rem;

@@ -12,6 +12,11 @@ const routes: RouteRecordRaw[] = [
     name: 'notifications',
     component: () => import('../views/NotificationsView.vue'),
   },
+  {
+    path: '/timesheet',
+    name: 'timesheet',
+    component: () => import('../views/TimesheetView.vue'),
+  },
 ];
 
 const router = createRouter({
