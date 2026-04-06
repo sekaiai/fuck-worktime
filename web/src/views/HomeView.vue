@@ -1,8 +1,10 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import HomeAuthTokenCard from '../components/home/HomeAuthTokenCard.vue';
 import HomeOverviewCards from '../components/home/HomeOverviewCards.vue';
 import HomeWeekTimeline from '../components/home/HomeWeekTimeline.vue';
+import HomeTimesheetForm from '../components/home/HomeTimesheetForm.vue';
 import { useUserAuthorization } from '../composables/useUserAuthorization';
 import { useWeeklyReportMock } from '../composables/useWeeklyReportMock';
 
@@ -13,6 +15,7 @@ const {
   report,
   selectedDate,
   selectedDay,
+  unfilledDays: unfilledDaysCount,
   selectWeek,
   selectDay,
 } = useWeeklyReportMock();
@@ -27,6 +30,12 @@ const {
   clearAuth,
 } = useUserAuthorization();
 
+const showTimesheet = ref(false);
+
+const unfilledDaysList = computed(() =>
+  report.value.days.filter((day) => !day.isWeekend && day.totalHours <= 0),
+);
+
 const updateToken = (value: string) => {
   token.value = value;
 };
@@ -35,8 +44,21 @@ const goToNotifications = () => {
   router.push('/notifications');
 };
 
-const goToTimesheet = () => {
-  router.push('/timesheet');
+const openTimesheet = () => {
+  showTimesheet.value = true;
+};
+
+const closeTimesheet = () => {
+  showTimesheet.value = false;
+};
+
+const submitTimesheet = (entries: unknown[]) => {
+  console.log('提交填报:', entries);
+  showTimesheet.value = false;
+};
+
+const handleAutoFill = () => {
+  console.log('自动填报功能待实现');
 };
 </script>
 
@@ -56,7 +78,17 @@ const goToTimesheet = () => {
     <HomeOverviewCards
       :report="report"
       :active-week="activeWeek"
+      :unfilled-days="unfilledDaysCount"
       @switch-week="selectWeek"
+      @open-timesheet="openTimesheet"
+      @auto-fill="handleAutoFill"
+    />
+
+    <HomeTimesheetForm
+      v-if="showTimesheet"
+      :unfilled-days="unfilledDaysList"
+      @close="closeTimesheet"
+      @submit="submitTimesheet"
     />
 
     <HomeWeekTimeline
@@ -93,7 +125,6 @@ const goToTimesheet = () => {
     </section>
 
     <button class="notify-button" @click="goToNotifications">前往消息提醒</button>
-    <button class="timesheet-button" @click="goToTimesheet">前往工时填报</button>
   </main>
 </template>
 
@@ -197,17 +228,6 @@ const goToTimesheet = () => {
   padding: 0.75rem;
 }
 
-.timesheet-button {
-  width: 100%;
-  border: 1px solid #145848;
-  border-radius: 0.75rem;
-  background: #ffffff;
-  color: #145848;
-  font-size: 0.92rem;
-  font-weight: 700;
-  padding: 0.75rem;
-}
-
 @media (min-width: 900px) {
   .home-shell {
     padding: 1.2rem 1rem 2rem;
@@ -218,12 +238,6 @@ const goToTimesheet = () => {
   }
 
   .notify-button {
-    width: auto;
-    min-width: 180px;
-    padding: 0.75rem 1.15rem;
-  }
-
-  .timesheet-button {
     width: auto;
     min-width: 180px;
     padding: 0.75rem 1.15rem;
