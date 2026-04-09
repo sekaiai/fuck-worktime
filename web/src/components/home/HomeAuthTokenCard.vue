@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AuthorizedUserProfile } from '../../api/user';
 import { onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
 import { getGzdataToken, getProjects, setGzdataToken } from '../../api/timesheet';
 
@@ -22,6 +23,7 @@ interface Emits {
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
+const router = useRouter();
 
 const gzdataTokenInput = ref<string>('');
 const gzdataTokenStatus = ref<'idle' | 'saved' | 'verifying' | 'valid' | 'invalid'>('idle');
@@ -89,6 +91,10 @@ const submit = () => {
   }
 
   emit('submit');
+};
+
+const navigateToDingtalkLogin = () => {
+  router.push('/dingtalk-login');
 };
 
 const statusClassMap = {
@@ -200,6 +206,13 @@ const statusClassMap = {
           @click="verifyGzdataToken"
         >
           {{ gzdataTokenStatus === 'verifying' ? '验证中...' : '验证 Token' }}
+        </button>
+      </div>
+
+      <div class="gzdata-alt-login">
+        <span class="gzdata-alt-divider">或</span>
+        <button class="dingtalk-login-button" @click="navigateToDingtalkLogin">
+          钉钉扫码登录
         </button>
       </div>
 
@@ -572,6 +585,49 @@ const statusClassMap = {
   color: #4c6760;
   font-size: 0.88rem;
   line-height: 1.6;
+}
+
+.gzdata-alt-login {
+  margin-top: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.gzdata-alt-divider {
+  color: #7a9990;
+  font-size: 0.84rem;
+  flex-shrink: 0;
+}
+
+.gzdata-alt-divider::before,
+.gzdata-alt-divider::after {
+  content: '';
+  display: inline-block;
+  width: 1rem;
+  height: 1px;
+  background: #c9d8d2;
+  vertical-align: middle;
+  margin: 0 0.3rem;
+}
+
+.dingtalk-login-button {
+  flex: 1;
+  border-radius: 0.85rem;
+  padding: 0.82rem 1rem;
+  border: 1px solid #c9d8d2;
+  background: rgba(255, 255, 255, 0.92);
+  color: #21443d;
+  font-weight: 700;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.dingtalk-login-button:hover {
+  transform: translateY(-1px);
+  background: rgba(247, 251, 249, 0.95);
 }
 
 @media (min-width: 900px) {
