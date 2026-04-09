@@ -3,6 +3,8 @@ import { randomUUID } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 
+import { UserStore } from '../user/user.store';
+
 interface LoginSession {
   taskId: string;
   browser: Browser;
@@ -21,7 +23,11 @@ export class DingtalkService {
   private readonly DINGTALK_AUTH_URL =
     'https://login.dingtalk.com/oauth2/challenge.htm?redirect_uri=https://times.gzdata.com.cn:8099/ding-talk-login&response_type=code&client_id=dinghuioeftyp2slxrcf&scope=openid&prompt=consent';
 
-  async getQrcode(): Promise<{ taskId: string; qrcodeBase64: string }> {
+  constructor(
+    private readonly userStore: UserStore,
+  ) {}
+
+  async getQrcode(): Promise<{ taskId: string; qrcodeBase64: string; loginState: 'qrcode' | 'auto_login' }> {
     const taskId = randomUUID();
 
     const browser = await chromium.launch({
@@ -43,31 +49,106 @@ export class DingtalkService {
       Object.defineProperty(navigator, 'webdriver', { get: () => false });
     });
 
+    const existingToken = await this.userStore.getToken();
+    if (existingToken) {
+      await context.addCookies([
+        {
+          name: 'token',
+          value: existingToken,
+          domain: '.gzdata.com.cn',
+          path: '/',
+        },
+        {
+          name: 'Authorization',
+          value: existingToken,
+          domain: '.gzdata.com.cn',
+          path: '/',
+        },
+      ]);
+    }
+
     const page = await context.newPage();
 
     await page.goto(this.DINGTALK_AUTH_URL, { waitUntil: 'networkidle' });
 
-    const qrcodeSelector =
-      'img[src*="qr"], canvas, .qrcode, [class*="qr"], [class*="scan"]';
-    await page.waitForSelector(qrcodeSelector, { timeout: 15000 }).catch(() => {});
+    await page.waitForLoadState('networkidle');
 
-    const screenshot = await page.screenshot({ type: 'png' });
-    const qrcodeBase64 = screenshot.toString('base64');
+    const loginButtonSelectors = [
+      'button:has-text("立即登录")',
+      'a:has-text("立即登录")',
+      '[class*="login"]:has-text("立即登录")',
+      'button:has-text("登录")',
+    ];
+
+    let isLoggedIn = false;
+    let loginState: 'qrcode' | 'auto_login' = 'qrcode';
+
+    for (const selector of loginButtonSelectors) {
+      const button = page.locator(selector);
+      if (await button.count() > 0) {
+        isLoggedIn = true;
+        loginState = 'auto_login';
+
+        await button.first().click();
+
+        await page.waitForURL('**/times.gzdata.com.cn/**', { timeout: 15000 }).catch(() => {});
+        break;
+      }
+    }
+
+    let qrcodeBase64 = '';
+
+    if (!isLoggedIn) {
+      const canvasLocator = page.locator('canvas');
+      const hasCanvas = await canvasLocator.count() > 0;
+
+      if (hasCanvas) {
+        const screenshot = await canvasLocator.first().screenshot({ type: 'png' });
+        qrcodeBase64 = screenshot.toString('base64');
+      } else {
+        const screenshot = await page.screenshot({ type: 'png' });
+        qrcodeBase64 = screenshot.toString('base64');
+      }
+    }
 
     const session: LoginSession = {
       taskId,
       browser,
       context,
       page,
-      status: 'waiting',
+      status: isLoggedIn ? 'success' : 'waiting',
       token: null,
       createdAt: Date.now(),
     };
+
+    if (isLoggedIn) {
+      const cookies = await context.cookies();
+      const tokenCookie = cookies.find(
+        (c) => c.name === 'token' || c.name === 'Authorization' || c.name === 'jwt',
+      );
+
+      let tokenFromStorage: string | null = null;
+      try {
+        tokenFromStorage = await page.evaluate(() => {
+          return localStorage.getItem('token') || localStorage.getItem('Authorization');
+        });
+      } catch {}
+
+      const token = tokenCookie?.value || tokenFromStorage || '';
+
+      if (token) {
+        session.token = token;
+        await this.userStore.saveToken(token);
+      }
+    }
+
     this.sessions.set(taskId, session);
 
-    this.monitorLogin(taskId);
+    if (!isLoggedIn) {
+      this.monitorLogin(taskId);
+    }
 
-    return { taskId, qrcodeBase64 };
+    return { taskId, qrcodeBase64, loginState };
   }
 
   private async monitorLogin(taskId: string): Promise<void> {
