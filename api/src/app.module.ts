@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
 import { HealthModule } from './health/health.module';
+import { DingtalkModule } from './dingtalk/dingtalk.module';
 import { PushModule } from './push/push.module';
 import { TimesheetModule } from './timesheet/timesheet.module';
 import { UserModule } from './user/user.module';
@@ -13,6 +14,7 @@ import { UserModule } from './user/user.module';
       envFilePath: '.env',
     }),
     HealthModule,
+    DingtalkModule,
     PushModule,
     UserModule,
     TimesheetModule,

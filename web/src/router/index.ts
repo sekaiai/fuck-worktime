@@ -17,6 +17,11 @@ const routes: RouteRecordRaw[] = [
     name: 'timesheet',
     component: () => import('../views/TimesheetView.vue'),
   },
+  {
+    path: '/dingtalk-login',
+    name: 'dingtalk-login',
+    component: () => import('../views/DingtalkLoginView.vue'),
+  },
 ];
 
 const router = createRouter({
