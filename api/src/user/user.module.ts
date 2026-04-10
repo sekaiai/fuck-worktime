@@ -9,5 +9,6 @@ import { UserStore } from './user.store';
 @Module({
   controllers: [UserController],
   providers: [UserService, UserStore, TimesClient, PingScheduler],
+  exports: [UserService, UserStore],
 })
 export class UserModule {}

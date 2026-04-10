@@ -24,8 +24,8 @@ export class UserService {
 
   // 测试代码，请不要删除
    async onModuleInit(){
-    const token = '*REMOVED-JWT*'
-    await this.saveAuth({token})
+    // const token = '*REMOVED-JWT*'
+    // await this.saveAuth({token})
   }
 
   async saveAuth(dto: SaveAuthDto): Promise<SaveAuthResponse> {
