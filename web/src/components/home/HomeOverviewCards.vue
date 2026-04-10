@@ -1,13 +1,16 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import type { WeekTab, WeeklyReportMock } from '../../composables/useWeeklyReportMock';
 
 interface Props {
   report: WeeklyReportMock;
   activeWeek: WeekTab;
+  unfilledDays: number;
 }
 
 interface Emits {
   (event: 'switch-week', week: WeekTab): void;
+  (event: 'open-timesheet'): void;
+  (event: 'auto-fill'): void;
 }
 
 defineProps<Props>();
@@ -21,6 +24,14 @@ const weekButtons: Array<{ key: WeekTab; label: string }> = [
 
 const switchWeek = (week: WeekTab) => {
   emit('switch-week', week);
+};
+
+const openTimesheet = () => {
+  emit('open-timesheet');
+};
+
+const autoFill = () => {
+  emit('auto-fill');
 };
 </script>
 
@@ -44,6 +55,15 @@ const switchWeek = (week: WeekTab) => {
         </button>
       </div>
     </header>
+
+    <div v-if="unfilledDays > 0" class="action-buttons">
+      <button class="fill-button" @click="openTimesheet">
+        填报工时（{{ unfilledDays }}天未填）
+      </button>
+      <button class="auto-fill-button" @click="autoFill">
+        自动填报
+      </button>
+    </div>
   </section>
 </template>
 
@@ -100,6 +120,33 @@ const switchWeek = (week: WeekTab) => {
   background: #2d7d67;
   color: #ffffff;
   font-weight: 700;
+}
+
+.action-buttons {
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+}
+
+.fill-button {
+  border: none;
+  border-radius: 0.65rem;
+  background: #145848;
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 0.6rem 0.8rem;
+}
+
+.auto-fill-button {
+  border: 1px solid #145848;
+  border-radius: 0.65rem;
+  background: #ffffff;
+  color: #145848;
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 0.6rem 0.8rem;
 }
 
 @media (min-width: 900px) {
