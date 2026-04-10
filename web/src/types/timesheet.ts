@@ -1,0 +1,57 @@
+export interface WeekDay {
+  date: string;
+  dayOfWeek: string;
+  isWeekend: boolean;
+  status: string;
+  totalHours: number;
+  details: WorkDetail[];
+}
+
+export interface WorkDetail {
+  id: string;
+  period: string;
+  hours: number;
+  content: string;
+  status: string;
+  statusDesc: string;
+}
+
+export interface WeekBoardResponse {
+  days: WeekDay[];
+  userName: string;
+  deptName: string;
+  totalHours: number;
+  weekNumber: number;
+  reportPeriod: string;
+  currentWeek: string;
+}
+
+export interface Project {
+  id: string;
+  title: string;
+}
+
+export interface WorkTypeNode {
+  id: string;
+  name: string;
+  level: number;
+  parentId: string | null;
+  children: WorkTypeNode[];
+  extraFields: {
+    selected: boolean;
+  };
+}
+
+export interface TimesheetEntry {
+  reportDate: string;
+  projectId: string;
+  projectTitle: string;
+  projectStatus: number;
+  itemId: string;
+  content: string;
+  hours: number;
+}
+
+export interface ReportBatchRequest {
+  workingTimingList: TimesheetEntry[];
+}
