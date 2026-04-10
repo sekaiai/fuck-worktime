@@ -1,3 +1,7 @@
 packages:
   - api
   - web
+
+ignoredBuiltDependencies:
+  - '@nestjs/core'
+  - esbuild
