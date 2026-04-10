@@ -83,7 +83,7 @@ export class TimesheetService {
       const response = await axios.get<ProjectDto[]>(url, { headers });
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to fetch projects', error);
+      this.logger.error('Failed to fetch projects');
       throw error;
     }
   }
