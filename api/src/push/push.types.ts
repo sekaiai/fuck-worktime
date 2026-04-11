@@ -1,4 +1,5 @@
 export interface StoredSubscription {
+  userId: string;
   endpoint: string;
   expirationTime?: number | null;
   keys: {

@@ -27,6 +27,7 @@ export class SaveAutoFillDto {
   hours!: number;
 
   @IsString()
+  @IsOptional()
   work!: string;
 
   @IsDateString()

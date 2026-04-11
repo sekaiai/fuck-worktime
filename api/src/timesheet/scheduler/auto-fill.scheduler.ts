@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { AutoFillStore } from './auto-fill.store';
 import { TimesheetService } from '../timesheet.service';
 import { AiService } from '../ai/ai.service';
-import { PushService } from '../../push/push.service';
+import { PushDeliveryService } from '../../push/push-delivery.service';
 import { DingtalkService } from '../../dingtalk/dingtalk.service';
 import type { AutoFillConfig } from './auto-fill.types';
 import axios from 'axios';
@@ -17,14 +17,14 @@ export class AutoFillScheduler {
     private readonly autoFillStore: AutoFillStore,
     private readonly timesheetService: TimesheetService,
     private readonly aiService: AiService,
-    private readonly pushService: PushService,
+    private readonly pushService: PushDeliveryService,
     private readonly dingtalkService: DingtalkService,
   ) {}
 
   @Cron('0 30 9 * * 1-5')
   async handleAutoFill(): Promise<void> {
     this.logger.log('Auto-fill scheduler triggered');
-    const configs = this.autoFillStore.getAll().filter((c) => c.enabled && !c.expired);
+    const configs = (await this.autoFillStore.getAll()).filter((c) => c.enabled && !c.expired);
 
     for (const config of configs) {
       try {
@@ -38,7 +38,7 @@ export class AutoFillScheduler {
   private async processUser(config: AutoFillConfig): Promise<void> {
     if (config.deadline && new Date(config.deadline) < new Date()) {
       const updated = { ...config, expired: true };
-      this.autoFillStore.set(updated);
+      await this.autoFillStore.set(updated);
       this.logger.log(`User ${config.userId} auto-fill expired`);
       return;
     }
@@ -77,7 +77,7 @@ export class AutoFillScheduler {
         lastExecutedAt: new Date().toISOString(),
         lastExecutionStatus: 'success',
       };
-      this.autoFillStore.set(updated);
+      await this.autoFillStore.set(updated);
       await this.notifyUser(config.userId, '今日工时已自动填报成功');
       this.logger.log(`User ${config.userId}: auto-fill success`);
     } catch (error) {
@@ -92,7 +92,7 @@ export class AutoFillScheduler {
               lastExecutedAt: new Date().toISOString(),
               lastExecutionStatus: 'success',
             };
-            this.autoFillStore.set(updated);
+            await this.autoFillStore.set(updated);
             await this.notifyUser(config.userId, '今日工时已自动填报成功');
             return;
           } catch {
@@ -106,7 +106,7 @@ export class AutoFillScheduler {
         lastExecutedAt: new Date().toISOString(),
         lastExecutionStatus: 'failed',
       };
-      this.autoFillStore.set(updated);
+      await this.autoFillStore.set(updated);
       await this.notifyUser(config.userId, '今日工时自动填报失败，请手动处理');
       this.logger.error(`User ${config.userId}: auto-fill failed`, error);
     }
@@ -160,11 +160,7 @@ export class AutoFillScheduler {
 
   private async tryRecoverToken(userId: string): Promise<string | null> {
     try {
-      const userData = await this.dingtalkService.getUserByUserId(userId);
-      if (userData?.token) {
-        return userData.token;
-      }
-      return null;
+      return await this.dingtalkService.refreshUserToken(userId);
     } catch {
       return null;
     }

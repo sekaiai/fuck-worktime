@@ -1,12 +1,13 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Post, Query } from '@nestjs/common';
 
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { RemoveSubscriptionDto } from './dto/remove-subscription.dto';
 import { SendNotificationDto } from './dto/send-notification.dto';
-import { PushService } from './push.service';
+import { PushDeliveryService } from './push-delivery.service';
 
 @Controller('push')
 export class PushController {
-  constructor(private readonly pushService: PushService) {}
+  constructor(private readonly pushService: PushDeliveryService) {}
 
   @Get('public-key')
   getPublicKey() {
@@ -14,8 +15,8 @@ export class PushController {
   }
 
   @Get('subscriptions')
-  getSubscriptions() {
-    return this.pushService.listSubscriptions();
+  getSubscriptions(@Query('userId') userId?: string) {
+    return this.pushService.listSubscriptions(userId);
   }
 
   @Get('diagnostic')
@@ -28,9 +29,13 @@ export class PushController {
     return this.pushService.saveSubscription(subscription);
   }
 
+  @Delete('subscribe')
+  unsubscribe(@Query() query: RemoveSubscriptionDto) {
+    return this.pushService.removeSubscription(query.endpoint);
+  }
+
   @Post('test')
   sendTest(@Body() payload: SendNotificationDto) {
     return this.pushService.sendTestNotification(payload);
   }
 }
-

@@ -5,7 +5,6 @@ import { HealthModule } from './health/health.module';
 import { DingtalkModule } from './dingtalk/dingtalk.module';
 import { PushModule } from './push/push.module';
 import { TimesheetModule } from './timesheet/timesheet.module';
-import { UserModule } from './user/user.module';
 
 @Module({
   imports: [
@@ -16,7 +15,6 @@ import { UserModule } from './user/user.module';
     HealthModule,
     DingtalkModule,
     PushModule,
-    UserModule,
     TimesheetModule,
   ],
 })

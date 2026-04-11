@@ -8,6 +8,8 @@ function getGzdataToken(): string {
   return getLocalStorage('gzdata_token') || '';
 }
 
+export { getGzdataToken };
+
 export function setGzdataToken(token: string): void {
   setLocalStorage('gzdata_token', token);
 }

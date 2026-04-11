@@ -1,64 +1,81 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { Injectable, Logger } from '@nestjs/common';
-import type { AutoFillConfig } from './auto-fill.types';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
-const CONFIG_FILE = path.join(DATA_DIR, 'auto-fill.json');
+import type { AutoFillConfig } from './auto-fill.types';
 
 @Injectable()
 export class AutoFillStore {
   private readonly logger = new Logger(AutoFillStore.name);
-  private configs: Map<string, AutoFillConfig> = new Map();
 
-  constructor() {
-    this.load();
+  private get dataDir(): string {
+    const cwd = process.cwd();
+    const apiRoot = path.basename(cwd) === 'api' ? cwd : path.resolve(cwd, 'api');
+    return path.join(apiRoot, 'data', 'auto-fill');
   }
 
-  private load(): void {
+  private getFilePath(userId: string): string {
+    return path.join(this.dataDir, `${userId}.json`);
+  }
+
+  private async ensureDir(): Promise<void> {
+    await fs.mkdir(this.dataDir, { recursive: true });
+  }
+
+  async get(userId: string): Promise<AutoFillConfig | null> {
     try {
-      if (!fs.existsSync(CONFIG_FILE)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-        fs.writeFileSync(CONFIG_FILE, '{}', 'utf-8');
-        return;
+      const content = await fs.readFile(this.getFilePath(userId), 'utf-8');
+      return JSON.parse(content) as AutoFillConfig;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        this.logger.error(`Failed to read auto-fill config for ${userId}`, error);
       }
-      const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
-      const parsed = JSON.parse(raw) as Record<string, AutoFillConfig>;
-      this.configs = new Map(Object.entries(parsed));
-    } catch (error) {
-      this.logger.error('Failed to load auto-fill config', error);
-      this.configs = new Map();
+      return null;
     }
   }
 
-  private save(): void {
+  async getAll(): Promise<AutoFillConfig[]> {
+    await this.ensureDir();
+
     try {
-      const obj: Record<string, AutoFillConfig> = {};
-      this.configs.forEach((value, key) => {
-        obj[key] = value;
-      });
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(CONFIG_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+      const entries = await fs.readdir(this.dataDir, { withFileTypes: true });
+      const configs = await Promise.all(
+        entries
+          .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+          .map(async (entry) => {
+            try {
+              const content = await fs.readFile(path.join(this.dataDir, entry.name), 'utf-8');
+              return JSON.parse(content) as AutoFillConfig;
+            } catch (error) {
+              this.logger.error(`Failed to parse auto-fill file ${entry.name}`, error);
+              return null;
+            }
+          }),
+      );
+
+      return configs.filter((config): config is AutoFillConfig => config !== null);
     } catch (error) {
-      this.logger.error('Failed to save auto-fill config', error);
+      this.logger.error('Failed to list auto-fill configs', error);
+      return [];
     }
   }
 
-  get(userId: string): AutoFillConfig | null {
-    return this.configs.get(userId) || null;
+  async set(config: AutoFillConfig): Promise<void> {
+    await this.ensureDir();
+    await fs.writeFile(
+      this.getFilePath(config.userId),
+      `${JSON.stringify(config, null, 2)}\n`,
+      'utf-8',
+    );
   }
 
-  getAll(): AutoFillConfig[] {
-    return Array.from(this.configs.values());
-  }
-
-  set(config: AutoFillConfig): void {
-    this.configs.set(config.userId, config);
-    this.save();
-  }
-
-  delete(userId: string): void {
-    this.configs.delete(userId);
-    this.save();
+  async delete(userId: string): Promise<void> {
+    try {
+      await fs.unlink(this.getFilePath(userId));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        this.logger.error(`Failed to delete auto-fill config for ${userId}`, error);
+      }
+    }
   }
 }

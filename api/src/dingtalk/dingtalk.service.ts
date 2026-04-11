@@ -406,6 +406,88 @@ export class DingtalkService {
     }
   }
 
+  async refreshUserToken(userId: string): Promise<string | null> {
+    const record = await this.dingtalkStore.getUser(userId);
+    if (!record) {
+      return null;
+    }
+
+    let browser: Browser | null = null;
+    let context: BrowserContext | null = null;
+    let page: Page | null = null;
+
+    try {
+      browser = await chromium.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-blink-features=AutomationControlled',
+        ],
+      });
+
+      context = await browser.newContext({
+        viewport: { width: 1280, height: 720 },
+        userAgent:
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      });
+
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => false });
+      });
+
+      const cookieEntries = Object.entries(record.dingtalkCookies ?? {});
+      if (cookieEntries.length > 0) {
+        await context.addCookies(
+          cookieEntries.map(([name, value]) => ({
+            name,
+            value,
+            domain: '.dingtalk.com',
+            path: '/',
+            httpOnly: false,
+            secure: true,
+            sameSite: 'Lax' as const,
+          })),
+        );
+      }
+
+      page = await context.newPage();
+      const dingAuthPromise = this.createDingAuthPromise(page, context);
+
+      await page.goto(this.DINGTALK_AUTH_URL, {
+        waitUntil: 'domcontentloaded',
+        timeout: 15000,
+      });
+
+      const loginButtonSelectors = [
+        'button:has-text("立即登录")',
+        'a:has-text("立即登录")',
+        '[class*="login"]:has-text("立即登录")',
+        'button:has-text("登录")',
+      ];
+
+      for (const selector of loginButtonSelectors) {
+        const button = page.locator(selector);
+        if (await button.count() > 0) {
+          await button.first().click();
+          break;
+        }
+      }
+
+      const authResult = await dingAuthPromise;
+      return authResult?.token ?? null;
+    } catch (error) {
+      this.logger.warn(
+        `refreshUserToken failed for ${userId}: ${error instanceof Error ? error.message : error}`,
+      );
+      return null;
+    } finally {
+      await page?.close().catch(() => {});
+      await context?.close().catch(() => {});
+      await browser?.close().catch(() => {});
+    }
+  }
+
   private extractUserInfo(response: unknown): { nickname: string; phone: string; department: string } {
     const envelope = this.asRecord(response);
 

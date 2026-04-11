@@ -12,8 +12,8 @@ interface NotificationPayload {
 }
 
 @Injectable()
-export class PushService {
-  private readonly logger = new Logger(PushService.name);
+export class PushDeliveryService {
+  private readonly logger = new Logger(PushDeliveryService.name);
   private readonly subscriptions = new Map<string, StoredSubscription>();
   private readonly requestTimeoutMs = 30000;
 
@@ -65,17 +65,17 @@ export class PushService {
 
   getDiagnosticInfo() {
     const subscriptions = Array.from(this.subscriptions.values());
-    const endpointParts = subscriptions.map((sub) => {
+    const endpointParts = subscriptions.map((subscription) => {
       try {
-        const url = new URL(sub.endpoint);
+        const url = new URL(subscription.endpoint);
         return {
           origin: url.origin,
           pathname: url.pathname,
           protocol: url.protocol,
-          userId: sub.userId,
+          userId: subscription.userId,
         };
       } catch {
-        return { raw: sub.endpoint, userId: sub.userId };
+        return { raw: subscription.endpoint, userId: subscription.userId };
       }
     });
 
@@ -92,18 +92,27 @@ export class PushService {
     };
   }
 
-  async sendTestNotification(payload?: {
-    title?: string;
-    body?: string;
-    url?: string;
-  }) {
-    const subscriptions = Array.from(this.subscriptions.values());
+  async sendTestNotification(payload?: NotificationPayload) {
+    return this.sendNotificationToAll(payload);
+  }
 
-    // 记录订阅信息用于调试
-    this.logger.debug(`准备发送推送，订阅数量: ${subscriptions.length}`);
-    subscriptions.forEach((sub, index) => {
-      this.logger.debug(`订阅[${index}]: endpoint=${sub.endpoint.substring(0, 50)}...`);
-    });
+  async sendNotificationToUser(userId: string, payload?: NotificationPayload) {
+    const subscriptions = Array.from(this.subscriptions.values()).filter(
+      (subscription) => subscription.userId === userId,
+    );
+
+    return this.sendNotification(payload, subscriptions);
+  }
+
+  async sendNotificationToAll(payload?: NotificationPayload) {
+    return this.sendNotification(payload, Array.from(this.subscriptions.values()));
+  }
+
+  private async sendNotification(
+    payload: NotificationPayload | undefined,
+    subscriptions: StoredSubscription[],
+  ) {
+    this.logger.debug(`Preparing push delivery for ${subscriptions.length} subscriptions.`);
 
     const pushPayload = JSON.stringify({
       title: payload?.title ?? '云上工时',
@@ -123,27 +132,28 @@ export class PushService {
 
     let removed = 0;
     const errors: string[] = [];
+
     results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        const reason = result.reason as Partial<webpush.WebPushError> | undefined;
-        const reasonText =
-          reason && typeof reason === 'object'
-            ? `status=${String(reason.statusCode ?? 'unknown')}, message=${String(reason.message ?? 'unknown')}`
-            : String(result.reason);
-        errors.push(`subscription[${index}]: ${reasonText}`);
-
-        // 清理无效订阅：404/410 表示订阅已过期
-        if (reason?.statusCode === 404 || reason?.statusCode === 410) {
-          const endpoint = subscriptions[index]?.endpoint;
-          if (endpoint && this.subscriptions.delete(endpoint)) {
-            removed += 1;
-          }
-        }
-
-        this.logger.warn(
-          `Push delivery failed for subscription ${index}: ${String(result.reason)}`,
-        );
+      if (result.status === 'fulfilled') {
+        return;
       }
+
+      const reason = result.reason as Partial<webpush.WebPushError> | undefined;
+      const reasonText =
+        reason && typeof reason === 'object'
+          ? `status=${String(reason.statusCode ?? 'unknown')}, message=${String(reason.message ?? 'unknown')}`
+          : String(result.reason);
+
+      errors.push(`subscription[${index}]: ${reasonText}`);
+
+      if (reason?.statusCode === 404 || reason?.statusCode === 410) {
+        const endpoint = subscriptions[index]?.endpoint;
+        if (endpoint && this.subscriptions.delete(endpoint)) {
+          removed += 1;
+        }
+      }
+
+      this.logger.warn(`Push delivery failed for subscription ${index}: ${reasonText}`);
     });
 
     const attempted = subscriptions.length;
@@ -151,17 +161,17 @@ export class PushService {
     const failed = results.filter((result) => result.status === 'rejected').length;
     const success = attempted > 0 && delivered > 0;
 
-    let resultMessage =
-      '推送请求已被推送服务接受。是否展示系统通知，取决于浏览器、Service Worker 和设备通知设置。';
+    let message =
+      '推送请求已发送，是否展示系统通知取决于浏览器权限、Service Worker 和系统通知设置。';
     if (attempted === 0) {
-      resultMessage = '当前没有可用订阅，请先创建订阅。';
+      message = '当前没有可用订阅，请先创建订阅。';
     } else if (delivered === 0) {
-      resultMessage = '推送请求已发出，但未送达任何订阅。请检查网络连接或重新创建订阅。';
+      message = '推送请求已发出，但未送达任何订阅，请检查权限或重新订阅。';
     }
 
     return {
       success,
-      message: resultMessage,
+      message,
       attempted,
       delivered,
       failed,

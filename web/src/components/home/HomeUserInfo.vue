@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { UserInfo } from '../../types/user';
+import { My } from '@nutui/icons-vue';
 
 defineProps<{
   userInfo: UserInfo | null;
@@ -19,7 +20,7 @@ defineEmits<{
 
     <div v-else-if="userInfo" class="user-info__content">
       <div class="user-info__avatar">
-        <nut-icon name="my" size="24" color="#fff"></nut-icon>
+        <My width="24" height="24" color="#fff"></My>
       </div>
       <div class="user-info__detail">
         <span class="user-info__name">{{ userInfo.nickname || '未知用户' }}</span>

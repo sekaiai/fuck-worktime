@@ -11,5 +11,5 @@ export interface AutoFillConfig {
   work: string;
   deadline: string | null;
   lastExecutedAt: string | null;
-  lastExecutionStatus: string | null;
+  lastExecutionStatus: 'success' | 'failed' | 'skipped' | 'expired' | null;
 }

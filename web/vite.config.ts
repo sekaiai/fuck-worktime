@@ -1,16 +1,10 @@
 import { VitePWA } from 'vite-plugin-pwa';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
-import Components from 'unplugin-vue-components/vite';
-import NutUIResolver from '@nutui/nutui/dist/resolver';
 
 export default defineConfig({
   plugins: [
     vue(),
-    Components({
-      resolvers: [NutUIResolver()],
-      dts: 'src/components.d.ts',
-    }),
     VitePWA({
       registerType: 'autoUpdate',
       strategies: 'injectManifest',
@@ -51,6 +45,14 @@ export default defineConfig({
       },
     }),
   ],
+  css: {
+    preprocessorOptions: {
+      scss: {
+        additionalData: `@use "@nutui/nutui/dist/styles/variables.scss" as *;\n`,
+        api: 'modern-compiler',
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     allowedHosts: ['example.com'],

@@ -5,14 +5,14 @@ import { TimesheetController } from './timesheet.controller';
 import { TimesheetService } from './timesheet.service';
 import { AiService } from './ai/ai.service';
 import { AutoFillStore } from './scheduler/auto-fill.store';
-import { AutoFillScheduler } from './scheduler/auto-fill.scheduler';
+import { AutoFillRuntimeScheduler } from './scheduler/auto-fill.runtime.scheduler';
 import { DingtalkModule } from '../dingtalk/dingtalk.module';
 import { PushModule } from '../push/push.module';
 
 @Module({
   imports: [ConfigModule, ScheduleModule.forRoot(), DingtalkModule, PushModule],
   controllers: [TimesheetController],
-  providers: [TimesheetService, AiService, AutoFillStore, AutoFillScheduler],
+  providers: [TimesheetService, AiService, AutoFillStore, AutoFillRuntimeScheduler],
   exports: [TimesheetService, AiService, AutoFillStore],
 })
 export class TimesheetModule {}

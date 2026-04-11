@@ -18,17 +18,18 @@ export interface WorkDetail {
 
 export interface WeekBoardResponse {
   days: WeekDay[];
-  userName: string;
-  deptName: string;
+  userName?: string;
+  deptName?: string;
   totalHours: number;
-  weekNumber: number;
-  reportPeriod: string;
-  currentWeek: string;
+  weekNumber?: number;
+  reportPeriod?: string;
+  currentWeek?: string;
 }
 
 export interface Project {
   id: string;
   title: string;
+  status: number;
 }
 
 export interface WorkTypeNode {
@@ -36,9 +37,9 @@ export interface WorkTypeNode {
   name: string;
   level: number;
   parentId: string | null;
-  children: WorkTypeNode[];
-  extraFields: {
-    selected: boolean;
+  children?: WorkTypeNode[];
+  extraFields?: {
+    selected?: boolean;
   };
 }
 
@@ -48,6 +49,7 @@ export interface TimesheetEntry {
   projectTitle: string;
   projectStatus: number;
   itemId: string;
+  itemName?: string;
   content: string;
   hours: number;
 }

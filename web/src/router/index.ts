@@ -5,17 +5,17 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'home',
-    component: () => import('../views/HomeView.vue'),
+    component: () => import('../views/HomeShellView.vue'),
   },
   {
     path: '/notifications',
     name: 'notifications',
-    component: () => import('../views/NotificationsView.vue'),
+    component: () => import('../views/PushNotificationsView.vue'),
   },
   {
     path: '/dingtalk-login',
     name: 'dingtalk-login',
-    component: () => import('../views/DingtalkLoginView.vue'),
+    component: () => import('../views/DingtalkAuthView.vue'),
   },
 ];
 

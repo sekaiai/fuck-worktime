@@ -21,6 +21,10 @@ class SubscriptionKeysDto {
 export class CreateSubscriptionDto {
   @IsString()
   @IsNotEmpty()
+  userId!: string;
+
+  @IsString()
+  @IsNotEmpty()
   endpoint!: string;
 
   @IsOptional()

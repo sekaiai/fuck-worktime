@@ -72,8 +72,10 @@ export class TimesheetController {
   }
 
   @Post('auto-fill')
-  saveAutoFill(@Body() dto: SaveAutoFillDto): { code: number; msg: string; data: AutoFillConfig | null } {
-    const existing = this.autoFillStore.get(dto.userId);
+  async saveAutoFill(
+    @Body() dto: SaveAutoFillDto,
+  ): Promise<{ code: number; msg: string; data: AutoFillConfig | null }> {
+    const existing = await this.autoFillStore.get(dto.userId);
     const config: AutoFillConfig = {
       userId: dto.userId,
       enabled: dto.enabled ?? true,
@@ -89,24 +91,28 @@ export class TimesheetController {
       lastExecutedAt: existing?.lastExecutedAt ?? null,
       lastExecutionStatus: existing?.lastExecutionStatus ?? null,
     };
-    this.autoFillStore.set(config);
+    await this.autoFillStore.set(config);
     return { code: 200, msg: '保存成功', data: config };
   }
 
   @Get('auto-fill')
-  getAutoFill(@Query() query: GetAutoFillQueryDto): { code: number; msg: string; data: AutoFillConfig | null } {
-    const config = this.autoFillStore.get(query.userId);
+  async getAutoFill(
+    @Query() query: GetAutoFillQueryDto,
+  ): Promise<{ code: number; msg: string; data: AutoFillConfig | null }> {
+    const config = await this.autoFillStore.get(query.userId);
     return { code: 200, msg: 'success', data: config };
   }
 
   @Delete('auto-fill')
-  disableAutoFill(@Query() query: GetAutoFillQueryDto): { code: number; msg: string; data: AutoFillConfig | null } {
-    const config = this.autoFillStore.get(query.userId);
+  async disableAutoFill(
+    @Query() query: GetAutoFillQueryDto,
+  ): Promise<{ code: number; msg: string; data: AutoFillConfig | null }> {
+    const config = await this.autoFillStore.get(query.userId);
     if (!config) {
       return { code: 404, msg: '配置不存在', data: null };
     }
     const updated: AutoFillConfig = { ...config, enabled: false };
-    this.autoFillStore.set(updated);
+    await this.autoFillStore.set(updated);
     return { code: 200, msg: '已关闭自动填报', data: updated };
   }
 }
