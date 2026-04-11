@@ -1,121 +1,91 @@
-import { ref } from 'vue';
+import type { WeekBoardResponse, Project, WorkTypeNode, TimesheetEntry, ReportBatchRequest } from '../types/timesheet';
+import type { AutoFillConfig } from '../types/auto-fill';
+import { getLocalStorage, setLocalStorage, removeLocalStorage } from '../utils/cache';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:10002/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:10002/api';
 
-export interface Project {
-  id: string;
-  title: string;
+function getGzdataToken(): string {
+  return getLocalStorage('gzdata_token') || '';
 }
 
-export interface WorkType {
-  id: string;
-  name: string;
-  level: number;
-  parentId?: string;
-  children?: WorkType[];
+export function setGzdataToken(token: string): void {
+  setLocalStorage('gzdata_token', token);
 }
 
-export interface TimesheetEntry {
-  reportDate: string;
-  projectId: string;
-  projectTitle: string;
-  projectStatus?: number;
-  itemId: string;
-  content: string;
-  hours: number;
+export function clearGzdataToken(): void {
+  removeLocalStorage('gzdata_token');
 }
 
-export interface GenerateContentRequest {
-  dayCount: number;
-  maxChars?: number;
-  description: string;
+function authHeaders(): Record<string, string> {
+  const token = getGzdataToken();
+  return token ? { 'x-gzdata-token': token } : {};
 }
 
-const gzdataToken = ref<string | null>(localStorage.getItem('gzdata_token'));
-
-export function setGzdataToken(token: string) {
-  gzdataToken.value = token;
-  localStorage.setItem('gzdata_token', token);
-}
-
-export function getGzdataToken(): string | null {
-  return gzdataToken.value;
-}
-
-export function clearGzdataToken() {
-  gzdataToken.value = null;
-  localStorage.removeItem('gzdata_token');
-}
-
-async function fetchApi<T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const token = gzdataToken.value;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
-  };
-  
-  if (token) {
-    headers['x-gzdata-token'] = token;
-  }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
     ...options,
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+      ...options?.headers as Record<string, string>,
+    },
   });
-
-  if (!response.ok) {
-    throw new Error(`API Error: ${response.status}`);
+  if (res.status === 401) {
+    const error = new Error('TOKEN_EXPIRED');
+    error.name = 'TokenExpiredError';
+    throw error;
   }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `请求失败: ${res.status}`);
+  }
+  return res.json();
+}
 
-  return response.json();
+export async function getWeekBoard(date: string): Promise<WeekBoardResponse> {
+  const data = await request<{ code: number; msg: string; data: WeekBoardResponse }>(`${API_BASE}/timesheet/week-board?date=${encodeURIComponent(date)}`);
+  return data.data;
 }
 
 export async function getProjects(): Promise<Project[]> {
-  const response = await fetchApi<{ data: Project[] }>('/timesheet/projects');
-  return response.data || [];
+  const data = await request<{ code: number; msg: string; data: Project[] }>(`${API_BASE}/timesheet/projects`);
+  return data.data;
 }
 
-export async function getWorkTypes(projectId: string): Promise<WorkType[]> {
-  const response = await fetchApi<{ data: WorkType[] }>(
-    `/timesheet/work-types?projectId=${projectId}`
-  );
-  return response.data || [];
+export async function getWorkTypes(projectId: string): Promise<WorkTypeNode[]> {
+  const data = await request<{ code: number; msg: string; data: WorkTypeNode[] }>(`${API_BASE}/timesheet/work-types?projectId=${encodeURIComponent(projectId)}`);
+  return data.data;
 }
 
-export async function submitTimesheet(
-  entry: TimesheetEntry
-): Promise<{ success: boolean; message: string }> {
-  return fetchApi('/timesheet/submit', {
+export async function submitBatch(body: ReportBatchRequest): Promise<{ code: number; msg: string }> {
+  return request<{ code: number; msg: string }>(`${API_BASE}/timesheet/report-batch`, {
     method: 'POST',
-    body: JSON.stringify({
-      ...entry,
-      projectStatus: entry.projectStatus || 30,
-    }),
+    body: JSON.stringify(body),
   });
 }
 
-export async function generateContent(
-  request: GenerateContentRequest
-): Promise<string[]> {
-  const response = await fetchApi<{ data: string[] }>('/timesheet/generate', {
+export async function generateContent(work: string, days: number): Promise<string[]> {
+  const data = await request<{ code: number; msg: string; data: string[] }>(`${API_BASE}/timesheet/generate`, {
     method: 'POST',
-    body: JSON.stringify(request),
+    body: JSON.stringify({ work, days }),
   });
-  return response.data || [];
+  return data.data;
 }
 
-export async function saveTokenToBackend(
-  token: string
-): Promise<{ success: boolean }> {
-  return fetchApi('/user/token', {
+export async function getAutoFillConfig(userId: string): Promise<AutoFillConfig | null> {
+  const data = await request<{ code: number; msg: string; data: AutoFillConfig | null }>(`${API_BASE}/timesheet/auto-fill?userId=${encodeURIComponent(userId)}`);
+  return data.data;
+}
+
+export async function saveAutoFillConfig(config: Partial<AutoFillConfig> & { userId: string }): Promise<{ code: number; msg: string }> {
+  return request<{ code: number; msg: string }>(`${API_BASE}/timesheet/auto-fill`, {
     method: 'POST',
-    body: JSON.stringify({ token }),
+    body: JSON.stringify(config),
   });
 }
 
-export async function getTokenFromBackend(): Promise<{ token: string | null }> {
-  return fetchApi('/user/token');
+export async function disableAutoFill(userId: string): Promise<{ code: number; msg: string }> {
+  return request<{ code: number; msg: string }>(`${API_BASE}/timesheet/auto-fill?userId=${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  });
 }

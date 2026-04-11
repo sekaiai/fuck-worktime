@@ -1,10 +1,16 @@
 import { VitePWA } from 'vite-plugin-pwa';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
+import Components from 'unplugin-vue-components/vite';
+import NutUIResolver from '@nutui/nutui/dist/resolver';
 
 export default defineConfig({
   plugins: [
     vue(),
+    Components({
+      resolvers: [NutUIResolver()],
+      dts: 'src/components.d.ts',
+    }),
     VitePWA({
       registerType: 'autoUpdate',
       strategies: 'injectManifest',

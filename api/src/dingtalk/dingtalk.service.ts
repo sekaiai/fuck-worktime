@@ -4,6 +4,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 
 import { DingtalkStore } from './dingtalk.store';
+import { UserInfoData } from './dto/user-info.dto';
+import { TimesClient } from '../user/times.client';
 
 interface DingAuthResponse {
   msg: string;
@@ -34,6 +36,7 @@ export class DingtalkService {
 
   constructor(
     private readonly dingtalkStore: DingtalkStore,
+    private readonly timesClient: TimesClient,
   ) {}
 
   /**
@@ -367,6 +370,76 @@ export class DingtalkService {
       return { status: 'not_found', userId: null, token: null };
     }
     return { status: session.status, userId: session.userId, token: session.token };
+  }
+
+  async getUserByUserId(userId: string): Promise<UserInfoData | null> {
+    const record = await this.dingtalkStore.getUser(userId);
+    if (!record) {
+      return null;
+    }
+
+    const authorization = `Bearer ${record.token}`;
+
+    try {
+      const remoteResponse = await this.timesClient.getUserInfo(authorization);
+      const userProfile = this.extractUserInfo(remoteResponse);
+
+      return {
+        userId: record.userId,
+        token: record.token,
+        nickname: userProfile.nickname,
+        phone: userProfile.phone,
+        department: userProfile.department,
+        updatedAt: record.updatedAt,
+      };
+    } catch (error) {
+      this.logger.warn(`getUserByUserId: 远程获取用户信息失败，userId=${userId}，${error instanceof Error ? error.message : error}`);
+
+      return {
+        userId: record.userId,
+        token: record.token,
+        nickname: '',
+        phone: '',
+        department: '',
+        updatedAt: record.updatedAt,
+      };
+    }
+  }
+
+  private extractUserInfo(response: unknown): { nickname: string; phone: string; department: string } {
+    const envelope = this.asRecord(response);
+
+    if (!envelope || envelope.code !== 200) {
+      return { nickname: '', phone: '', department: '' };
+    }
+
+    const user = this.asRecord(envelope.user);
+    if (!user) {
+      return { nickname: '', phone: '', department: '' };
+    }
+
+    const nickname = this.pickString(user, ['nickName', 'nickname', 'userName']) ?? '';
+    const phone = this.pickString(user, ['phonenumber', 'userName', 'phone']) ?? '';
+    const department = this.pickString(user, ['deptName', 'department', 'deptId']) ?? '';
+
+    return { nickname, phone, department };
+  }
+
+  private pickString(record: Record<string, unknown>, fields: string[]): string | null {
+    for (const field of fields) {
+      const value = record[field];
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+    return null;
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+    return value as Record<string, unknown>;
   }
 
   /**

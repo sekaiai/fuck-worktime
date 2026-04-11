@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { getQrcode, pollStatus, getUserByUserId } from '../api/dingtalk';
 import { setGzdataToken } from '../api/timesheet';
+import { setLocalStorage } from '../utils/cache';
 
 const router = useRouter();
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:10002/api';
 
 const qrcodeBase64 = ref<string | null>(null);
 const taskId = ref<string | null>(null);
@@ -19,17 +19,15 @@ async function fetchQrcode() {
   qrcodeBase64.value = null;
 
   try {
-    const response = await fetch(`${API_BASE_URL}/dingtalk/qrcode`);
-    const result = await response.json();
-
-    if (result.code === 200 && result.data) {
-      taskId.value = result.data.taskId;
-      qrcodeBase64.value = result.data.qrcodeBase64;
+    const result = await getQrcode();
+    if (result.taskId && result.qrcode) {
+      taskId.value = result.taskId;
+      qrcodeBase64.value = result.qrcode;
       status.value = 'waiting';
       startPolling();
     } else {
       status.value = 'error';
-      errorMessage.value = result.msg || '获取二维码失败';
+      errorMessage.value = '获取二维码失败';
     }
   } catch (error) {
     status.value = 'error';
@@ -43,32 +41,45 @@ function startPolling() {
     if (!taskId.value) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/dingtalk/status?taskId=${taskId.value}`);
-      const result = await response.json();
+      const result = await pollStatus(taskId.value);
 
-      if (result.code === 200 && result.data) {
-        const { status: loginStatus, token } = result.data;
-
-        if (loginStatus === 'success' && token) {
-          status.value = 'success';
-          setGzdataToken(token);
-          stopPolling();
-          setTimeout(() => {
-            router.push('/timesheet');
-          }, 1500);
-        } else if (loginStatus === 'timeout') {
-          status.value = 'timeout';
-          stopPolling();
-        } else if (loginStatus === 'error') {
-          status.value = 'error';
-          errorMessage.value = '登录失败';
-          stopPolling();
-        }
+      if (result.status === 'success' && result.userId) {
+        status.value = 'success';
+        stopPolling();
+        await handleLoginSuccess(result.userId);
+      } else if (result.status === 'timeout') {
+        status.value = 'timeout';
+        stopPolling();
+      } else if (result.status === 'error') {
+        status.value = 'error';
+        errorMessage.value = '登录失败';
+        stopPolling();
       }
     } catch {
-      // 轮询网络错误，继续轮询
+      // continue polling on network error
     }
   }, 2000);
+}
+
+async function handleLoginSuccess(userId: string) {
+  try {
+    const userResult = await getUserByUserId(userId);
+    if (userResult.code === 200 && userResult.data) {
+      setLocalStorage('userId', userId);
+      if (userResult.data.token) {
+        setGzdataToken(userResult.data.token);
+      }
+      setTimeout(() => {
+        router.push('/');
+      }, 1000);
+    } else {
+      status.value = 'error';
+      errorMessage.value = '获取用户信息失败，请重试';
+    }
+  } catch {
+    status.value = 'error';
+    errorMessage.value = '获取用户信息失败，请重试';
+  }
 }
 
 function stopPolling() {
@@ -114,12 +125,12 @@ onUnmounted(() => {
 
         <div v-else-if="status === 'timeout'" class="dingtalk-login__expired">
           <p>二维码已过期</p>
-          <button class="dingtalk-login__refresh-btn" @click="refreshQrcode">刷新二维码</button>
+          <nut-button type="primary" size="small" @click="refreshQrcode">刷新二维码</nut-button>
         </div>
 
         <div v-else-if="status === 'error'" class="dingtalk-login__error">
           <p>{{ errorMessage || '获取二维码失败' }}</p>
-          <button class="dingtalk-login__refresh-btn" @click="refreshQrcode">重试</button>
+          <nut-button type="primary" size="small" @click="refreshQrcode">重试</nut-button>
         </div>
       </div>
 
@@ -142,7 +153,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0f3d3e 0%, #1a5c5e 100%);
 }
 
 .dingtalk-login__card {
@@ -168,8 +179,8 @@ onUnmounted(() => {
 }
 
 .dingtalk-login__qrcode-wrapper {
-  width: 280px;
-  height: 280px;
+  width: 260px;
+  height: 260px;
   margin: 0 auto 1.5rem;
   border: 2px solid #e8e8e8;
   border-radius: 12px;
@@ -189,7 +200,7 @@ onUnmounted(() => {
 .dingtalk-login__overlay {
   position: absolute;
   inset: 0;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.92);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -213,7 +224,7 @@ onUnmounted(() => {
   width: 40px;
   height: 40px;
   border: 3px solid #e8e8e8;
-  border-top-color: #667eea;
+  border-top-color: #0f3d3e;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -228,26 +239,14 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+}
+
+.dingtalk-login__expired p {
   color: #999;
 }
 
-.dingtalk-login__error {
+.dingtalk-login__error p {
   color: #ff4d4f;
-}
-
-.dingtalk-login__refresh-btn {
-  padding: 0.5rem 1.5rem;
-  background: #667eea;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background 0.2s;
-}
-
-.dingtalk-login__refresh-btn:hover {
-  background: #5a6fd6;
 }
 
 .dingtalk-login__tips {
@@ -265,7 +264,7 @@ onUnmounted(() => {
 }
 
 .dingtalk-login__back {
-  color: #667eea;
+  color: #0f3d3e;
   text-decoration: none;
   font-size: 0.9rem;
 }

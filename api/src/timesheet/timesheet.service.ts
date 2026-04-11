@@ -6,14 +6,17 @@ import { ReportBatchDto } from './dto/report-batch.dto';
 import { ReportDto } from './dto/report.dto';
 import { ProjectDto } from './dto/project.dto';
 import { WorkTypeDto } from './dto/work-type.dto';
+import { AiService } from './ai/ai.service';
 
 @Injectable()
 export class TimesheetService {
   private readonly logger = new Logger(TimesheetService.name);
   private readonly timesApiBaseUrl = 'https://times.gzdata.com.cn:8099/prod-api';
-  private readonly siliconFlowApiUrl = 'https://api.siliconflow.cn/v1/chat/completions';
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly aiService: AiService,
+  ) {}
 
   private getAuthHeaders(token: string) {
     return {
@@ -27,9 +30,7 @@ export class TimesheetService {
       const response = await axios.post(
         `${this.timesApiBaseUrl}/working/timing/repor`,
         data,
-        {
-          headers: this.getAuthHeaders(token),
-        },
+        { headers: this.getAuthHeaders(token) },
       );
       return response.data;
     } catch (error) {
@@ -38,43 +39,8 @@ export class TimesheetService {
     }
   }
 
-  async generateContent(dayCount: number, maxChars: number, description: string): Promise<string[]> {
-    const apiKey = this.configService.get<string>('SILICONFLOW_API_KEY');
-    if (!apiKey) {
-      throw new Error('SILICONFLOW_API_KEY is not configured');
-    }
-
-    try {
-      const response = await axios.post(
-        this.siliconFlowApiUrl,
-        {
-          model: 'Pro/zai-org/GLM-4.7',
-          messages: [
-            {
-              role: 'system',
-              content: `你是一个工时填报助手。根据用户描述的工作内容，生成${dayCount}条工作内容，每条不超过${maxChars}字。返回JSON数组格式：["内容1", "内容2", ...]`,
-            },
-            {
-              role: 'user',
-              content: description,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-
-      const content = response.data.choices[0].message.content;
-      const parsed = JSON.parse(content);
-      return parsed;
-    } catch (error) {
-      this.logger.error('Failed to generate content', error);
-      throw error;
-    }
+  async generateContent(work: string, days: number): Promise<string[]> {
+    return this.aiService.generateWorkContents(work, days);
   }
 
   async getProjects(token: string): Promise<ProjectDto[]> {
