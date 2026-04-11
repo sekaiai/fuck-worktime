@@ -147,14 +147,16 @@ defineExpose({ showSubmitResult });
                 @change="onWorkTypeChange(($event.target as HTMLSelectElement).value)"
               >
                 <option value="" disabled>请选择工时类型</option>
-                <optgroup v-for="group in workTypes" :key="group.id" :label="group.name">
-                  <option v-for="child in group.children" :key="child.id" :value="child.id">
-                    {{ child.name }}
+                <template v-for="group in workTypes" :key="group.id">
+                  <optgroup v-if="group.children && group.children.length > 0" :label="group.name">
+                    <option v-for="child in group.children" :key="child.id" :value="child.id">
+                      {{ child.name }}
+                    </option>
+                  </optgroup>
+                  <option v-else :value="group.id">
+                    {{ group.name }}
                   </option>
-                </optgroup>
-                <option v-for="f in flatWorkTypes.filter((f) => !f.parent)" :key="f.node.id" :value="f.node.id">
-                  {{ f.node.name }}
-                </option>
+                </template>
               </select>
             </template>
             <template #icon>
