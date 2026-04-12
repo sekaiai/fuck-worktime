@@ -15,6 +15,16 @@ interface WeekBoardDay {
   status: string;
 }
 
+interface AutoFillReportPayload {
+  reportDate: string;
+  projectId: string;
+  projectTitle: string;
+  projectStatus: number;
+  itemId: string;
+  content: string;
+  hours: number;
+}
+
 @Injectable()
 export class AutoFillRuntimeScheduler {
   private readonly logger = new Logger(AutoFillRuntimeScheduler.name);
@@ -63,68 +73,81 @@ export class AutoFillRuntimeScheduler {
 
     const today = this.getTodayKey();
     const weekBoard = await this.getWeekBoard(today, token);
-    const todayData = weekBoard?.find((day) => day.date === today);
-
-    if (!todayData) {
-      await this.markFailed(config, '获取当日填报状态失败，请稍后重试。');
+    if (!weekBoard) {
+      await this.markFailed(config, '获取本周填报状态失败，请稍后重试。');
       return;
     }
 
-    if (todayData.isWeekend) {
-      await this.markSkipped(config, '今天是休息日，自动填报未执行。');
+    const fillableDays = weekBoard
+      .filter((day) => !day.isWeekend && day.status === '未提交' && day.date <= today)
+      .sort((left, right) => left.date.localeCompare(right.date));
+
+    if (fillableDays.length === 0) {
+      await this.markSkipped(config, '本周当前没有可自动填报的未提交工作日。');
       return;
     }
 
-    if (todayData.status !== '未提交') {
-      await this.markSkipped(config, '今天工时已提交，自动填报未重复执行。');
-      return;
-    }
+    const contents = await this.aiService.generateWorkContents(
+      config.work || '日常工作处理',
+      fillableDays.length,
+    );
 
-    const [content] = await this.aiService.generateWorkContents(config.work || '日常工作处理', 1);
-    const payload = {
-      reportDate: today,
+    const payloads = fillableDays.map<AutoFillReportPayload>((day, index) => ({
+      reportDate: day.date,
       projectId: config.projectId,
       projectTitle: config.projectTitle,
       projectStatus: config.projectStatus,
       itemId: config.itemId,
-      content: content || '日常工作处理',
+      content: contents[index] || '日常工作处理',
       hours: config.hours,
-    };
+    }));
 
     try {
-      await this.timesheetService.report(payload, token);
+      const submittedCount = await this.submitReportsSequentially(config.userId, payloads, token);
       await this.autoFillStore.set({
         ...config,
         lastExecutedAt: new Date().toISOString(),
         lastExecutionStatus: 'success',
       });
-      await this.notifyUser(config.userId, '今天工时已自动填报成功。');
+      await this.notifyUser(
+        config.userId,
+        `本周自动填报成功，已提交 ${submittedCount} 条工时。`,
+      );
     } catch (error) {
-      if (this.isAuthError(error)) {
-        const retryToken = await this.dingtalkService.refreshUserToken(config.userId);
-
-        if (retryToken) {
-          try {
-            await this.timesheetService.report(payload, retryToken);
-            await this.autoFillStore.set({
-              ...config,
-              lastExecutedAt: new Date().toISOString(),
-              lastExecutionStatus: 'success',
-            });
-            await this.notifyUser(config.userId, '今天工时已自动填报成功。');
-            return;
-          } catch (retryError) {
-            this.logger.error(`Retry auto-fill failed for user ${config.userId}`, retryError);
-          }
-        }
-
-        await this.markFailed(config, '自动填报凭证已失效，请重新执行钉钉登录。');
-        return;
-      }
-
-      await this.markFailed(config, '今天工时自动填报失败，请手动处理。');
+      await this.markFailed(config, '本周自动填报失败，请手动处理未提交工时。');
       this.logger.error(`Auto-fill failed for user ${config.userId}`, error);
     }
+  }
+
+  private async submitReportsSequentially(
+    userId: string,
+    payloads: AutoFillReportPayload[],
+    initialToken: string,
+  ): Promise<number> {
+    let token = initialToken;
+    let submittedCount = 0;
+
+    for (const payload of payloads) {
+      try {
+        await this.timesheetService.report(payload, token);
+        submittedCount += 1;
+      } catch (error) {
+        if (!this.isAuthError(error)) {
+          throw error;
+        }
+
+        const retryToken = await this.dingtalkService.refreshUserToken(userId);
+        if (!retryToken) {
+          throw error;
+        }
+
+        token = retryToken;
+        await this.timesheetService.report(payload, token);
+        submittedCount += 1;
+      }
+    }
+
+    return submittedCount;
   }
 
   private async getTokenForUser(userId: string): Promise<string | null> {
