@@ -29,9 +29,11 @@ const {
   errorCode,
   isLoading: isWeekLoading,
   canGoNextWeek,
+  isCurrentWeek,
   loadWeek,
   goToPreviousWeek,
   goToNextWeek,
+  goToCurrentWeek,
 } = weekBoard;
 const { projects, isProjectsLoading, loadProjects: loadCatalogProjects, loadWorkTypes } = catalog;
 const {
@@ -64,9 +66,16 @@ async function refreshWeekBoard(): Promise<void> {
   }
 }
 
-async function switchWeek(direction: 'previous' | 'next'): Promise<void> {
-  const ok =
-    direction === 'previous' ? await goToPreviousWeek() : await goToNextWeek();
+async function switchWeek(direction: 'previous' | 'current' | 'next'): Promise<void> {
+  let ok = false;
+
+  if (direction === 'previous') {
+    ok = await goToPreviousWeek();
+  } else if (direction === 'current') {
+    ok = await goToCurrentWeek();
+  } else {
+    ok = await goToNextWeek();
+  }
 
   if (!ok && errorCode.value === 'TOKEN_EXPIRED') {
     handleTokenExpired();
@@ -132,8 +141,9 @@ onMounted(() => {
         :average-hours="averageHours"
         :fillable-count="fillableDays.length"
         :can-go-next-week="canGoNextWeek"
-        @refresh="refreshWeekBoard"
+        :is-current-week="isCurrentWeek"
         @previous-week="switchWeek('previous')"
+        @current-week="switchWeek('current')"
         @next-week="switchWeek('next')"
         @open-manual-fill="openManualFill"
       />

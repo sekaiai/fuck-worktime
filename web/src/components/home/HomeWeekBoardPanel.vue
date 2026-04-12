@@ -15,11 +15,12 @@ const props = defineProps<{
   averageHours: number;
   fillableCount: number;
   canGoNextWeek: boolean;
+  isCurrentWeek: boolean;
 }>();
 
 const emit = defineEmits<{
-  refresh: [];
   previousWeek: [];
+  currentWeek: [];
   nextWeek: [];
   openManualFill: [];
 }>();
@@ -97,6 +98,9 @@ function getDetailKey(detail: WorkDetail, index: number): string {
         <button class="board-panel__ghost" type="button" :disabled="isLoading" @click="emit('previousWeek')">
           上一周
         </button>
+        <button class="board-panel__ghost" type="button" :disabled="isLoading || isCurrentWeek" @click="emit('currentWeek')">
+          本周
+        </button>
         <button
           class="board-panel__ghost"
           type="button"
@@ -104,9 +108,6 @@ function getDetailKey(detail: WorkDetail, index: number): string {
           @click="emit('nextWeek')"
         >
           下一周
-        </button>
-        <button class="board-panel__refresh" type="button" :disabled="isLoading" @click="emit('refresh')">
-          {{ isLoading ? '刷新中...' : '刷新' }}
         </button>
       </div>
     </header>
@@ -227,7 +228,6 @@ function getDetailKey(detail: WorkDetail, index: number): string {
 }
 
 .board-panel__ghost,
-.board-panel__refresh,
 .board-panel__fill {
   border: 0;
   border-radius: 999px;
@@ -240,7 +240,6 @@ function getDetailKey(detail: WorkDetail, index: number): string {
   color: #24383f;
 }
 
-.board-panel__refresh,
 .board-panel__fill {
   background: #0f4f53;
   color: #fff;

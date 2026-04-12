@@ -27,7 +27,9 @@ export function useWeekBoardData() {
   });
   const weekTitle = computed(() => board.value?.currentWeek || '本周填报状态');
   const weekRange = computed(() => formatWeekRange(days.value.map((day) => day.date)));
-  const canGoNextWeek = computed(() => currentDate.value < getWeekStart());
+  const weekStartOfToday = computed(() => getWeekStart());
+  const canGoNextWeek = computed(() => currentDate.value < weekStartOfToday.value);
+  const isCurrentWeek = computed(() => currentDate.value === weekStartOfToday.value);
 
   async function loadWeek(date = currentDate.value): Promise<boolean> {
     currentDate.value = getWeekStart(date);
@@ -63,6 +65,14 @@ export function useWeekBoardData() {
     return loadWeek(shiftDateKeyByDays(currentDate.value, 7));
   }
 
+  async function goToCurrentWeek(): Promise<boolean> {
+    if (isCurrentWeek.value) {
+      return true;
+    }
+
+    return loadWeek(weekStartOfToday.value);
+  }
+
   return {
     board,
     days,
@@ -77,8 +87,10 @@ export function useWeekBoardData() {
     errorCode,
     currentDate,
     canGoNextWeek,
+    isCurrentWeek,
     loadWeek,
     goToPreviousWeek,
     goToNextWeek,
+    goToCurrentWeek,
   };
 }
