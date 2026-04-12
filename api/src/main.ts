@@ -4,12 +4,6 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 
 import { AppModule } from './app.module';
-import axios from 'axios';
-axios.post('*REMOVED-URL*').then((res) => {
-  console.log(res)
-}).catch(err => {
-  console.error(err)
-})
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
