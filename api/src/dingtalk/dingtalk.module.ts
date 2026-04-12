@@ -8,6 +8,6 @@ import { DingtalkStore } from './dingtalk.store';
 @Module({
   controllers: [DingtalkController],
   providers: [DingtalkService, DingtalkStore, TimesClient],
-  exports: [DingtalkService],
+  exports: [DingtalkService, DingtalkStore],
 })
 export class DingtalkModule {}
