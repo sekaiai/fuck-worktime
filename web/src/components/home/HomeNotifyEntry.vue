@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { Notice, Right, Tips } from '@nutui/icons-vue';
 import { usePwaDetect } from '../../composables/usePwaDetect';
 
 defineProps<{
@@ -18,13 +19,13 @@ function goToNotifications() {
   <section v-if="autoFillEnabled" class="notify-entry">
     <div class="notify-entry__content" @click="goToNotifications">
       <div class="notify-entry__left">
-        <nut-icon name="notice" size="20" color="#0f3d3e"></nut-icon>
+        <Notice width="20" height="20" color="#0f3d3e"></Notice>
         <span class="notify-entry__text">消息订阅通知</span>
       </div>
-      <nut-icon name="right" size="14" color="#999"></nut-icon>
+      <Right width="14" height="14" color="#999"></Right>
     </div>
     <div v-if="!isPwa" class="notify-entry__pwa-hint">
-      <nut-icon name="tips" size="14" color="#d48806"></nut-icon>
+      <Tips width="14" height="14" color="#d48806"></Tips>
       <span>安装为 PWA 应用可获得最佳通知体验</span>
     </div>
   </section>

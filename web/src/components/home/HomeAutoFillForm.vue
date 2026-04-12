@@ -2,6 +2,7 @@
 import { ref, watch, computed } from 'vue';
 import type { Project, WorkTypeNode } from '../../types/timesheet';
 import type { AutoFillConfig, AutoFillStatus } from '../../types/auto-fill';
+import { ArrowUp, DownArrow } from '@nutui/icons-vue';
 
 const props = defineProps<{
   status: AutoFillStatus;
@@ -144,7 +145,8 @@ const statusType = computed((): string => {
           截止: {{ deadlineDisplay }}
         </span>
       </div>
-      <nut-icon :name="isExpanded ? 'up' : 'down'" size="14"></nut-icon>
+      <ArrowUp v-if="isExpanded" width="14" height="14"></ArrowUp>
+      <DownArrow v-else width="14" height="14"></DownArrow>
     </div>
 
     <div v-if="isExpanded" class="auto-fill-form__body">

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import type { WeekDay, Project, WorkTypeNode, TimesheetEntry } from '../../types/timesheet';
+import { Loading } from '@nutui/icons-vue';
 
 const props = defineProps<{
   fillableDays: WeekDay[];
@@ -134,7 +135,7 @@ defineExpose({ showSubmitResult });
               </select>
             </template>
             <template #icon>
-              <nut-icon v-if="isLoadingProjects" name="loading" size="16"></nut-icon>
+              <Loading v-if="isLoadingProjects" width="16" height="16"></Loading>
             </template>
           </nut-cell>
 
@@ -160,7 +161,7 @@ defineExpose({ showSubmitResult });
               </select>
             </template>
             <template #icon>
-              <nut-icon v-if="isLoadingWorkTypes" name="loading" size="16"></nut-icon>
+              <Loading v-if="isLoadingWorkTypes" width="16" height="16"></Loading>
             </template>
           </nut-cell>
 

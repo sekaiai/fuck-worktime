@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { WeekDay } from '../../types/timesheet';
+import { Notice } from '@nutui/icons-vue';
 
 defineProps<{
   days: WeekDay[];
@@ -49,7 +50,7 @@ function formatShortDate(dateStr: string): string {
     </div>
 
     <div v-else-if="error" class="week-timeline__error">
-      <nut-icon name="notice" size="20" color="#ff4d4f"></nut-icon>
+      <Notice width="20" height="20" color="#ff4d4f"></Notice>
       <span class="week-timeline__error-text">{{ error === 'TOKEN_EXPIRED' ? '登录已过期，请重新登录' : error }}</span>
     </div>
 

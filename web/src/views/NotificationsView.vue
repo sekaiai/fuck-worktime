@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import PushSubscriptionCard from '../components/push/PushSubscriptionCard.vue';
 import { usePushNotifications } from '../composables/usePushNotifications';
 import { usePwaDetect } from '../composables/usePwaDetect';
+import { Tips } from '@nutui/icons-vue';
 
 const {
   isSupported,
@@ -65,7 +66,7 @@ onUnmounted(() => {
 
     <div v-if="showInstallBanner && !isPwa" class="install-banner">
       <div class="install-banner__content">
-        <nut-icon name="tips" size="20" color="#0f3d3e"></nut-icon>
+        <Tips width="20" height="20" color="#0f3d3e"></Tips>
         <div class="install-banner__text">
           <p class="install-banner__title">安装为应用</p>
           <p class="install-banner__desc">安装为 PWA 应用可获得最佳通知体验，支持离线访问</p>
