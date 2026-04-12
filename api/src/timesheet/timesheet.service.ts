@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
+import { Agent } from 'https';
 import { SubmitTimesheetDto } from './dto/submit-timesheet.dto';
 import { ReportBatchDto } from './dto/report-batch.dto';
 import { ReportDto } from './dto/report.dto';
@@ -12,22 +13,33 @@ import { AiService } from './ai/ai.service';
 export class TimesheetService {
   private readonly logger = new Logger(TimesheetService.name);
   private readonly timesApiBaseUrl = 'https://times.gzdata.com.cn:8099/prod-api';
+  private readonly client: AxiosInstance = axios.create({
+    timeout: 15000,
+    httpsAgent: new Agent({ rejectUnauthorized: false }),
+    insecureHTTPParser: true,
+  });
 
   constructor(
     private readonly configService: ConfigService,
     private readonly aiService: AiService,
   ) {}
 
-  private getAuthHeaders(token: string) {
+  private getAuthHeaders(token: string): { Authorization: string; Referer: string } {
+    const normalized = this.normalizeToken(token);
     return {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${normalized}`,
       Referer: 'https://times.gzdata.com.cn:8099/hours/filling',
     };
   }
 
+  private normalizeToken(token: string): string {
+    const trimmed = token.trim().replace(/[\r\n]/g, '');
+    return trimmed.startsWith('Bearer ') ? trimmed.slice(7).trim() : trimmed;
+  }
+
   async submitTimesheet(data: SubmitTimesheetDto, token: string): Promise<unknown> {
     try {
-      const response = await axios.post(
+      const response = await this.client.post(
         `${this.timesApiBaseUrl}/working/timing/repor`,
         data,
         { headers: this.getAuthHeaders(token) },
@@ -48,7 +60,7 @@ export class TimesheetService {
     const headers = this.getAuthHeaders(token);
 
     try {
-      const response = await axios.get<ProjectDto[]>(url, { headers });
+      const response = await this.client.get<ProjectDto[]>(url, { headers });
       return response.data;
     } catch (error) {
       this.logger.error('Failed to fetch projects');
@@ -61,7 +73,7 @@ export class TimesheetService {
     const headers = this.getAuthHeaders(token);
 
     try {
-      const response = await axios.get<WorkTypeDto[]>(url, { headers });
+      const response = await this.client.get<WorkTypeDto[]>(url, { headers });
       return response.data;
     } catch (error) {
       this.logger.error('Failed to fetch work types', error);
@@ -74,10 +86,11 @@ export class TimesheetService {
     const headers = this.getAuthHeaders(token);
 
     try {
-      const response = await axios.get(url, { headers });
+      const response = await this.client.get(url, { headers });
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to fetch week board', error);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to fetch week board: ${message}`);
       throw error;
     }
   }
@@ -87,7 +100,7 @@ export class TimesheetService {
     const headers = this.getAuthHeaders(token);
 
     try {
-      const response = await axios.post(url, data, { headers });
+      const response = await this.client.post(url, data, { headers });
       return response.data;
     } catch (error) {
       this.logger.error('Failed to batch report timesheet', error);
@@ -100,7 +113,7 @@ export class TimesheetService {
     const headers = this.getAuthHeaders(token);
 
     try {
-      const response = await axios.post(url, data, { headers });
+      const response = await this.client.post(url, data, { headers });
       return response.data;
     } catch (error) {
       this.logger.error('Failed to report timesheet', error);
