@@ -2,6 +2,7 @@ import { computed, shallowRef } from 'vue';
 
 import { disableAutoFill, getAutoFillConfig, saveAutoFillConfig } from '../api/timesheet-client';
 import type { AutoFillConfig, AutoFillStatus } from '../types/auto-fill';
+import { getTodayKey } from '../utils/date';
 
 export function useAutoFillManager() {
   const config = shallowRef<AutoFillConfig | null>(null);
@@ -14,7 +15,7 @@ export function useAutoFillManager() {
       return 'disabled';
     }
 
-    if (config.value.expired || (config.value.deadline && config.value.deadline < new Date().toLocaleDateString('en-CA'))) {
+    if (config.value.expired || (config.value.deadline && config.value.deadline < getTodayKey())) {
       return 'expired';
     }
 

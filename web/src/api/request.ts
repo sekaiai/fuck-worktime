@@ -27,6 +27,10 @@ export function setAuthToken(token: string): void {
   authToken = token.trim();
 }
 
+export function getAuthToken(): string {
+  return authToken;
+}
+
 export function clearAuthToken(): void {
   authToken = '';
 }

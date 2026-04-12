@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from 'vue';
+import { computed, ref, shallowRef, watch } from 'vue';
 
 import { buildBatchPayload, generateContent, submitBatch } from '../../api/timesheet-client';
 import type { Project, TimesheetEntry, WeekDay, WorkTypeNode } from '../../types/timesheet';
 import { formatDisplayDate } from '../../utils/date';
+import { buildWorkTypeGroups, findWorkTypeById } from '../../utils/work-types';
 
 const props = defineProps<{
-  userId: string | null;
+  visible: boolean;
   fillableDays: WeekDay[];
   projects: Project[];
   isProjectsLoading: boolean;
@@ -15,12 +16,13 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  close: [];
   submitted: [];
 }>();
 
-const isOpen = shallowRef(false);
 const workTypes = shallowRef<WorkTypeNode[]>([]);
 const projectId = shallowRef('');
+const workTypeGroupId = shallowRef('');
 const workTypeId = shallowRef('');
 const workTypeName = shallowRef('');
 const hours = shallowRef(8);
@@ -30,16 +32,38 @@ const entries = shallowRef<TimesheetEntry[]>([]);
 const isGenerating = shallowRef(false);
 const isSubmitting = shallowRef(false);
 const toastMessage = shallowRef('');
-const resultDialog = shallowRef<{ open: boolean; title: string; message: string }>({
+const resultDialog = ref<{ open: boolean; title: string; message: string }>({
   open: false,
   title: '',
   message: '',
 });
 
 const maxFillDays = computed(() => props.fillableDays.length);
-const sortedFillableDays = computed(() => [...props.fillableDays].sort((left, right) => left.date.localeCompare(right.date)));
+const sortedFillableDays = computed(() =>
+  [...props.fillableDays].sort((left, right) => left.date.localeCompare(right.date)),
+);
 const selectedProject = computed(() => props.projects.find((project) => project.id === projectId.value) ?? null);
-const flatWorkTypes = computed(() => flattenWorkTypes(workTypes.value));
+const workTypeGroups = computed(() => buildWorkTypeGroups(workTypes.value));
+const availableWorkTypes = computed(
+  () => workTypeGroups.value.find((group) => group.id === workTypeGroupId.value)?.children ?? [],
+);
+
+watch(
+  () => props.visible,
+  async (visible) => {
+    if (!visible) {
+      return;
+    }
+
+    if (props.projects.length === 0) {
+      try {
+        await props.loadProjects();
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : '获取项目列表失败。');
+      }
+    }
+  },
+);
 
 watch(
   () => props.fillableDays,
@@ -47,12 +71,25 @@ watch(
     if (daysToGenerate.value === 0 || daysToGenerate.value > days.length) {
       daysToGenerate.value = days.length;
     }
+
+    if (days.length === 0) {
+      entries.value = [];
+    }
   },
   { immediate: true },
 );
 
-function flattenWorkTypes(nodes: WorkTypeNode[]): WorkTypeNode[] {
-  return nodes.flatMap((node) => (node.children && node.children.length > 0 ? node.children : [node]));
+function resetEntries(): void {
+  entries.value = [];
+}
+
+function closePanel(): void {
+  resultDialog.value = { ...resultDialog.value, open: false };
+  emit('close');
+}
+
+function closeResultDialog(): void {
+  resultDialog.value = { ...resultDialog.value, open: false };
 }
 
 function showToast(message: string): void {
@@ -63,40 +100,41 @@ function showToast(message: string): void {
   }, 2600);
 }
 
-async function openPanel(): Promise<void> {
-  isOpen.value = !isOpen.value;
-  if (isOpen.value) {
-    try {
-      await props.loadProjects();
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : '获取项目列表失败。');
-    }
-  }
-}
-
 async function handleProjectChange(nextProjectId: string): Promise<void> {
   projectId.value = nextProjectId;
+  workTypeGroupId.value = '';
   workTypeId.value = '';
   workTypeName.value = '';
+  resetEntries();
+
   try {
     workTypes.value = await props.loadWorkTypes(nextProjectId);
   } catch (error) {
+    workTypes.value = [];
     showToast(error instanceof Error ? error.message : '获取工时类型失败。');
   }
 }
 
+function handleWorkTypeGroupChange(nextGroupId: string): void {
+  workTypeGroupId.value = nextGroupId;
+  workTypeId.value = '';
+  workTypeName.value = '';
+  resetEntries();
+}
+
 function handleWorkTypeChange(nextWorkTypeId: string): void {
   workTypeId.value = nextWorkTypeId;
-  workTypeName.value = flatWorkTypes.value.find((item) => item.id === nextWorkTypeId)?.name ?? '';
+  workTypeName.value = findWorkTypeById(workTypeGroups.value, nextWorkTypeId)?.name ?? '';
+  resetEntries();
 }
 
 async function handleGenerate(): Promise<void> {
   if (!selectedProject.value || !workTypeId.value) {
-    showToast('请选择项目和工时类型。');
+    showToast('请选择项目和二级工时类型。');
     return;
   }
   if (!work.value.trim()) {
-    showToast('请填写工作内容后再生成。');
+    showToast('请先填写工作内容。');
     return;
   }
   if (daysToGenerate.value <= 0) {
@@ -119,11 +157,11 @@ async function handleGenerate(): Promise<void> {
       projectStatus: selectedProject.value!.status,
       itemId: workTypeId.value,
       itemName: workTypeName.value,
-      content: contents[index] || '日常工作处理',
+      content: contents[index] ?? '日常工作处理',
       hours: hours.value,
     }));
   } catch (error) {
-    showToast(error instanceof Error ? error.message : 'AI 生成工时失败。');
+    showToast(error instanceof Error ? error.message : '生成工时失败。');
   } finally {
     isGenerating.value = false;
   }
@@ -137,24 +175,31 @@ function updateEntryDate(index: number, nextDate: string): void {
     return;
   }
 
-  entries.value[index] = {
-    ...entries.value[index],
+  const nextEntries = [...entries.value];
+  nextEntries[index] = {
+    ...nextEntries[index],
     reportDate: nextDate,
   };
+  entries.value = nextEntries;
 }
 
 function updateEntryContent(index: number, nextValue: string): void {
-  entries.value[index] = {
-    ...entries.value[index],
+  const nextEntries = [...entries.value];
+  nextEntries[index] = {
+    ...nextEntries[index],
     content: nextValue,
   };
+  entries.value = nextEntries;
 }
 
 function updateEntryHours(index: number, nextValue: number): void {
-  entries.value[index] = {
-    ...entries.value[index],
-    hours: nextValue,
+  const safeHours = Number.isFinite(nextValue) && nextValue > 0 ? nextValue : 1;
+  const nextEntries = [...entries.value];
+  nextEntries[index] = {
+    ...nextEntries[index],
+    hours: safeHours,
   };
+  entries.value = nextEntries;
 }
 
 async function handleSubmit(): Promise<void> {
@@ -172,7 +217,7 @@ async function handleSubmit(): Promise<void> {
       message: result.msg,
     };
     if (result.code === 200) {
-      entries.value = [];
+      resetEntries();
       emit('submitted');
     }
   } catch (error) {
@@ -188,24 +233,17 @@ async function handleSubmit(): Promise<void> {
 </script>
 
 <template>
-  <section class="panel">
+  <section v-if="visible" class="panel">
     <header class="section-header">
       <div>
         <p class="section-eyebrow">手动补填</p>
-        <h2 class="section-title">填报工时（{{ maxFillDays }}天）</h2>
+        <h2 class="section-title">批量补填未提交工时</h2>
       </div>
-      <button
-        v-if="maxFillDays > 0"
-        class="action-button"
-        type="button"
-        @click="openPanel"
-      >
-        {{ isOpen ? '收起' : '展开' }}
-      </button>
+      <button class="action-button" type="button" @click="closePanel">收起</button>
     </header>
 
-    <div v-if="maxFillDays === 0" class="state-block">本周当前没有可补填的工作日。</div>
-    <template v-else-if="isOpen">
+    <div v-if="maxFillDays === 0" class="state-block">当前这周没有可补填的工作日。</div>
+    <template v-else>
       <div class="form-grid">
         <label>
           <span>项目</span>
@@ -216,10 +254,26 @@ async function handleSubmit(): Promise<void> {
         </label>
 
         <label>
-          <span>工时类型</span>
-          <select :value="workTypeId" @change="handleWorkTypeChange(($event.target as HTMLSelectElement).value)">
-            <option value="">请选择工时类型</option>
-            <option v-for="item in flatWorkTypes" :key="item.id" :value="item.id">{{ item.name }}</option>
+          <span>一级工时类型</span>
+          <select
+            :value="workTypeGroupId"
+            :disabled="workTypeGroups.length === 0"
+            @change="handleWorkTypeGroupChange(($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">请选择一级类型</option>
+            <option v-for="group in workTypeGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
+          </select>
+        </label>
+
+        <label>
+          <span>二级工时类型</span>
+          <select
+            :value="workTypeId"
+            :disabled="availableWorkTypes.length === 0"
+            @change="handleWorkTypeChange(($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">请选择二级类型</option>
+            <option v-for="item in availableWorkTypes" :key="item.id" :value="item.id">{{ item.name }}</option>
           </select>
         </label>
 
@@ -239,9 +293,13 @@ async function handleSubmit(): Promise<void> {
         <textarea
           v-model="work"
           rows="3"
-          placeholder="输入工作内容，AI 会生成适合工时填报的描述。"
+          placeholder="输入工作内容，系统会生成适合工时填报的描述。"
         />
       </label>
+
+      <p v-if="daysToGenerate > maxFillDays" class="warning-text">
+        生成天数不能超过当前可补填的未填天数。
+      </p>
 
       <div class="inline-actions">
         <button class="primary-button" type="button" :disabled="isGenerating || isProjectsLoading" @click="handleGenerate">
@@ -261,6 +319,14 @@ async function handleSubmit(): Promise<void> {
             </select>
           </label>
           <label>
+            <span>项目</span>
+            <input :value="entry.projectTitle" disabled />
+          </label>
+          <label>
+            <span>工时类型</span>
+            <input :value="entry.itemName || workTypeName" disabled />
+          </label>
+          <label>
             <span>工时</span>
             <input :value="entry.hours" type="number" min="1" max="24" @input="updateEntryHours(index, Number(($event.target as HTMLInputElement).value))" />
           </label>
@@ -278,11 +344,11 @@ async function handleSubmit(): Promise<void> {
 
     <div v-if="toastMessage" class="toast">{{ toastMessage }}</div>
 
-    <div v-if="resultDialog.open" class="modal-backdrop" @click.self="resultDialog.open = false">
+    <div v-if="resultDialog.open" class="modal-backdrop" @click.self="closeResultDialog">
       <div class="modal-card">
         <h3>{{ resultDialog.title }}</h3>
         <p>{{ resultDialog.message }}</p>
-        <button class="primary-button" type="button" @click="resultDialog.open = false">知道了</button>
+        <button class="primary-button" type="button" @click="closeResultDialog">知道了</button>
       </div>
     </div>
   </section>
@@ -359,6 +425,11 @@ textarea {
   background: #fffdf8;
 }
 
+input:disabled {
+  color: #5f645b;
+  background: #f3f1eb;
+}
+
 .block-field,
 .entry-list {
   margin-top: 0.9rem;
@@ -375,6 +446,11 @@ textarea {
 .helper-text {
   color: #7c6c54;
   font-size: 0.86rem;
+}
+
+.warning-text {
+  margin: 0.9rem 0 0;
+  color: #b42318;
 }
 
 .entry-list {

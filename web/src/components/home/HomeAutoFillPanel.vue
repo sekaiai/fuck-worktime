@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { shallowRef, watch } from 'vue';
+import { computed, ref, shallowRef, watch } from 'vue';
 
 import type { AutoFillConfig, AutoFillStatus } from '../../types/auto-fill';
 import type { Project, WorkTypeNode } from '../../types/timesheet';
+import { buildWorkTypeGroups, findWorkTypeById } from '../../utils/work-types';
 
 const props = defineProps<{
   userId: string | null;
@@ -25,22 +26,36 @@ const emit = defineEmits<{
 const isOpen = shallowRef(false);
 const workTypes = shallowRef<WorkTypeNode[]>([]);
 const projectId = shallowRef('');
+const workTypeGroupId = shallowRef('');
 const itemId = shallowRef('');
 const itemName = shallowRef('');
 const hours = shallowRef(8);
 const work = shallowRef('');
 const deadline = shallowRef('');
 const toastMessage = shallowRef('');
-const resultDialog = shallowRef<{ open: boolean; title: string; message: string }>({
+const resultDialog = ref<{ open: boolean; title: string; message: string }>({
   open: false,
   title: '',
   message: '',
 });
 
+const workTypeGroups = computed(() => buildWorkTypeGroups(workTypes.value));
+const availableWorkTypes = computed(
+  () => workTypeGroups.value.find((group) => group.id === workTypeGroupId.value)?.children ?? [],
+);
+
 watch(
   () => props.config,
   async (config) => {
     if (!config) {
+      projectId.value = '';
+      workTypeGroupId.value = '';
+      itemId.value = '';
+      itemName.value = '';
+      hours.value = 8;
+      work.value = '';
+      deadline.value = '';
+      workTypes.value = [];
       return;
     }
 
@@ -50,10 +65,14 @@ watch(
     hours.value = config.hours;
     work.value = config.work;
     deadline.value = config.deadline ?? '';
+
     try {
       workTypes.value = await props.loadWorkTypes(config.projectId);
+      workTypeGroupId.value =
+        workTypeGroups.value.find((group) => group.children.some((child) => child.id === config.itemId))?.id ?? '';
     } catch {
       workTypes.value = [];
+      workTypeGroupId.value = '';
     }
   },
   { immediate: true },
@@ -67,36 +86,53 @@ function showToast(message: string): void {
   }, 2600);
 }
 
+function closeResultDialog(): void {
+  resultDialog.value = { ...resultDialog.value, open: false };
+}
+
 async function toggleOpen(): Promise<void> {
   isOpen.value = !isOpen.value;
-  if (isOpen.value) {
-    try {
-      await props.loadProjects();
-      if (projectId.value) {
-        workTypes.value = await props.loadWorkTypes(projectId.value);
+  if (!isOpen.value) {
+    return;
+  }
+
+  try {
+    await props.loadProjects();
+    if (projectId.value) {
+      workTypes.value = await props.loadWorkTypes(projectId.value);
+      if (itemId.value) {
+        workTypeGroupId.value =
+          workTypeGroups.value.find((group) => group.children.some((child) => child.id === itemId.value))?.id ?? '';
       }
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : '获取项目或工时类型失败。');
     }
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : '获取项目或工时类型失败。');
   }
 }
 
 async function handleProjectChange(nextProjectId: string): Promise<void> {
   projectId.value = nextProjectId;
+  workTypeGroupId.value = '';
   itemId.value = '';
   itemName.value = '';
+
   try {
     workTypes.value = await props.loadWorkTypes(nextProjectId);
   } catch (error) {
+    workTypes.value = [];
     showToast(error instanceof Error ? error.message : '获取工时类型失败。');
   }
 }
 
+function handleWorkTypeGroupChange(nextGroupId: string): void {
+  workTypeGroupId.value = nextGroupId;
+  itemId.value = '';
+  itemName.value = '';
+}
+
 function handleWorkTypeChange(nextItemId: string): void {
   itemId.value = nextItemId;
-  itemName.value =
-    workTypes.value.flatMap((item) => (item.children && item.children.length > 0 ? item.children : [item]))
-      .find((item) => item.id === nextItemId)?.name ?? '';
+  itemName.value = findWorkTypeById(workTypeGroups.value, nextItemId)?.name ?? '';
 }
 
 async function handleSave(): Promise<void> {
@@ -104,8 +140,8 @@ async function handleSave(): Promise<void> {
     showToast('请先登录后再配置自动填报。');
     return;
   }
-  if (!projectId.value || !itemId.value) {
-    showToast('请选择项目和工时类型。');
+  if (!projectId.value || !workTypeGroupId.value || !itemId.value) {
+    showToast('请选择项目、一级类型和二级类型。');
     return;
   }
 
@@ -113,7 +149,6 @@ async function handleSave(): Promise<void> {
   const result = await props.saveConfig({
     userId: props.userId,
     enabled: true,
-    expired: false,
     projectId: projectId.value,
     projectTitle: project?.title ?? '',
     projectStatus: project?.status ?? 20,
@@ -178,16 +213,26 @@ async function handleDisable(): Promise<void> {
       </label>
 
       <label>
-        <span>工时类型</span>
-        <select :value="itemId" @change="handleWorkTypeChange(($event.target as HTMLSelectElement).value)">
-          <option value="">请选择工时类型</option>
-          <option
-            v-for="item in workTypes.flatMap((node) => (node.children && node.children.length > 0 ? node.children : [node]))"
-            :key="item.id"
-            :value="item.id"
-          >
-            {{ item.name }}
-          </option>
+        <span>一级工时类型</span>
+        <select
+          :value="workTypeGroupId"
+          :disabled="workTypeGroups.length === 0"
+          @change="handleWorkTypeGroupChange(($event.target as HTMLSelectElement).value)"
+        >
+          <option value="">请选择一级类型</option>
+          <option v-for="group in workTypeGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
+        </select>
+      </label>
+
+      <label>
+        <span>二级工时类型</span>
+        <select
+          :value="itemId"
+          :disabled="availableWorkTypes.length === 0"
+          @change="handleWorkTypeChange(($event.target as HTMLSelectElement).value)"
+        >
+          <option value="">请选择二级类型</option>
+          <option v-for="item in availableWorkTypes" :key="item.id" :value="item.id">{{ item.name }}</option>
         </select>
       </label>
 
@@ -228,11 +273,11 @@ async function handleDisable(): Promise<void> {
 
     <div v-if="toastMessage" class="toast">{{ toastMessage }}</div>
 
-    <div v-if="resultDialog.open" class="modal-backdrop" @click.self="resultDialog.open = false">
+    <div v-if="resultDialog.open" class="modal-backdrop" @click.self="closeResultDialog">
       <div class="modal-card">
         <h3>{{ resultDialog.title }}</h3>
         <p>{{ resultDialog.message }}</p>
-        <button class="primary-button" type="button" @click="resultDialog.open = false">知道了</button>
+        <button class="primary-button" type="button" @click="closeResultDialog">知道了</button>
       </div>
     </div>
   </section>

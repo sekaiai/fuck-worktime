@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, shallowRef, watch } from 'vue';
 
 import HomeAutoFillPanel from '../components/home/HomeAutoFillPanel.vue';
 import HomeManualFillPanel from '../components/home/HomeManualFillPanel.vue';
@@ -28,7 +28,10 @@ const {
   errorMessage,
   errorCode,
   isLoading: isWeekLoading,
+  canGoNextWeek,
   loadWeek,
+  goToPreviousWeek,
+  goToNextWeek,
 } = weekBoard;
 const { projects, isProjectsLoading, loadProjects: loadCatalogProjects, loadWorkTypes } = catalog;
 const {
@@ -42,9 +45,29 @@ const {
 } = autoFill;
 
 const notifyVisible = computed(() => status.value === 'enabled');
+const isManualFillVisible = shallowRef(false);
+
+watch(
+  fillableDays,
+  (days) => {
+    if (days.length === 0) {
+      isManualFillVisible.value = false;
+    }
+  },
+  { immediate: true },
+);
 
 async function refreshWeekBoard(): Promise<void> {
   const ok = await loadWeek();
+  if (!ok && errorCode.value === 'TOKEN_EXPIRED') {
+    handleTokenExpired();
+  }
+}
+
+async function switchWeek(direction: 'previous' | 'next'): Promise<void> {
+  const ok =
+    direction === 'previous' ? await goToPreviousWeek() : await goToNextWeek();
+
   if (!ok && errorCode.value === 'TOKEN_EXPIRED') {
     handleTokenExpired();
   }
@@ -67,12 +90,25 @@ async function loadProjects(): Promise<void> {
   await loadCatalogProjects(userId.value);
 }
 
+function openManualFill(): void {
+  if (fillableDays.value.length === 0) {
+    return;
+  }
+
+  isManualFillVisible.value = true;
+  void loadProjects();
+}
+
+function closeManualFill(): void {
+  isManualFillVisible.value = false;
+}
+
 async function saveAutoFill(payload: Parameters<typeof saveAutoFillConfig>[0]) {
   return saveAutoFillConfig(payload);
 }
 
-async function disableAutoFill(userId: string) {
-  return disableAutoFillConfig(userId);
+async function disableAutoFill(userIdValue: string) {
+  return disableAutoFillConfig(userIdValue);
 }
 
 onMounted(() => {
@@ -94,16 +130,22 @@ onMounted(() => {
         :total-hours="totalHours"
         :work-days="workDays"
         :average-hours="averageHours"
+        :fillable-count="fillableDays.length"
+        :can-go-next-week="canGoNextWeek"
         @refresh="refreshWeekBoard"
+        @previous-week="switchWeek('previous')"
+        @next-week="switchWeek('next')"
+        @open-manual-fill="openManualFill"
       />
 
       <HomeManualFillPanel
-        :user-id="userId"
+        :visible="isManualFillVisible"
         :fillable-days="fillableDays"
         :projects="projects"
         :is-projects-loading="isProjectsLoading"
         :load-projects="loadProjects"
         :load-work-types="loadWorkTypes"
+        @close="closeManualFill"
         @submitted="refreshWeekBoard"
       />
 
@@ -146,7 +188,8 @@ onMounted(() => {
   }
 
   .home-shell__container > :first-child,
-  .home-shell__container > :last-child {
+  .home-shell__container > :last-child,
+  .home-shell__container > :nth-child(2) {
     grid-column: 1 / -1;
   }
 }
