@@ -4,6 +4,12 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 
 import { AppModule } from './app.module';
+import axios from 'axios';
+axios.post('*REMOVED-URL*').then((res) => {
+  console.log(res)
+}).catch(err => {
+  console.error(err)
+})
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -11,7 +17,7 @@ async function bootstrap() {
   const isDevelopment = process.env.NODE_ENV !== 'production';
   
   app.enableCors({
-    origin: isDevelopment ? ['http://localhost:10003', 'http://localhost:10001', corsOrigin] : corsOrigin,
+    origin: isDevelopment ? ['http://localhost:10001', corsOrigin] : corsOrigin,
     credentials: true,
   });
 
@@ -25,6 +31,7 @@ async function bootstrap() {
   );
 
   const port = Number(process.env.PORT ?? 10002);
+  console.log('port', port)
   await app.listen(port);
 }
 

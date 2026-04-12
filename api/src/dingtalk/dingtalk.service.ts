@@ -31,6 +31,10 @@ export class DingtalkService {
   private readonly logger = new Logger(DingtalkService.name);
   private readonly sessions = new Map<string, LoginSession>();
   private readonly TIMEOUT_MS = 60000;
+  private readonly LOGIN_BUTTON_SELECTORS = [
+    '.app-page-curr div.module-confirm-button.base-comp-button.base-comp-button-type-primary:has-text("立即登录")',
+    '.app-page-curr div.module-confirm-button:has-text("立即登录")'
+  ];
   private readonly DINGTALK_AUTH_URL =
     'https://login.dingtalk.com/oauth2/challenge.htm?redirect_uri=https://times.gzdata.com.cn:8099/ding-talk-login&response_type=code&client_id=dinghuioeftyp2slxrcf&scope=openid&prompt=consent';
 
@@ -110,17 +114,10 @@ export class DingtalkService {
       // 步骤 5: 检测是否已登录
       // ============================================
       this.logger.log('[步骤5] 检测是否已登录');
-      const loginButtonSelectors = [
-        'button:has-text("立即登录")',
-        'a:has-text("立即登录")',
-        '[class*="login"]:has-text("立即登录")',
-        'button:has-text("登录")',
-      ];
-
       let isLoggedIn = false;
       let loginState: 'qrcode' | 'auto_login' = 'qrcode';
 
-      for (const selector of loginButtonSelectors) {
+      for (const selector of this.LOGIN_BUTTON_SELECTORS) {
         const button = page.locator(selector);
         if (await button.count() > 0) {
           isLoggedIn = true;
@@ -178,9 +175,12 @@ export class DingtalkService {
       // 步骤 8: 如果已登录，点击按钮并等待 ding-auth 响应
       // ============================================
       if (isLoggedIn) {
+        if (!page) {
+          throw new Error('Dingtalk page is not initialized');
+        }
         this.logger.log('[步骤8] 已登录，点击登录按钮');
         // 点击登录按钮，触发跳转（ding-auth 请求会在跳转后发出）
-        for (const selector of loginButtonSelectors) {
+        for (const selector of this.LOGIN_BUTTON_SELECTORS) {
           const button = page.locator(selector);
           if (await button.count() > 0) {
             await button.first().click();
@@ -239,15 +239,18 @@ export class DingtalkService {
     page: Page,
     context: BrowserContext,
   ): Promise<{ userId: string; token: string } | null> {
+
+    console.log({page})
     return new Promise<{ userId: string; token: string } | null>((resolve) => {
       const timeout = setTimeout(() => {
         this.logger.warn('[ding-auth] 等待超时（15秒），未捕获到响应');
         cleanup();
         resolve(null);
-      }, 15000);
+      }, 150000);
 
       const responseHandler = async (response: import('playwright').Response) => {
         const url = response.url();
+        console.log("URL:", url)
         if (!url.includes('/prod-api/ding-auth')) {
           return;
         }
@@ -270,6 +273,8 @@ export class DingtalkService {
 
           // 获取钉钉域名下的 Cookie
           const dingtalkCookies = await context.cookies(['https://login.dingtalk.com']);
+
+          console.log('dingtalkCookies',dingtalkCookies)
           const cookieMap: Record<string, string> = {};
           for (const cookie of dingtalkCookies) {
             cookieMap[cookie.name] = cookie.value;
@@ -418,7 +423,7 @@ export class DingtalkService {
 
     try {
       browser = await chromium.launch({
-        headless: true,
+        headless: false,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -459,14 +464,7 @@ export class DingtalkService {
         timeout: 15000,
       });
 
-      const loginButtonSelectors = [
-        'button:has-text("立即登录")',
-        'a:has-text("立即登录")',
-        '[class*="login"]:has-text("立即登录")',
-        'button:has-text("登录")',
-      ];
-
-      for (const selector of loginButtonSelectors) {
+      for (const selector of this.LOGIN_BUTTON_SELECTORS) {
         const button = page.locator(selector);
         if (await button.count() > 0) {
           await button.first().click();
