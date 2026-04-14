@@ -40,7 +40,7 @@ onUnmounted(() => {
 <template>
   <main class="notification-page">
     <section class="notification-hero">
-      <p class="notification-eyebrow">notifications</p>
+      <p class="notification-eyebrow">Notifications</p>
       <h1 class="notification-title">通知订阅管理</h1>
       <p class="notification-copy">用户可以在这里订阅通知、取消订阅，并测试推送链路是否可用。</p>
     </section>

@@ -104,6 +104,11 @@ export function usePushSubscriptionCenter(userId: string | null) {
   }
 
   async function sendTest() {
+    if (!hasSubscription.value) {
+      statusMessage.value = '请先完成订阅，再发送测试通知。';
+      return;
+    }
+
     isLoading.value = true;
     try {
       const result = await sendPushTest();

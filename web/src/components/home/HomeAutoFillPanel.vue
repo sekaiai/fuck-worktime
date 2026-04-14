@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, watch } from 'vue';
 
+import InlineToast from '../common/InlineToast.vue';
+import ResultDialog from '../common/ResultDialog.vue';
+import { useTemplatePrefill } from '../../composables/useTemplatePrefill';
 import type { AutoFillConfig, AutoFillStatus } from '../../types/auto-fill';
 import type { Project, WorkTypeNode } from '../../types/timesheet';
 import { buildWorkTypeGroups, findWorkTypeById } from '../../utils/work-types';
@@ -38,6 +41,9 @@ const resultDialog = ref<{ open: boolean; title: string; message: string }>({
   title: '',
   message: '',
 });
+const compactMode = shallowRef(true);
+const { getQuickTemplates, prefillIfEmpty } = useTemplatePrefill();
+const quickTemplates = getQuickTemplates();
 
 const workTypeGroups = computed(() => buildWorkTypeGroups(workTypes.value));
 const availableWorkTypes = computed(
@@ -78,6 +84,14 @@ watch(
   { immediate: true },
 );
 
+watch(compactMode, (value) => {
+  if (!value && prefillIfEmpty(work.value, (nextValue) => {
+    work.value = nextValue;
+  })) {
+    showToast('已自动填入推荐模板，可继续编辑后保存。');
+  }
+});
+
 function showToast(message: string): void {
   toastMessage.value = message;
   window.clearTimeout((showToast as typeof showToast & { timer?: number }).timer);
@@ -104,6 +118,12 @@ async function toggleOpen(): Promise<void> {
         workTypeGroupId.value =
           workTypeGroups.value.find((group) => group.children.some((child) => child.id === itemId.value))?.id ?? '';
       }
+    }
+
+    if (!compactMode.value && prefillIfEmpty(work.value, (nextValue) => {
+      work.value = nextValue;
+    })) {
+      showToast('已自动填入推荐模板，可继续编辑后保存。');
     }
   } catch (error) {
     showToast(error instanceof Error ? error.message : '获取项目或工时类型失败。');
@@ -133,6 +153,10 @@ function handleWorkTypeGroupChange(nextGroupId: string): void {
 function handleWorkTypeChange(nextItemId: string): void {
   itemId.value = nextItemId;
   itemName.value = findWorkTypeById(workTypeGroups.value, nextItemId)?.name ?? '';
+}
+
+function applyTemplate(template: string): void {
+  work.value = template;
 }
 
 async function handleSave(): Promise<void> {
@@ -204,6 +228,11 @@ async function handleDisable(): Promise<void> {
     </header>
 
     <div v-if="isOpen" class="form-grid">
+      <label class="compact-switch full">
+        <input v-model="compactMode" type="checkbox" />
+        <span>简化模式（默认隐藏截止日期和工作内容）</span>
+      </label>
+
       <label>
         <span>项目</span>
         <select :value="projectId" @change="handleProjectChange(($event.target as HTMLSelectElement).value)">
@@ -241,12 +270,12 @@ async function handleDisable(): Promise<void> {
         <input v-model.number="hours" type="number" min="1" max="24" />
       </label>
 
-      <label>
+      <label v-show="!compactMode">
         <span>截止日期</span>
         <input v-model="deadline" type="date" />
       </label>
 
-      <label class="full">
+      <label v-show="!compactMode" class="full">
         <span>工作内容</span>
         <textarea
           v-model="work"
@@ -254,6 +283,19 @@ async function handleDisable(): Promise<void> {
           placeholder="不设置截止日期，则会在每个可填报工作日自动填报当天工时。"
         />
       </label>
+
+      <div v-show="!compactMode" class="quick-templates full">
+        <span>快捷模板</span>
+        <button
+          v-for="template in quickTemplates"
+          :key="template"
+          type="button"
+          class="template-chip"
+          @click="applyTemplate(template)"
+        >
+          {{ template }}
+        </button>
+      </div>
     </div>
 
     <div v-if="isOpen" class="actions">
@@ -271,15 +313,13 @@ async function handleDisable(): Promise<void> {
       </button>
     </div>
 
-    <div v-if="toastMessage" class="toast">{{ toastMessage }}</div>
-
-    <div v-if="resultDialog.open" class="modal-backdrop" @click.self="closeResultDialog">
-      <div class="modal-card">
-        <h3>{{ resultDialog.title }}</h3>
-        <p>{{ resultDialog.message }}</p>
-        <button class="primary-button" type="button" @click="closeResultDialog">知道了</button>
-      </div>
-    </div>
+    <InlineToast :message="toastMessage" />
+    <ResultDialog
+      :open="resultDialog.open"
+      :title="resultDialog.title"
+      :message="resultDialog.message"
+      @close="closeResultDialog"
+    />
   </section>
 </template>
 
@@ -351,6 +391,36 @@ async function handleDisable(): Promise<void> {
   grid-column: 1 / -1;
 }
 
+.compact-switch {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  color: #445b62;
+  font-size: 0.88rem;
+}
+
+.quick-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.quick-templates > span {
+  color: #7c6c54;
+  font-size: 0.82rem;
+}
+
+.template-chip {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.48rem 0.75rem;
+  background: #ece8df;
+  color: #31454c;
+  font-size: 0.82rem;
+}
+
 label {
   display: flex;
   flex-direction: column;
@@ -373,34 +443,6 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-}
-
-.toast {
-  position: sticky;
-  bottom: 0.75rem;
-  margin-top: 0.75rem;
-  background: #13272c;
-  color: #fff;
-  padding: 0.8rem 1rem;
-  border-radius: 16px;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(16, 26, 30, 0.42);
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-}
-
-.modal-card {
-  width: min(100%, 360px);
-  background: #fff;
-  border-radius: 24px;
-  padding: 1.2rem;
-  display: grid;
-  gap: 0.9rem;
 }
 
 @media (max-width: 680px) {

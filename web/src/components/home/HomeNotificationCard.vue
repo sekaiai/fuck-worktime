@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router';
+
 import { usePwaDetect } from '../../composables/usePwaDetect';
 
 defineProps<{
@@ -6,9 +8,10 @@ defineProps<{
 }>();
 
 const { isPwa } = usePwaDetect();
+const router = useRouter();
 
 function openNotifications(): void {
-  window.location.href = 'http://localhost:10001/notifications';
+  void router.push('/notifications');
 }
 </script>
 

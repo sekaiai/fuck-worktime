@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef, watch } from 'vue';
+import { computed, nextTick, ref, shallowRef, watch } from 'vue';
 
 import { buildBatchPayload, generateContent, submitBatch } from '../../api/timesheet-client';
+import InlineToast from '../common/InlineToast.vue';
+import ResultDialog from '../common/ResultDialog.vue';
+import { useTemplatePrefill } from '../../composables/useTemplatePrefill';
 import type { Project, TimesheetEntry, WeekDay, WorkTypeNode } from '../../types/timesheet';
 import { formatDisplayDate } from '../../utils/date';
 import { buildWorkTypeGroups, findWorkTypeById } from '../../utils/work-types';
@@ -11,6 +14,9 @@ const props = defineProps<{
   fillableDays: WeekDay[];
   projects: Project[];
   isProjectsLoading: boolean;
+  recommendedDaysToGenerate?: number | null;
+  preferredReportDate?: string | null;
+  preferredStep?: 1 | 2 | 3;
   loadProjects: () => Promise<void>;
   loadWorkTypes: (projectId: string) => Promise<WorkTypeNode[]>;
 }>();
@@ -37,6 +43,11 @@ const resultDialog = ref<{ open: boolean; title: string; message: string }>({
   title: '',
   message: '',
 });
+const currentStep = shallowRef<1 | 2 | 3>(1);
+const compactReviewMode = shallowRef(true);
+const { getQuickTemplates, prefillIfEmpty } = useTemplatePrefill();
+const quickTemplates = getQuickTemplates();
+const projectSelectRef = ref<HTMLSelectElement | null>(null);
 
 const maxFillDays = computed(() => props.fillableDays.length);
 const sortedFillableDays = computed(() =>
@@ -55,6 +66,8 @@ watch(
       return;
     }
 
+    currentStep.value = props.preferredStep ?? 1;
+
     if (props.projects.length === 0) {
       try {
         await props.loadProjects();
@@ -62,6 +75,34 @@ watch(
         showToast(error instanceof Error ? error.message : '获取项目列表失败。');
       }
     }
+
+    if (currentStep.value > 1 && !isStepTwoReady()) {
+      currentStep.value = 1;
+      showToast('请先在第 1 步选择项目和二级工时类型，再继续快速补填。');
+      await nextTick();
+      projectSelectRef.value?.focus();
+      return;
+    }
+
+    if (currentStep.value === 2 && !work.value.trim()) {
+      const applied = prefillIfEmpty(work.value, (nextValue) => {
+        work.value = nextValue;
+      });
+      if (applied) {
+        showToast('已自动填入推荐模板，可直接生成或手动调整内容。');
+      }
+    }
+  },
+);
+
+watch(
+  () => props.recommendedDaysToGenerate,
+  (recommended) => {
+    if (!recommended || recommended <= 0) {
+      return;
+    }
+
+    daysToGenerate.value = Math.min(recommended, maxFillDays.value || 1);
   },
 );
 
@@ -85,6 +126,7 @@ function resetEntries(): void {
 
 function closePanel(): void {
   resultDialog.value = { ...resultDialog.value, open: false };
+  currentStep.value = 1;
   emit('close');
 }
 
@@ -149,7 +191,14 @@ async function handleGenerate(): Promise<void> {
   isGenerating.value = true;
   try {
     const contents = await generateContent(work.value.trim(), daysToGenerate.value);
-    const targetDays = sortedFillableDays.value.slice(0, daysToGenerate.value);
+    const preferredDays =
+      daysToGenerate.value === 1 && props.preferredReportDate
+        ? sortedFillableDays.value.filter((day) => day.date === props.preferredReportDate).slice(0, 1)
+        : [];
+    const targetDays =
+      preferredDays.length > 0
+        ? preferredDays
+        : sortedFillableDays.value.slice(0, daysToGenerate.value);
     entries.value = targetDays.map((day, index) => ({
       reportDate: day.date,
       projectId: selectedProject.value!.id,
@@ -160,11 +209,29 @@ async function handleGenerate(): Promise<void> {
       content: contents[index] ?? '日常工作处理',
       hours: hours.value,
     }));
+    currentStep.value = 3;
   } catch (error) {
     showToast(error instanceof Error ? error.message : '生成工时失败。');
   } finally {
     isGenerating.value = false;
   }
+}
+
+function goToStep(step: 1 | 2 | 3): void {
+  if (step === 3 && entries.value.length === 0) {
+    showToast('请先生成工时列表。');
+    return;
+  }
+
+  currentStep.value = step;
+}
+
+function applyTemplate(template: string): void {
+  work.value = template;
+}
+
+function isStepTwoReady(): boolean {
+  return Boolean(projectId.value && workTypeId.value);
 }
 
 function updateEntryDate(index: number, nextDate: string): void {
@@ -244,10 +311,16 @@ async function handleSubmit(): Promise<void> {
 
     <div v-if="maxFillDays === 0" class="state-block">当前这周没有可补填的工作日。</div>
     <template v-else>
-      <div class="form-grid">
+      <div class="stepper">
+        <button type="button" :class="{ active: currentStep === 1 }" @click="goToStep(1)">1. 选择类型</button>
+        <button type="button" :class="{ active: currentStep === 2 }" @click="goToStep(2)">2. 生成内容</button>
+        <button type="button" :class="{ active: currentStep === 3 }" @click="goToStep(3)">3. 校对提交</button>
+      </div>
+
+      <div v-show="currentStep === 1" class="form-grid">
         <label>
           <span>项目</span>
-          <select :value="projectId" @change="handleProjectChange(($event.target as HTMLSelectElement).value)">
+          <select ref="projectSelectRef" :value="projectId" @change="handleProjectChange(($event.target as HTMLSelectElement).value)">
             <option value="">请选择项目</option>
             <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.title }}</option>
           </select>
@@ -288,7 +361,7 @@ async function handleSubmit(): Promise<void> {
         </label>
       </div>
 
-      <label class="block-field">
+      <label v-show="currentStep === 2" class="block-field">
         <span>工作内容</span>
         <textarea
           v-model="work"
@@ -296,19 +369,36 @@ async function handleSubmit(): Promise<void> {
           placeholder="输入工作内容，系统会生成适合工时填报的描述。"
         />
       </label>
+      <div v-show="currentStep === 2" class="quick-templates">
+        <span>快捷模板</span>
+        <button
+          v-for="template in quickTemplates"
+          :key="template"
+          type="button"
+          class="template-chip"
+          @click="applyTemplate(template)"
+        >
+          {{ template }}
+        </button>
+      </div>
 
-      <p v-if="daysToGenerate > maxFillDays" class="warning-text">
+      <p v-show="currentStep === 2 && daysToGenerate > maxFillDays" class="warning-text">
         生成天数不能超过当前可补填的未填天数。
       </p>
 
-      <div class="inline-actions">
+      <div v-show="currentStep === 2" class="inline-actions">
         <button class="primary-button" type="button" :disabled="isGenerating || isProjectsLoading" @click="handleGenerate">
           {{ isGenerating ? '生成中...' : '生成工时' }}
         </button>
         <span class="helper-text" v-if="isProjectsLoading">正在获取项目列表...</span>
       </div>
 
-      <div v-if="entries.length > 0" class="entry-list">
+      <div v-show="currentStep === 3 && entries.length > 0" class="entry-list">
+        <label class="compact-switch">
+          <input v-model="compactReviewMode" type="checkbox" />
+          <span>简化校对模式（仅检查日期与摘要）</span>
+        </label>
+
         <article v-for="(entry, index) in entries" :key="`${entry.reportDate}-${index}`" class="entry-card">
           <label>
             <span>日期</span>
@@ -326,31 +416,39 @@ async function handleSubmit(): Promise<void> {
             <span>工时类型</span>
             <input :value="entry.itemName || workTypeName" disabled />
           </label>
-          <label>
-            <span>工时</span>
-            <input :value="entry.hours" type="number" min="1" max="24" @input="updateEntryHours(index, Number(($event.target as HTMLInputElement).value))" />
-          </label>
-          <label class="entry-card__content">
-            <span>内容</span>
-            <textarea :value="entry.content" rows="3" @input="updateEntryContent(index, ($event.target as HTMLTextAreaElement).value)" />
-          </label>
+          <template v-if="compactReviewMode">
+            <p class="entry-card__summary">{{ entry.hours }}h · {{ entry.content }}</p>
+          </template>
+          <template v-else>
+            <label>
+              <span>工时</span>
+              <input :value="entry.hours" type="number" min="1" max="24" @input="updateEntryHours(index, Number(($event.target as HTMLInputElement).value))" />
+            </label>
+            <label class="entry-card__content">
+              <span>内容</span>
+              <textarea :value="entry.content" rows="3" @input="updateEntryContent(index, ($event.target as HTMLTextAreaElement).value)" />
+            </label>
+          </template>
         </article>
 
         <button class="primary-button" type="button" :disabled="isSubmitting" @click="handleSubmit">
           {{ isSubmitting ? '提交中...' : '提交补填工时' }}
         </button>
       </div>
+
+      <div class="inline-actions">
+        <button class="secondary-button" type="button" :disabled="currentStep === 1" @click="goToStep((currentStep - 1) as 1 | 2 | 3)">上一步</button>
+        <button class="primary-button" type="button" :disabled="currentStep === 3" @click="goToStep((currentStep + 1) as 1 | 2 | 3)">下一步</button>
+      </div>
     </template>
 
-    <div v-if="toastMessage" class="toast">{{ toastMessage }}</div>
-
-    <div v-if="resultDialog.open" class="modal-backdrop" @click.self="closeResultDialog">
-      <div class="modal-card">
-        <h3>{{ resultDialog.title }}</h3>
-        <p>{{ resultDialog.message }}</p>
-        <button class="primary-button" type="button" @click="closeResultDialog">知道了</button>
-      </div>
-    </div>
+    <InlineToast :message="toastMessage" />
+    <ResultDialog
+      :open="resultDialog.open"
+      :title="resultDialog.title"
+      :message="resultDialog.message"
+      @close="closeResultDialog"
+    />
   </section>
 </template>
 
@@ -397,6 +495,32 @@ async function handleSubmit(): Promise<void> {
 }
 
 .primary-button {
+  background: #0f4f53;
+  color: #fff;
+}
+
+.secondary-button {
+  background: #ece8df;
+  color: #24383f;
+}
+
+.stepper {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.stepper button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.65rem 0.5rem;
+  background: #ece8df;
+  color: #4b595f;
+  font-size: 0.82rem;
+}
+
+.stepper button.active {
   background: #0f4f53;
   color: #fff;
 }
@@ -453,9 +577,48 @@ input:disabled {
   color: #b42318;
 }
 
+.quick-templates {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.quick-templates > span {
+  color: #7c6c54;
+  font-size: 0.82rem;
+}
+
+.template-chip {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.48rem 0.75rem;
+  background: #ece8df;
+  color: #31454c;
+  font-size: 0.82rem;
+}
+
 .entry-list {
   display: grid;
   gap: 0.75rem;
+}
+
+.compact-switch {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  color: #445b62;
+  font-size: 0.88rem;
+}
+
+.entry-card__summary {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 14px;
+  background: #fff;
+  color: #24383f;
 }
 
 .entry-card {
@@ -478,35 +641,11 @@ input:disabled {
   color: #6c665b;
 }
 
-.toast {
-  position: sticky;
-  bottom: 0.75rem;
-  margin-top: 0.75rem;
-  background: #13272c;
-  color: #fff;
-  padding: 0.8rem 1rem;
-  border-radius: 16px;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(16, 26, 30, 0.42);
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-}
-
-.modal-card {
-  width: min(100%, 360px);
-  background: #fff;
-  border-radius: 24px;
-  padding: 1.2rem;
-  display: grid;
-  gap: 0.9rem;
-}
-
 @media (max-width: 680px) {
+  .stepper {
+    grid-template-columns: 1fr;
+  }
+
   .form-grid {
     grid-template-columns: 1fr;
   }

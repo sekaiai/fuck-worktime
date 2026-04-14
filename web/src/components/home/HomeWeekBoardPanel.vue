@@ -119,7 +119,7 @@ function getDetailKey(detail: WorkDetail, index: number): string {
       <div class="board-panel__toolbar">
         <button
           v-if="fillableCount > 0"
-          class="board-panel__fill"
+          class="board-panel__fill board-panel__fill--mobile-sticky"
           type="button"
           @click="emit('openManualFill')"
         >
@@ -395,6 +395,17 @@ function getDetailKey(detail: WorkDetail, index: number): string {
 }
 
 @media (max-width: 680px) {
+  .board-panel__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .board-panel__fill--mobile-sticky {
+    position: sticky;
+    bottom: 0.7rem;
+    z-index: 10;
+    width: 100%;
+  }
+
   .board-panel__header,
   .board-panel__toolbar,
   .board-panel__detail-header {
