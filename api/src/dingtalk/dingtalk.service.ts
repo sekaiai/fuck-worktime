@@ -56,7 +56,7 @@ export class DingtalkService {
    * 6. 如已登录，点击按钮跳转，等待 ding-auth 响应
    * 7. 保存 userId、token 和钉钉 cookie 到本地 JSON
    */
-  async getQrcode(): Promise<{ taskId: string; qrcodeBase64: string; loginState: 'qrcode' | 'auto_login' }> {
+  async getQrcode(userId?: string): Promise<{ taskId: string; qrcodeBase64: string; loginState: 'qrcode' | 'auto_login' }> {
     const taskId = randomUUID();
     let browser: Browser | null = null;
     let context: BrowserContext | null = null;
@@ -85,6 +85,9 @@ export class DingtalkService {
         userAgent:
           'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       });
+
+      // 尝试恢复该用户在钉钉侧的登录态，减少重复扫码。
+      await this.applyStoredCookies(context, userId);
 
       // 注入反检测脚本：移除 navigator.webdriver 属性
       await context.addInitScript(() => {
@@ -441,20 +444,7 @@ export class DingtalkService {
         Object.defineProperty(navigator, 'webdriver', { get: () => false });
       });
 
-      const cookieEntries = Object.entries(record.dingtalkCookies ?? {});
-      if (cookieEntries.length > 0) {
-        await context.addCookies(
-          cookieEntries.map(([name, value]) => ({
-            name,
-            value,
-            domain: '.dingtalk.com',
-            path: '/',
-            httpOnly: false,
-            secure: true,
-            sameSite: 'Lax' as const,
-          })),
-        );
-      }
+      await this.applyStoredCookies(context, userId);
 
       page = await context.newPage();
       const dingAuthPromise = this.createDingAuthPromise(page, context);
@@ -520,6 +510,32 @@ export class DingtalkService {
       return null;
     }
     return value as Record<string, unknown>;
+  }
+
+  private async applyStoredCookies(context: BrowserContext, userId?: string): Promise<void> {
+    if (!userId) {
+      return;
+    }
+
+    const record = await this.dingtalkStore.getUser(userId);
+    const cookieEntries = Object.entries(record?.dingtalkCookies ?? {});
+    if (cookieEntries.length === 0) {
+      this.logger.log(`[cookies] No stored dingtalk cookies for userId=${userId}`);
+      return;
+    }
+
+    await context.addCookies(
+      cookieEntries.map(([name, value]) => ({
+        name,
+        value,
+        domain: '.dingtalk.com',
+        path: '/',
+        httpOnly: false,
+        secure: true,
+        sameSite: 'Lax' as const,
+      })),
+    );
+    this.logger.log(`[cookies] Applied ${cookieEntries.length} stored dingtalk cookies for userId=${userId}`);
   }
 
   /**

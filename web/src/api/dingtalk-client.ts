@@ -1,4 +1,4 @@
-import { apiRequest } from './request';
+import { apiRequest, getStoredUserId } from './request';
 
 export interface QrcodeResult {
   taskId: string;
@@ -21,11 +21,13 @@ export interface UserByUserIdResult {
 }
 
 export async function getQrcode(): Promise<QrcodeResult> {
+  const userId = getStoredUserId();
+  const query = userId ? `?userId=${encodeURIComponent(userId)}` : '';
   const response = await apiRequest<{
     taskId: string;
     qrcode?: string;
     qrcodeBase64?: string;
-  }>('/dingtalk/qrcode');
+  }>(`/dingtalk/qrcode${query}`);
 
   return {
     taskId: response.data.taskId,

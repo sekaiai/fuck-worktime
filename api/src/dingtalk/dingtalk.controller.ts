@@ -8,9 +8,9 @@ export class DingtalkController {
   constructor(private readonly dingtalkService: DingtalkService) {}
 
   @Get('qrcode')
-  async getQrcode() {
+  async getQrcode(@Query('userId') userId?: string) {
     try {
-      const result = await this.dingtalkService.getQrcode();
+      const result = await this.dingtalkService.getQrcode(userId);
       return { code: 200, msg: 'success', data: result };
     } catch (error) {
       return {
