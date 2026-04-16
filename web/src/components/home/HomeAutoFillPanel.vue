@@ -3,7 +3,6 @@ import { computed, ref, shallowRef, watch } from 'vue';
 
 import InlineToast from '../common/InlineToast.vue';
 import ResultDialog from '../common/ResultDialog.vue';
-import { useTemplatePrefill } from '../../composables/useTemplatePrefill';
 import type { AutoFillConfig, AutoFillStatus } from '../../types/auto-fill';
 import type { Project, WorkTypeNode } from '../../types/timesheet';
 import { buildWorkTypeGroups, findWorkTypeById } from '../../utils/work-types';
@@ -26,6 +25,8 @@ const emit = defineEmits<{
   updated: [];
 }>();
 
+const DEFAULT_REPORT_TIME = '17:00';
+
 const isOpen = shallowRef(false);
 const workTypes = shallowRef<WorkTypeNode[]>([]);
 const projectId = shallowRef('');
@@ -34,6 +35,7 @@ const itemId = shallowRef('');
 const itemName = shallowRef('');
 const hours = shallowRef(8);
 const work = shallowRef('');
+const reportTime = shallowRef(DEFAULT_REPORT_TIME);
 const deadline = shallowRef('');
 const toastMessage = shallowRef('');
 const resultDialog = ref<{ open: boolean; title: string; message: string }>({
@@ -41,9 +43,6 @@ const resultDialog = ref<{ open: boolean; title: string; message: string }>({
   title: '',
   message: '',
 });
-const compactMode = shallowRef(true);
-const { getQuickTemplates, prefillIfEmpty } = useTemplatePrefill();
-const quickTemplates = getQuickTemplates();
 
 const workTypeGroups = computed(() => buildWorkTypeGroups(workTypes.value));
 const availableWorkTypes = computed(
@@ -60,22 +59,27 @@ watch(
       itemName.value = '';
       hours.value = 8;
       work.value = '';
+      reportTime.value = DEFAULT_REPORT_TIME;
       deadline.value = '';
       workTypes.value = [];
       return;
     }
 
     projectId.value = config.projectId;
+    workTypeGroupId.value = config.workTypeGroupId ?? '';
     itemId.value = config.itemId;
     itemName.value = config.itemName;
     hours.value = config.hours;
     work.value = config.work;
+    reportTime.value = config.reportTime || DEFAULT_REPORT_TIME;
     deadline.value = config.deadline ?? '';
 
     try {
       workTypes.value = await props.loadWorkTypes(config.projectId);
-      workTypeGroupId.value =
-        workTypeGroups.value.find((group) => group.children.some((child) => child.id === config.itemId))?.id ?? '';
+      if (!workTypeGroupId.value) {
+        workTypeGroupId.value =
+          workTypeGroups.value.find((group) => group.children.some((child) => child.id === config.itemId))?.id ?? '';
+      }
     } catch {
       workTypes.value = [];
       workTypeGroupId.value = '';
@@ -83,14 +87,6 @@ watch(
   },
   { immediate: true },
 );
-
-watch(compactMode, (value) => {
-  if (!value && prefillIfEmpty(work.value, (nextValue) => {
-    work.value = nextValue;
-  })) {
-    showToast('已自动填入推荐模板，可继续编辑后保存。');
-  }
-});
 
 function showToast(message: string): void {
   toastMessage.value = message;
@@ -119,14 +115,8 @@ async function toggleOpen(): Promise<void> {
           workTypeGroups.value.find((group) => group.children.some((child) => child.id === itemId.value))?.id ?? '';
       }
     }
-
-    if (!compactMode.value && prefillIfEmpty(work.value, (nextValue) => {
-      work.value = nextValue;
-    })) {
-      showToast('已自动填入推荐模板，可继续编辑后保存。');
-    }
   } catch (error) {
-    showToast(error instanceof Error ? error.message : '获取项目或工时类型失败。');
+    showToast(error instanceof Error ? error.message : 'Failed to load projects or work types.');
   }
 }
 
@@ -140,7 +130,7 @@ async function handleProjectChange(nextProjectId: string): Promise<void> {
     workTypes.value = await props.loadWorkTypes(nextProjectId);
   } catch (error) {
     workTypes.value = [];
-    showToast(error instanceof Error ? error.message : '获取工时类型失败。');
+    showToast(error instanceof Error ? error.message : 'Failed to load work types.');
   }
 }
 
@@ -155,37 +145,48 @@ function handleWorkTypeChange(nextItemId: string): void {
   itemName.value = findWorkTypeById(workTypeGroups.value, nextItemId)?.name ?? '';
 }
 
-function applyTemplate(template: string): void {
-  work.value = template;
-}
-
 async function handleSave(): Promise<void> {
   if (!props.userId) {
-    showToast('请先登录后再配置自动填报。');
+    showToast('Please log in before configuring auto-fill.');
     return;
   }
+
   if (!projectId.value || !workTypeGroupId.value || !itemId.value) {
-    showToast('请选择项目、一级类型和二级类型。');
+    showToast('Project, level-1 type, and level-2 type are required.');
+    return;
+  }
+
+  if (!Number.isFinite(hours.value) || hours.value <= 0) {
+    showToast('Hours must be greater than 0.');
+    return;
+  }
+
+  if (!work.value.trim()) {
+    showToast('Work content is required.');
     return;
   }
 
   const project = props.projects.find((item) => item.id === projectId.value);
+  const workTypeGroup = workTypeGroups.value.find((group) => group.id === workTypeGroupId.value);
   const result = await props.saveConfig({
     userId: props.userId,
     enabled: true,
     projectId: projectId.value,
     projectTitle: project?.title ?? '',
     projectStatus: project?.status ?? 20,
+    workTypeGroupId: workTypeGroupId.value,
+    workTypeGroupName: workTypeGroup?.name ?? '',
     itemId: itemId.value,
     itemName: itemName.value,
     hours: hours.value,
     work: work.value.trim(),
+    reportTime: reportTime.value.trim() || DEFAULT_REPORT_TIME,
     deadline: deadline.value || null,
   });
 
   resultDialog.value = {
     open: true,
-    title: result.code === 200 ? '保存结果' : '保存失败',
+    title: result.code === 200 ? 'Save Result' : 'Save Failed',
     message: result.msg,
   };
   if (result.code === 200) {
@@ -201,7 +202,7 @@ async function handleDisable(): Promise<void> {
   const result = await props.disableConfig(props.userId);
   resultDialog.value = {
     open: true,
-    title: result.code === 200 ? '关闭结果' : '关闭失败',
+    title: result.code === 200 ? 'Disable Result' : 'Disable Failed',
     message: result.msg,
   };
   if (result.code === 200) {
@@ -214,93 +215,81 @@ async function handleDisable(): Promise<void> {
   <section class="panel">
     <header class="section-header">
       <div>
-        <p class="section-eyebrow">自动填报</p>
-        <h2 class="section-title">自动填报当天工时</h2>
+        <p class="section-eyebrow">Auto Fill</p>
+        <h2 class="section-title">Auto Fill Today Timesheet</h2>
         <p class="section-status">
-          当前状态：
-          <strong>{{ status === 'enabled' ? '已开启' : status === 'expired' ? '已截止' : '未开启' }}</strong>
+          Status:
+          <strong>{{ status === 'enabled' ? 'Enabled' : status === 'expired' ? 'Expired' : 'Disabled' }}</strong>
         </p>
-        <p v-if="config?.deadline" class="section-helper">截止日期：{{ config.deadline }}</p>
+        <p v-if="config?.reportTime" class="section-helper">Report Time: {{ config.reportTime }}</p>
+        <p v-if="config?.deadline" class="section-helper">Deadline: {{ config.deadline }}</p>
       </div>
       <button class="action-button" type="button" @click="toggleOpen">
-        {{ isOpen ? '收起' : '配置' }}
+        {{ isOpen ? 'Collapse' : 'Configure' }}
       </button>
     </header>
 
     <div v-if="isOpen" class="form-grid">
-      <label class="compact-switch full">
-        <input v-model="compactMode" type="checkbox" />
-        <span>简化模式（默认隐藏截止日期和工作内容）</span>
-      </label>
-
       <label>
-        <span>项目</span>
+        <span>Project</span>
         <select :value="projectId" @change="handleProjectChange(($event.target as HTMLSelectElement).value)">
-          <option value="">请选择项目</option>
+          <option value="">Select project</option>
           <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.title }}</option>
         </select>
       </label>
 
       <label>
-        <span>一级工时类型</span>
+        <span>Level-1 Type</span>
         <select
           :value="workTypeGroupId"
           :disabled="workTypeGroups.length === 0"
           @change="handleWorkTypeGroupChange(($event.target as HTMLSelectElement).value)"
         >
-          <option value="">请选择一级类型</option>
+          <option value="">Select level-1 type</option>
           <option v-for="group in workTypeGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
         </select>
       </label>
 
       <label>
-        <span>二级工时类型</span>
+        <span>Level-2 Type</span>
         <select
           :value="itemId"
           :disabled="availableWorkTypes.length === 0"
           @change="handleWorkTypeChange(($event.target as HTMLSelectElement).value)"
         >
-          <option value="">请选择二级类型</option>
+          <option value="">Select level-2 type</option>
           <option v-for="item in availableWorkTypes" :key="item.id" :value="item.id">{{ item.name }}</option>
         </select>
       </label>
 
       <label>
-        <span>工时</span>
+        <span>Hours</span>
         <input v-model.number="hours" type="number" min="1" max="24" />
       </label>
 
-      <label v-show="!compactMode">
-        <span>截止日期</span>
+      <label>
+        <span>Report Time</span>
+        <input v-model="reportTime" type="time" />
+      </label>
+
+      <label>
+        <span>Deadline</span>
         <input v-model="deadline" type="date" />
       </label>
 
-      <label v-show="!compactMode" class="full">
-        <span>工作内容</span>
-        <textarea
-          v-model="work"
-          rows="3"
-          placeholder="不设置截止日期，则会在每个可填报工作日自动填报当天工时。"
-        />
+      <label class="full">
+        <span>Work Content</span>
+        <textarea v-model="work" rows="3" placeholder="Describe the work content for auto-fill"></textarea>
       </label>
 
-      <div v-show="!compactMode" class="quick-templates full">
-        <span>快捷模板</span>
-        <button
-          v-for="template in quickTemplates"
-          :key="template"
-          type="button"
-          class="template-chip"
-          @click="applyTemplate(template)"
-        >
-          {{ template }}
-        </button>
-      </div>
+      <p class="field-helper full">
+        If no deadline is set, the scheduler fills the current day at the configured report time on each valid workday.
+      </p>
     </div>
 
     <div v-if="isOpen" class="actions">
       <button class="primary-button" type="button" :disabled="isSaving || isProjectsLoading" @click="handleSave">
-        {{ isSaving ? '保存中...' : '保存自动填报' }}
+        {{ isSaving ? 'Saving...' : 'Save Auto Fill' }}
       </button>
       <button
         v-if="status === 'enabled'"
@@ -309,7 +298,7 @@ async function handleDisable(): Promise<void> {
         :disabled="isDisabling"
         @click="handleDisable"
       >
-        {{ isDisabling ? '关闭中...' : '关闭自动填报' }}
+        {{ isDisabling ? 'Disabling...' : 'Disable Auto Fill' }}
       </button>
     </div>
 
@@ -391,41 +380,17 @@ async function handleDisable(): Promise<void> {
   grid-column: 1 / -1;
 }
 
-.compact-switch {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.45rem;
-  color: #445b62;
-  font-size: 0.88rem;
-}
-
-.quick-templates {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  align-items: center;
-}
-
-.quick-templates > span {
-  color: #7c6c54;
-  font-size: 0.82rem;
-}
-
-.template-chip {
-  border: 0;
-  border-radius: 999px;
-  padding: 0.48rem 0.75rem;
-  background: #ece8df;
-  color: #31454c;
-  font-size: 0.82rem;
-}
-
 label {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   color: #31454c;
+}
+
+.field-helper {
+  margin: 0;
+  color: #5f645b;
+  font-size: 0.88rem;
 }
 
 select,

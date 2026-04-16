@@ -28,6 +28,7 @@ interface AutoFillReportPayload {
 @Injectable()
 export class AutoFillRuntimeScheduler {
   private readonly logger = new Logger(AutoFillRuntimeScheduler.name);
+  private readonly defaultReportTime = '17:00';
 
   constructor(
     private readonly autoFillStore: AutoFillStore,
@@ -37,14 +38,17 @@ export class AutoFillRuntimeScheduler {
     private readonly dingtalkService: DingtalkService,
   ) {}
 
-  @Cron('0 30 9 * * 1-5')
+  @Cron('0 * * * * *')
   async handleAutoFill(): Promise<void> {
-    this.logger.log('Auto-fill scheduler triggered');
     const configs = (await this.autoFillStore.getAll()).filter(
       (config) => config.enabled && !config.expired,
     );
 
     for (const config of configs) {
+      if (!this.shouldRunNow(config)) {
+        continue;
+      }
+
       try {
         await this.processUser(config);
       } catch (error) {
@@ -61,20 +65,20 @@ export class AutoFillRuntimeScheduler {
         lastExecutedAt: new Date().toISOString(),
         lastExecutionStatus: 'expired',
       });
-      await this.notifyUser(config.userId, '自动填报已超过截止日期，系统已停止执行。');
+      await this.notifyUser(config.userId, 'Auto-fill is expired and has stopped.');
       return;
     }
 
     const token = await this.getTokenForUser(config.userId);
     if (!token) {
-      await this.markFailed(config, '无法获取登录凭证，请重新登录后再开启自动填报。');
+      await this.markFailed(config, 'Failed to acquire token. Please log in again.');
       return;
     }
 
     const today = this.getTodayKey();
     const weekBoard = await this.getWeekBoard(today, token);
     if (!weekBoard) {
-      await this.markFailed(config, '获取本周填报状态失败，请稍后重试。');
+      await this.markFailed(config, 'Failed to fetch week board.');
       return;
     }
 
@@ -83,12 +87,12 @@ export class AutoFillRuntimeScheduler {
       .sort((left, right) => left.date.localeCompare(right.date));
 
     if (fillableDays.length === 0) {
-      await this.markSkipped(config, '本周当前没有可自动填报的未提交工作日。');
+      await this.markSkipped(config, 'No fillable workday is available this week.');
       return;
     }
 
     const contents = await this.aiService.generateWorkContents(
-      config.work || '日常工作处理',
+      config.work || 'Daily work handling',
       fillableDays.length,
     );
 
@@ -98,7 +102,7 @@ export class AutoFillRuntimeScheduler {
       projectTitle: config.projectTitle,
       projectStatus: config.projectStatus,
       itemId: config.itemId,
-      content: contents[index] || '日常工作处理',
+      content: contents[index] || 'Daily work handling',
       hours: config.hours,
     }));
 
@@ -109,12 +113,9 @@ export class AutoFillRuntimeScheduler {
         lastExecutedAt: new Date().toISOString(),
         lastExecutionStatus: 'success',
       });
-      await this.notifyUser(
-        config.userId,
-        `本周自动填报成功，已提交 ${submittedCount} 条工时。`,
-      );
+      await this.notifyUser(config.userId, `Auto-fill succeeded with ${submittedCount} submitted entries.`);
     } catch (error) {
-      await this.markFailed(config, '本周自动填报失败，请手动处理未提交工时。');
+      await this.markFailed(config, 'Auto-fill failed. Please handle the remaining entries manually.');
       this.logger.error(`Auto-fill failed for user ${config.userId}`, error);
     }
   }
@@ -185,6 +186,20 @@ export class AutoFillRuntimeScheduler {
     return new Date().toLocaleDateString('en-CA');
   }
 
+  private shouldRunNow(config: AutoFillConfig): boolean {
+    const now = new Date();
+    const today = now.toLocaleDateString('en-CA');
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const reportTime = config.reportTime || this.defaultReportTime;
+    const lastExecutedDay = config.lastExecutedAt ? config.lastExecutedAt.slice(0, 10) : null;
+
+    if (lastExecutedDay === today) {
+      return false;
+    }
+
+    return currentTime >= reportTime;
+  }
+
   private async markSkipped(config: AutoFillConfig, message: string): Promise<void> {
     await this.autoFillStore.set({
       ...config,
@@ -206,7 +221,7 @@ export class AutoFillRuntimeScheduler {
   private async notifyUser(userId: string, message: string): Promise<void> {
     try {
       await this.pushService.sendNotificationToUser(userId, {
-        title: '工时填报通知',
+        title: 'Timesheet Notification',
         body: message,
         url: '/',
       });
