@@ -4,7 +4,6 @@ import { computed, nextTick, ref, shallowRef, watch } from 'vue';
 import { buildBatchPayload, generateContent, submitBatch } from '../../api/timesheet-client';
 import InlineToast from '../common/InlineToast.vue';
 import ResultDialog from '../common/ResultDialog.vue';
-import { useTemplatePrefill } from '../../composables/useTemplatePrefill';
 import type { Project, TimesheetEntry, WeekDay, WorkTypeNode } from '../../types/timesheet';
 import { formatDisplayDate } from '../../utils/date';
 import { buildWorkTypeGroups, findWorkTypeById } from '../../utils/work-types';
@@ -45,8 +44,6 @@ const resultDialog = ref<{ open: boolean; title: string; message: string }>({
 });
 const currentStep = shallowRef<1 | 2 | 3>(1);
 const compactReviewMode = shallowRef(true);
-const { getQuickTemplates, prefillIfEmpty } = useTemplatePrefill();
-const quickTemplates = getQuickTemplates();
 const projectSelectRef = ref<HTMLSelectElement | null>(null);
 
 const maxFillDays = computed(() => props.fillableDays.length);
@@ -85,12 +82,7 @@ watch(
     }
 
     if (currentStep.value === 2 && !work.value.trim()) {
-      const applied = prefillIfEmpty(work.value, (nextValue) => {
-        work.value = nextValue;
-      });
-      if (applied) {
-        showToast('已自动填入推荐模板，可直接生成或手动调整内容。');
-      }
+      showToast('请填写工作内容后再继续。');
     }
   },
 );
@@ -369,18 +361,6 @@ async function handleSubmit(): Promise<void> {
           placeholder="输入工作内容，系统会生成适合工时填报的描述。"
         />
       </label>
-      <div v-show="currentStep === 2" class="quick-templates">
-        <span>快捷模板</span>
-        <button
-          v-for="template in quickTemplates"
-          :key="template"
-          type="button"
-          class="template-chip"
-          @click="applyTemplate(template)"
-        >
-          {{ template }}
-        </button>
-      </div>
 
       <p v-show="currentStep === 2 && daysToGenerate > maxFillDays" class="warning-text">
         生成天数不能超过当前可补填的未填天数。

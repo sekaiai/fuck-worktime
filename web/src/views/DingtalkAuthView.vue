@@ -90,7 +90,7 @@ onUnmounted(() => {
 <template>
   <main class="login-page">
     <section class="login-card">
-      <p class="login-eyebrow">dingtalk-login</p>
+      <p class="login-eyebrow">钉钉登录</p>
       <h1 class="login-title">钉钉扫码登录</h1>
       <p class="login-copy">
         {{ route.query.reason === 'expired' ? '当前 token 已失效，请重新完成钉钉登录。' : '首次进入请使用钉钉扫码登录。' }}

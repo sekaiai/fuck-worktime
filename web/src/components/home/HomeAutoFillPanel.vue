@@ -215,81 +215,81 @@ async function handleDisable(): Promise<void> {
   <section class="panel">
     <header class="section-header">
       <div>
-        <p class="section-eyebrow">Auto Fill</p>
-        <h2 class="section-title">Auto Fill Today Timesheet</h2>
+        <p class="section-eyebrow">自动填报</p>
+        <h2 class="section-title">今日自动填报工时</h2>
         <p class="section-status">
-          Status:
-          <strong>{{ status === 'enabled' ? 'Enabled' : status === 'expired' ? 'Expired' : 'Disabled' }}</strong>
+          状态：
+          <strong>{{ status === 'enabled' ? '已启用' : status === 'expired' ? '已过期' : '已禁用' }}</strong>
         </p>
-        <p v-if="config?.reportTime" class="section-helper">Report Time: {{ config.reportTime }}</p>
-        <p v-if="config?.deadline" class="section-helper">Deadline: {{ config.deadline }}</p>
+        <p v-if="config?.reportTime" class="section-helper">填报时间：{{ config.reportTime }}</p>
+        <p v-if="config?.deadline" class="section-helper">截止时间：{{ config.deadline }}</p>
       </div>
       <button class="action-button" type="button" @click="toggleOpen">
-        {{ isOpen ? 'Collapse' : 'Configure' }}
+        {{ isOpen ? '收起' : '配置' }}
       </button>
     </header>
 
     <div v-if="isOpen" class="form-grid">
       <label>
-        <span>Project</span>
+        <span>项目</span>
         <select :value="projectId" @change="handleProjectChange(($event.target as HTMLSelectElement).value)">
-          <option value="">Select project</option>
+          <option value="">请选择项目</option>
           <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.title }}</option>
         </select>
       </label>
 
       <label>
-        <span>Level-1 Type</span>
+        <span>一级工时类型</span>
         <select
           :value="workTypeGroupId"
           :disabled="workTypeGroups.length === 0"
           @change="handleWorkTypeGroupChange(($event.target as HTMLSelectElement).value)"
         >
-          <option value="">Select level-1 type</option>
+          <option value="">请选择一级类型</option>
           <option v-for="group in workTypeGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
         </select>
       </label>
 
       <label>
-        <span>Level-2 Type</span>
+        <span>二级工时类型</span>
         <select
           :value="itemId"
           :disabled="availableWorkTypes.length === 0"
           @change="handleWorkTypeChange(($event.target as HTMLSelectElement).value)"
         >
-          <option value="">Select level-2 type</option>
+          <option value="">请选择二级类型</option>
           <option v-for="item in availableWorkTypes" :key="item.id" :value="item.id">{{ item.name }}</option>
         </select>
       </label>
 
       <label>
-        <span>Hours</span>
+        <span>工时</span>
         <input v-model.number="hours" type="number" min="1" max="24" />
       </label>
 
       <label>
-        <span>Report Time</span>
+        <span>填报时间</span>
         <input v-model="reportTime" type="time" />
       </label>
 
       <label>
-        <span>Deadline</span>
+        <span>截止日期</span>
         <input v-model="deadline" type="date" />
       </label>
 
       <label class="full">
-        <span>Work Content</span>
-        <textarea v-model="work" rows="3" placeholder="Describe the work content for auto-fill"></textarea>
+        <span>工作内容</span>
+        <textarea v-model="work" rows="3" placeholder="输入自动填报的工作内容" />
       </label>
 
       <p class="field-helper full">
-        If no deadline is set, the scheduler fills the current day at the configured report time on each valid workday.
+        若未设置截止日期，调度器会在每个有效工作日的填报时间自动填报当天工时。
       </p>
     </div>
 
     <div v-if="isOpen" class="actions">
       <button class="primary-button" type="button" :disabled="isSaving || isProjectsLoading" @click="handleSave">
-        {{ isSaving ? 'Saving...' : 'Save Auto Fill' }}
+        {{ isSaving ? '保存中...' : '保存自动填报配置' }}
       </button>
       <button
         v-if="status === 'enabled'"
@@ -298,7 +298,7 @@ async function handleDisable(): Promise<void> {
         :disabled="isDisabling"
         @click="handleDisable"
       >
-        {{ isDisabling ? 'Disabling...' : 'Disable Auto Fill' }}
+        {{ isDisabling ? '禁用中...' : '禁用自动填报' }}
       </button>
     </div>
 
