@@ -15,10 +15,12 @@ const props = defineProps<{
   isProjectsLoading: boolean;
   isSaving: boolean;
   isDisabling: boolean;
+  isTriggering: boolean;
   loadProjects: () => Promise<void>;
   loadWorkTypes: (projectId: string) => Promise<WorkTypeNode[]>;
   saveConfig: (payload: Partial<AutoFillConfig> & { userId: string }) => Promise<{ code: number; msg: string }>;
   disableConfig: (userId: string) => Promise<{ code: number; msg: string }>;
+  triggerConfig: (userId: string) => Promise<{ code: number; msg: string }>;
 }>();
 
 const emit = defineEmits<{
@@ -194,6 +196,21 @@ async function handleSave(): Promise<void> {
   }
 }
 
+async function handleRunNow(): Promise<void> {
+  if (!props.userId) {
+    showToast('Please log in before triggering auto-fill.');
+    return;
+  }
+
+  const result = await props.triggerConfig(props.userId);
+  resultDialog.value = {
+    open: true,
+    title: result.code === 200 ? 'Run Result' : 'Run Failed',
+    message: result.msg,
+  };
+  emit('updated');
+}
+
 async function handleDisable(): Promise<void> {
   if (!props.userId) {
     return;
@@ -215,81 +232,90 @@ async function handleDisable(): Promise<void> {
   <section class="panel">
     <header class="section-header">
       <div>
-        <p class="section-eyebrow">自动填报</p>
-        <h2 class="section-title">今日自动填报工时</h2>
+        <p class="section-eyebrow">Auto Fill</p>
+        <h2 class="section-title">Auto Fill Today Timesheet</h2>
         <p class="section-status">
-          状态：
-          <strong>{{ status === 'enabled' ? '已启用' : status === 'expired' ? '已过期' : '已禁用' }}</strong>
+          Status:
+          <strong>{{ status === 'enabled' ? 'Enabled' : status === 'expired' ? 'Expired' : 'Disabled' }}</strong>
         </p>
-        <p v-if="config?.reportTime" class="section-helper">填报时间：{{ config.reportTime }}</p>
-        <p v-if="config?.deadline" class="section-helper">截止时间：{{ config.deadline }}</p>
+        <p v-if="config?.reportTime" class="section-helper">Report Time: {{ config.reportTime }}</p>
+        <p v-if="config?.deadline" class="section-helper">Deadline: {{ config.deadline }}</p>
       </div>
       <button class="action-button" type="button" @click="toggleOpen">
-        {{ isOpen ? '收起' : '配置' }}
+        {{ isOpen ? 'Collapse' : 'Configure' }}
       </button>
     </header>
 
     <div v-if="isOpen" class="form-grid">
       <label>
-        <span>项目</span>
+        <span>Project</span>
         <select :value="projectId" @change="handleProjectChange(($event.target as HTMLSelectElement).value)">
-          <option value="">请选择项目</option>
+          <option value="">Select project</option>
           <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.title }}</option>
         </select>
       </label>
 
       <label>
-        <span>一级工时类型</span>
+        <span>Level-1 Type</span>
         <select
           :value="workTypeGroupId"
           :disabled="workTypeGroups.length === 0"
           @change="handleWorkTypeGroupChange(($event.target as HTMLSelectElement).value)"
         >
-          <option value="">请选择一级类型</option>
+          <option value="">Select level-1 type</option>
           <option v-for="group in workTypeGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
         </select>
       </label>
 
       <label>
-        <span>二级工时类型</span>
+        <span>Level-2 Type</span>
         <select
           :value="itemId"
           :disabled="availableWorkTypes.length === 0"
           @change="handleWorkTypeChange(($event.target as HTMLSelectElement).value)"
         >
-          <option value="">请选择二级类型</option>
+          <option value="">Select level-2 type</option>
           <option v-for="item in availableWorkTypes" :key="item.id" :value="item.id">{{ item.name }}</option>
         </select>
       </label>
 
       <label>
-        <span>工时</span>
+        <span>Hours</span>
         <input v-model.number="hours" type="number" min="1" max="24" />
       </label>
 
       <label>
-        <span>填报时间</span>
+        <span>Report Time</span>
         <input v-model="reportTime" type="time" />
       </label>
 
       <label>
-        <span>截止日期</span>
+        <span>Deadline</span>
         <input v-model="deadline" type="date" />
       </label>
 
       <label class="full">
-        <span>工作内容</span>
-        <textarea v-model="work" rows="3" placeholder="输入自动填报的工作内容" />
+        <span>Work Content</span>
+        <textarea v-model="work" rows="3" placeholder="Describe the work content for auto-fill"></textarea>
       </label>
 
       <p class="field-helper full">
-        若未设置截止日期，调度器会在每个有效工作日的填报时间自动填报当天工时。
+        If no deadline is set, the scheduler fills the current day at the configured report time on each valid workday.
       </p>
     </div>
 
     <div v-if="isOpen" class="actions">
       <button class="primary-button" type="button" :disabled="isSaving || isProjectsLoading" @click="handleSave">
-        {{ isSaving ? '保存中...' : '保存自动填报配置' }}
+        {{ isSaving ? 'Saving...' : 'Save Auto Fill Config' }}
+      </button>
+      <button
+        v-if="status === 'enabled'"
+        class="secondary-button"
+        type="button"
+        :disabled="isTriggering"
+        @click="handleRunNow"
+      >
+        {{ isTriggering ? 'Running...' : 'Run Auto Fill Now' }}
       </button>
       <button
         v-if="status === 'enabled'"
@@ -298,7 +324,7 @@ async function handleDisable(): Promise<void> {
         :disabled="isDisabling"
         @click="handleDisable"
       >
-        {{ isDisabling ? '禁用中...' : '禁用自动填报' }}
+        {{ isDisabling ? 'Disabling...' : 'Disable Auto Fill' }}
       </button>
     </div>
 

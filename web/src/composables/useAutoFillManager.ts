@@ -1,6 +1,6 @@
 import { computed, shallowRef } from 'vue';
 
-import { disableAutoFill, getAutoFillConfig, saveAutoFillConfig } from '../api/timesheet-client';
+import { disableAutoFill, getAutoFillConfig, runAutoFillNow, saveAutoFillConfig } from '../api/timesheet-client';
 import type { AutoFillConfig, AutoFillStatus } from '../types/auto-fill';
 import { getTodayKey } from '../utils/date';
 
@@ -9,6 +9,7 @@ export function useAutoFillManager() {
   const isLoading = shallowRef(false);
   const isSaving = shallowRef(false);
   const isDisabling = shallowRef(false);
+  const isTriggering = shallowRef(false);
 
   const status = computed<AutoFillStatus>(() => {
     if (!config.value?.enabled) {
@@ -69,14 +70,32 @@ export function useAutoFillManager() {
     }
   }
 
+  async function trigger(userId: string) {
+    isTriggering.value = true;
+    try {
+      const result = await runAutoFillNow(userId);
+      await load(userId);
+      return result;
+    } catch (error) {
+      return {
+        code: 500,
+        msg: error instanceof Error ? error.message : 'Trigger auto-fill failed',
+      };
+    } finally {
+      isTriggering.value = false;
+    }
+  }
+
   return {
     config,
     status,
     isLoading,
     isSaving,
     isDisabling,
+    isTriggering,
     load,
     save,
     disable,
+    trigger,
   };
 }

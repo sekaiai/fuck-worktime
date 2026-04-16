@@ -361,6 +361,18 @@ export async function disableAutoFill(userId: string): Promise<{ code: number; m
   };
 }
 
+export async function runAutoFillNow(userId: string): Promise<{ code: number; msg: string }> {
+  const response = await apiRequest('/timesheet/auto-fill/run-now', {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+
+  return {
+    code: response.code,
+    msg: response.msg,
+  };
+}
+
 export function buildBatchPayload(entries: TimesheetEntry[]): ReportBatchRequest {
   return {
     workingTimingList: entries.map((entry) => ({

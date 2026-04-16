@@ -8,6 +8,7 @@ import { WorkTypeDto } from './dto/work-type.dto';
 import { GenerateContentDto } from './dto/generate-content.dto';
 import { GetAutoFillQueryDto, SaveAutoFillDto } from './dto/auto-fill.dto';
 import { AutoFillStore } from './scheduler/auto-fill.store';
+import { AutoFillRuntimeScheduler } from './scheduler/auto-fill.runtime.scheduler';
 import type { AutoFillConfig } from './scheduler/auto-fill.types';
 import { TimesheetService } from './timesheet.service';
 
@@ -18,6 +19,7 @@ export class TimesheetController {
   constructor(
     private readonly timesheetService: TimesheetService,
     private readonly autoFillStore: AutoFillStore,
+    private readonly autoFillRuntimeScheduler: AutoFillRuntimeScheduler,
   ) {}
 
   @Get('projects')
@@ -98,7 +100,7 @@ export class TimesheetController {
       lastExecutionStatus: existing?.lastExecutionStatus ?? null,
     };
     await this.autoFillStore.set(config);
-    return { code: 200, msg: '保存成功', data: config };
+    return { code: 200, msg: 'Save success', data: config };
   }
 
   @Get('auto-fill')
@@ -115,12 +117,24 @@ export class TimesheetController {
   ): Promise<{ code: number; msg: string; data: AutoFillConfig | null }> {
     const config = await this.autoFillStore.get(query.userId);
     if (!config) {
-      return { code: 404, msg: '配置不存在', data: null };
+      return { code: 404, msg: 'Config not found', data: null };
     }
 
     const updated = this.withDefaults({ ...config, enabled: false });
     await this.autoFillStore.set(updated);
-    return { code: 200, msg: '已关闭自动填报', data: updated };
+    return { code: 200, msg: 'Auto-fill disabled', data: updated };
+  }
+
+  @Post('auto-fill/run-now')
+  async runAutoFillNow(
+    @Body() dto: GetAutoFillQueryDto,
+  ): Promise<{ code: number; msg: string; data: null }> {
+    const result = await this.autoFillRuntimeScheduler.triggerNow(dto.userId);
+    return {
+      code: result.code,
+      msg: result.msg,
+      data: null,
+    };
   }
 
   private withDefaults(config: AutoFillConfig): AutoFillConfig {

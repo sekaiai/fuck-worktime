@@ -43,9 +43,11 @@ const {
   status,
   isSaving,
   isDisabling,
+  isTriggering,
   load: loadAutoFill,
   save: saveAutoFillConfig,
   disable: disableAutoFillConfig,
+  trigger: triggerAutoFillConfig,
 } = autoFill;
 
 const notifyVisible = computed(() => status.value === 'enabled');
@@ -135,6 +137,10 @@ async function disableAutoFill(userIdValue: string) {
   return disableAutoFillConfig(userIdValue);
 }
 
+async function triggerAutoFill(userIdValue: string) {
+  return triggerAutoFillConfig(userIdValue);
+}
+
 onMounted(() => {
   void initialize();
 });
@@ -209,10 +215,12 @@ onMounted(() => {
         :is-projects-loading="isProjectsLoading"
         :is-saving="isSaving"
         :is-disabling="isDisabling"
+        :is-triggering="isTriggering"
         :load-projects="loadProjects"
         :load-work-types="loadWorkTypes"
         :save-config="saveAutoFill"
         :disable-config="disableAutoFill"
+        :trigger-config="triggerAutoFill"
         @updated="initialize"
       />
 

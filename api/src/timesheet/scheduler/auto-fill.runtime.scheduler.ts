@@ -57,6 +57,46 @@ export class AutoFillRuntimeScheduler {
     }
   }
 
+  async triggerNow(userId: string): Promise<{ code: number; msg: string }> {
+    const config = await this.autoFillStore.get(userId);
+    if (!config) {
+      return { code: 404, msg: 'Auto-fill config not found.' };
+    }
+
+    const normalizedConfig: AutoFillConfig = {
+      ...config,
+      reportTime: config.reportTime || this.defaultReportTime,
+    };
+
+    if (!normalizedConfig.enabled) {
+      return { code: 400, msg: 'Auto-fill is disabled.' };
+    }
+
+    try {
+      await this.processUser(normalizedConfig);
+    } catch (error) {
+      this.logger.error(`Manual auto-fill failed for user ${userId}`, error);
+      return {
+        code: 500,
+        msg: error instanceof Error ? error.message : 'Manual auto-fill failed.',
+      };
+    }
+
+    const latest = await this.autoFillStore.get(userId);
+    switch (latest?.lastExecutionStatus) {
+      case 'success':
+        return { code: 200, msg: 'Auto-fill completed successfully.' };
+      case 'skipped':
+        return { code: 200, msg: 'No fillable workday is available right now.' };
+      case 'expired':
+        return { code: 200, msg: 'Auto-fill is expired and has stopped.' };
+      case 'failed':
+        return { code: 500, msg: 'Auto-fill failed. Please check the current config and login state.' };
+      default:
+        return { code: 200, msg: 'Auto-fill request finished.' };
+    }
+  }
+
   private async processUser(config: AutoFillConfig): Promise<void> {
     if (this.isExpired(config.deadline)) {
       await this.autoFillStore.set({
