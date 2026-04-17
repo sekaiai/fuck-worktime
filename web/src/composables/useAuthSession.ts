@@ -31,10 +31,9 @@ export function useAuthSession() {
       userId.value = response.data.userId;
       userInfo.value = {
         userId: response.data.userId,
-        nickname: response.data.nickname || '未命名用户',
+        nickname: response.data.nickname || '未知',
         phone: response.data.phone || '',
         department: response.data.department || '未分配部门',
-        statusText: '已登录',
       };
       return true;
     } catch {

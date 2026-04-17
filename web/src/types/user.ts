@@ -5,7 +5,6 @@ export interface UserInfo {
   department?: string;
   deptName?: string;
   avatar?: string;
-  statusText?: string;
 }
 
 export interface UserAuthState {

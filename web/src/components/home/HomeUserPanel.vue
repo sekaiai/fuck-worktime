@@ -18,8 +18,7 @@ defineEmits<{
       <div>
         <p class="user-panel__eyebrow">当前登录</p>
         <h1 class="user-panel__name">{{ userInfo.nickname }}</h1>
-        <p class="user-panel__meta">{{ userInfo.department }}</p>
-        <p class="user-panel__meta">状态：{{ userInfo.statusText }}</p>
+        <p class="user-panel__meta">{{ userInfo.phone }}</p>
       </div>
       <button class="user-panel__logout" type="button" @click="$emit('logout')">退出登录</button>
     </div>
