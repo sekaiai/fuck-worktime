@@ -24,7 +24,7 @@ services:
       - traefik.http.services.${WEB_SERVICE_NAME}.loadbalancer.server.port=${WEB_CONTAINER_PORT}
 
   fuck-api:
-    image: mcr.microsoft.com/playwright:v1.59.1-jammy
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/mcr.microsoft.com/playwright:v1.59.1-jammy
     container_name: fuck-api
     restart: always
     working_dir: /app

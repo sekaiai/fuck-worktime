@@ -16,7 +16,7 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:10002/api';
+const API_BASE = import.meta.env.PROD ? 'https://example.com/api' : 'http://localhost:10002/api';
 let authToken = '';
 
 export function getApiBase(): string {

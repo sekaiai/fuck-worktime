@@ -57,5 +57,12 @@ export default defineConfig({
     host: '0.0.0.0',
     allowedHosts: ['example.com'],
     port: 10001,
+    proxy: {
+      '/api': {
+        target: 'https://example.com',
+         changeOrigin: true,
+secure: false,
+      }
+    }
   },
 });
