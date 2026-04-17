@@ -68,7 +68,7 @@ export class DingtalkService {
       // ============================================
       this.logger.log('[步骤1] 启动浏览器');
       browser = await chromium.launch({
-        headless: true,
+        headless: false,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -168,11 +168,12 @@ export class DingtalkService {
         browser,
         context,
         page,
-        status: isLoggedIn ? 'success' : 'waiting',
+        status: 'waiting',
         userId: null,
         token: null,
         createdAt: Date.now(),
       };
+      this.sessions.set(taskId, session);
 
       // ============================================
       // 步骤 8: 如果已登录，点击按钮并等待 ding-auth 响应
@@ -195,15 +196,17 @@ export class DingtalkService {
         // 等待 ding-auth 响应（监听器已在步骤 3 注册，不会错过）
         const authResult = await dingAuthPromise;
         if (authResult) {
+          session.status = 'success';
           session.userId = authResult.userId;
           session.token = authResult.token;
           this.logger.log(`[步骤8] 获取到用户信息：userId=${authResult.userId}`);
         } else {
+          session.status = 'error';
           this.logger.warn('[步骤8] 未获取到 ding-auth 响应');
         }
-      }
 
-      this.sessions.set(taskId, session);
+        await this.cleanup(taskId);
+      }
 
       // 如果未登录，启动登录监听（监听器已在步骤 3 注册）
       if (!isLoggedIn) {
@@ -426,7 +429,7 @@ export class DingtalkService {
 
     try {
       browser = await chromium.launch({
-        headless: true,
+        headless: false,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -550,9 +553,9 @@ export class DingtalkService {
 
     try {
       // 暂时不关闭浏览器资源，保持窗口打开，方便调试
-      // await session.page.close().catch(() => {});
-      // await session.context.close().catch(() => {});
-      // await session.browser.close().catch(() => {});
+      await session.page.close().catch(() => {});
+      await session.context.close().catch(() => {});
+      await session.browser.close().catch(() => {});
     } catch (error) {
       this.logger.error(`清理浏览器资源失败：${error}`);
     }
