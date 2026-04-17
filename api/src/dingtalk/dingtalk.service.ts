@@ -176,7 +176,7 @@ export class DingtalkService {
       this.sessions.set(taskId, session);
 
       // ============================================
-      // 步骤 8: 如果已登录，点击按钮并等待 ding-auth 响应
+      // 步骤 8: 如果已登录，点击按钮并启动登录监听
       // ============================================
       if (isLoggedIn) {
         if (!page) {
@@ -192,20 +192,7 @@ export class DingtalkService {
             break;
           }
         }
-
-        // 等待 ding-auth 响应（监听器已在步骤 3 注册，不会错过）
-        const authResult = await dingAuthPromise;
-        if (authResult) {
-          session.status = 'success';
-          session.userId = authResult.userId;
-          session.token = authResult.token;
-          this.logger.log(`[步骤8] 获取到用户信息：userId=${authResult.userId}`);
-        } else {
-          session.status = 'error';
-          this.logger.warn('[步骤8] 未获取到 ding-auth 响应');
-        }
-
-        await this.cleanup(taskId);
+        this.monitorLogin(taskId, dingAuthPromise);
       }
 
       // 如果未登录，启动登录监听（监听器已在步骤 3 注册）
@@ -280,7 +267,6 @@ export class DingtalkService {
           // 获取钉钉域名下的 Cookie
           const dingtalkCookies = await context.cookies(['https://login.dingtalk.com']);
 
-          console.log('dingtalkCookies',dingtalkCookies)
           const cookieMap: Record<string, string> = {};
           for (const cookie of dingtalkCookies) {
             cookieMap[cookie.name] = cookie.value;

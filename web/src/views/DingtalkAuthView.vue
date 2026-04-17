@@ -12,6 +12,7 @@ const auth = useAuthSession();
 const qrcode = shallowRef('');
 const taskId = shallowRef('');
 const status = shallowRef<'loading' | 'waiting' | 'success' | 'timeout' | 'error'>('loading');
+const loginState = shallowRef<'qrcode' | 'auto_login'>('qrcode');
 const message = shallowRef('');
 let pollTimer: number | null = null;
 
@@ -65,11 +66,13 @@ async function loadQrcode(): Promise<void> {
   status.value = 'loading';
   message.value = '';
   qrcode.value = '';
+  loginState.value = 'qrcode';
 
   try {
     const result = await getQrcode();
     taskId.value = result.taskId;
     qrcode.value = result.qrcode;
+    loginState.value = result.loginState;
     status.value = 'waiting';
     await startPolling();
   } catch (error) {
@@ -99,10 +102,15 @@ onUnmounted(() => {
       <div class="login-qrcode">
         <div v-if="status === 'loading'" class="login-state">正在获取二维码...</div>
         <img v-else-if="qrcode" :src="`data:image/png;base64,${qrcode}`" alt="钉钉登录二维码" />
+        <div v-else-if="loginState === 'auto_login' && status === 'waiting'" class="login-state">
+          检测到已登录状态，正在自动完成授权...
+        </div>
         <div v-else class="login-state">{{ message || '二维码暂不可用。' }}</div>
       </div>
 
-      <div v-if="status === 'waiting'" class="login-note">请使用钉钉扫一扫完成授权，系统会在成功后自动跳转。</div>
+      <div v-if="status === 'waiting'" class="login-note">
+        {{ loginState === 'auto_login' ? '正在复用已保存的钉钉登录状态，成功后会自动跳转。' : '请使用钉钉扫一扫完成授权，系统会在成功后自动跳转。' }}
+      </div>
       <div v-else-if="status === 'success'" class="login-note">登录成功，正在恢复用户数据...</div>
       <div v-else-if="status === 'timeout' || status === 'error'" class="login-error">{{ message }}</div>
 
