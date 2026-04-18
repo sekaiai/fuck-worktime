@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, shallowRef } from 'vue';
+import { computed, onMounted, onUnmounted, shallowRef } from 'vue';
 
 import { usePushSubscriptionCenter } from '../composables/usePushSubscriptionCenter';
 import { usePwaDetect } from '../composables/usePwaDetect';
@@ -13,6 +13,31 @@ const deferredPrompt = shallowRef<Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 } | null>(null);
+
+const canInstallPwa = computed(() => deferredPrompt.value !== null);
+const permissionText = computed(() => {
+  if (notifications.permissionState.value === 'granted') {
+    return '已允许';
+  }
+  if (notifications.permissionState.value === 'denied') {
+    return '已拒绝';
+  }
+  return '未选择';
+});
+const overviewItems = computed(() => [
+  {
+    label: '浏览器能力',
+    value: notifications.isSupported.value ? '支持推送' : '不支持',
+  },
+  {
+    label: '通知权限',
+    value: permissionText.value,
+  },
+  {
+    label: '订阅状态',
+    value: notifications.hasSubscription.value ? '在线' : '未启用',
+  },
+]);
 
 function handleBeforeInstallPrompt(event: Event): void {
   event.preventDefault();
@@ -39,44 +64,79 @@ onUnmounted(() => {
 
 <template>
   <main class="notification-page">
-    <section class="notification-hero">
-      <p class="notification-eyebrow">通知管理</p>
-      <h1 class="notification-title">通知订阅管理</h1>
-      <p class="notification-copy">用户可以在这里订阅通知、取消订阅，并测试推送链路是否可用。</p>
+    <section class="notification-page__hero">
+      <div>
+        <p class="notification-page__eyebrow">Push Operations</p>
+        <h1 class="notification-page__title">通知链路控制台</h1>
+      </div>
+      <p class="notification-page__copy">
+        在这里校验浏览器推送能力、通知权限和订阅状态。自动填报执行后，成功、失败和过期提醒都会走这条链路。
+      </p>
     </section>
 
-    <section v-if="!isPwa" class="notification-card notification-card--warning">
-      <h2>先安装为 PWA 应用</h2>
-      <p>当前不是 PWA 环境，通知体验可能受限。若浏览器支持安装，可先安装后再继续订阅。</p>
-      <button class="primary-button" type="button" @click="installPwa">尝试安装 PWA</button>
+    <section class="notification-page__overview">
+      <article v-for="item in overviewItems" :key="item.label">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+      </article>
     </section>
 
-    <section class="notification-card">
-      <div class="notification-grid">
+    <section v-if="!isPwa" class="notification-panel notification-panel--warning">
+      <div>
+        <p class="notification-panel__eyebrow">PWA Required</p>
+        <h2 class="notification-panel__title">建议先安装为应用</h2>
+        <p class="notification-panel__copy">
+          当前不是 PWA 环境，通知体验可能被浏览器限制。若当前浏览器支持安装，建议先安装后再完成订阅。
+        </p>
+      </div>
+      <button class="notification-panel__primary" type="button" :disabled="!canInstallPwa" @click="installPwa">
+        尝试安装 PWA
+      </button>
+    </section>
+
+    <section class="notification-panel">
+      <header class="notification-panel__header">
         <div>
-          <span>浏览器支持</span>
-          <strong>{{ notifications.isSupported.value ? '支持' : '不支持' }}</strong>
+          <p class="notification-panel__eyebrow">Subscription Control</p>
+          <h2 class="notification-panel__title">浏览器订阅管理</h2>
         </div>
-        <div>
-          <span>通知权限</span>
-          <strong>{{ notifications.permissionState.value }}</strong>
-        </div>
-        <div>
-          <span>订阅状态</span>
-          <strong>{{ notifications.hasSubscription.value ? '已订阅' : '未订阅' }}</strong>
-        </div>
+        <span class="notification-panel__badge" :class="{ 'is-active': notifications.hasSubscription.value }">
+          {{ notifications.hasSubscription.value ? '已订阅' : '未订阅' }}
+        </span>
+      </header>
+
+      <p class="notification-panel__copy">{{ notifications.statusMessage.value }}</p>
+
+      <div
+        v-if="notifications.permissionState.value === 'denied'"
+        class="notification-panel__warning"
+      >
+        请在浏览器地址栏的站点权限中将“通知”改为允许，然后刷新页面重试。
       </div>
 
-      <p class="notification-status">{{ notifications.statusMessage.value }}</p>
-
-      <div class="notification-actions">
-        <button class="primary-button" type="button" :disabled="notifications.isLoading.value || !notifications.canSubscribe.value" @click="notifications.subscribe">
+      <div class="notification-panel__actions">
+        <button
+          class="notification-panel__primary"
+          type="button"
+          :disabled="notifications.isLoading.value || !notifications.canSubscribe.value"
+          @click="notifications.subscribe"
+        >
           {{ notifications.isLoading.value ? '处理中...' : '订阅通知' }}
         </button>
-        <button class="secondary-button" type="button" :disabled="notifications.isLoading.value || !notifications.hasSubscription.value" @click="notifications.unsubscribe">
+        <button
+          class="notification-panel__secondary"
+          type="button"
+          :disabled="notifications.isLoading.value || !notifications.hasSubscription.value"
+          @click="notifications.unsubscribe"
+        >
           取消订阅
         </button>
-        <button class="secondary-button" type="button" :disabled="notifications.isLoading.value || !notifications.hasSubscription.value" @click="notifications.sendTest">
+        <button
+          class="notification-panel__secondary"
+          type="button"
+          :disabled="notifications.isLoading.value || !notifications.hasSubscription.value"
+          @click="notifications.sendTest"
+        >
           发送测试通知
         </button>
       </div>
@@ -86,89 +146,185 @@ onUnmounted(() => {
 
 <style scoped>
 .notification-page {
-  min-height: 100vh;
-  width: min(100%, 760px);
+  width: min(100%, 1120px);
   margin: 0 auto;
-  padding: 1rem;
+  min-height: 100vh;
+  padding: clamp(1rem, 3vw, 2rem);
   display: grid;
   gap: 1rem;
 }
 
-.notification-hero,
-.notification-card {
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 1.2rem;
-  box-shadow: 0 16px 36px rgba(15, 61, 62, 0.08);
+.notification-page__hero,
+.notification-page__overview,
+.notification-panel {
+  border: 1px solid var(--line-soft);
+  border-radius: 30px;
+  background: linear-gradient(180deg, rgba(255, 250, 244, 0.84), rgba(240, 234, 226, 0.72));
+  padding: clamp(1.2rem, 2.4vw, 1.8rem);
+  box-shadow: 0 28px 60px rgba(20, 41, 44, 0.1);
+  backdrop-filter: blur(16px);
 }
 
-.notification-card--warning {
-  background: #fff7e5;
+.notification-page__hero {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  align-items: end;
 }
 
-.notification-eyebrow {
-  margin: 0;
-  color: #7c6c54;
+.notification-page__eyebrow,
+.notification-panel__eyebrow {
+  margin: 0 0 0.5rem;
+  color: var(--accent-amber);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.76rem;
 }
 
-.notification-title {
-  margin: 0.35rem 0 0;
+.notification-page__title {
+  font-size: clamp(2.2rem, 5vw, 4.2rem);
+  line-height: 0.94;
 }
 
-.notification-copy,
-.notification-status {
-  margin: 0.7rem 0 0;
-  color: #5f645b;
+.notification-page__copy,
+.notification-panel__copy {
+  color: var(--ink-soft);
+  line-height: 1.75;
 }
 
-.notification-grid {
+.notification-page__overview {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.8rem;
 }
 
-.notification-grid div {
-  border-radius: 18px;
-  background: #f6f3ec;
-  padding: 0.9rem;
+.notification-page__overview article {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.3rem;
+  border-radius: 20px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.46);
+  border: 1px solid rgba(19, 38, 40, 0.08);
 }
 
-.notification-grid span {
-  color: #5f645b;
+.notification-page__overview span {
+  color: var(--ink-muted);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
-.notification-actions {
+.notification-page__overview strong {
+  font-family: var(--font-display);
+  font-size: 1.12rem;
+}
+
+.notification-panel--warning {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(255, 244, 220, 0.92), rgba(247, 235, 209, 0.84));
+  border-color: rgba(196, 131, 45, 0.24);
+}
+
+.notification-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.notification-panel__title {
+  font-size: clamp(1.55rem, 4vw, 2.1rem);
+}
+
+.notification-panel__badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.3rem;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  background: rgba(19, 38, 40, 0.08);
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.notification-panel__badge.is-active {
+  background: rgba(35, 76, 75, 0.14);
+  color: var(--accent);
+}
+
+.notification-panel__warning {
   margin-top: 1rem;
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  background: rgba(170, 71, 55, 0.08);
+  color: var(--danger);
+}
+
+.notification-panel__actions {
+  margin-top: 1.1rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.8rem;
 }
 
-.primary-button,
-.secondary-button {
+.notification-panel__primary,
+.notification-panel__secondary {
   border: 0;
   border-radius: 999px;
-  padding: 0.9rem 1rem;
+  min-height: 3rem;
+  padding: 0.8rem 1.15rem;
   cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
 }
 
-.primary-button {
-  background: #0f4f53;
-  color: #fff;
+.notification-panel__primary:hover:not(:disabled),
+.notification-panel__secondary:hover:not(:disabled) {
+  transform: translateY(-1px);
 }
 
-.secondary-button {
-  background: #ece8df;
-  color: #24383f;
+.notification-panel__primary:disabled,
+.notification-panel__secondary:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
-@media (max-width: 680px) {
-  .notification-grid {
+.notification-panel__primary {
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: rgba(255, 248, 238, 0.94);
+}
+
+.notification-panel__secondary {
+  background: rgba(19, 38, 40, 0.08);
+  color: var(--ink-strong);
+}
+
+@media (max-width: 860px) {
+  .notification-page__hero,
+  .notification-panel--warning,
+  .notification-page__overview {
+    grid-template-columns: 1fr;
+  }
+
+  .notification-panel--warning {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .notification-panel__header {
+    flex-direction: column;
+  }
+
+  .notification-page__overview {
     grid-template-columns: 1fr;
   }
 }

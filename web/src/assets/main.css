@@ -1,19 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;500;600;700&display=swap');
+
 :root {
   color-scheme: light;
-  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-display: 'IBM Plex Sans Condensed', 'PingFang SC', sans-serif;
+  --font-body: 'Source Serif 4', 'Noto Serif SC', 'Songti SC', serif;
+  --bg-base: #ded4c3;
+  --bg-paper: rgba(250, 246, 239, 0.88);
+  --bg-panel: rgba(255, 251, 244, 0.74);
+  --bg-panel-strong: rgba(18, 37, 40, 0.88);
+  --ink-strong: #132628;
+  --ink-soft: #536261;
+  --ink-muted: #7d735f;
+  --line-soft: rgba(19, 38, 40, 0.12);
+  --line-strong: rgba(19, 38, 40, 0.24);
+  --accent: #234c4b;
+  --accent-strong: #0f2c2f;
+  --accent-amber: #c4832d;
+  --danger: #aa4737;
   line-height: 1.5;
   font-weight: 400;
-  color: #102122;
-  background:
-    radial-gradient(circle at top, rgba(255, 219, 165, 0.65), transparent 35%),
-    linear-gradient(145deg, #f4efe7 0%, #dfeceb 100%);
+  font-family: var(--font-body);
+  color: var(--ink-strong);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -23,8 +39,32 @@ body,
   min-height: 100%;
 }
 
+html {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(212, 166, 104, 0.28), transparent 30%),
+    linear-gradient(180deg, #efe8db 0%, #d6d0c4 100%);
+}
+
 body {
   margin: 0;
+  color: var(--ink-strong);
+  background:
+    radial-gradient(circle at top, rgba(255, 221, 172, 0.2), transparent 24%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(207, 201, 189, 0.18));
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.08;
+  background-image:
+    linear-gradient(120deg, transparent 0%, rgba(15, 44, 47, 0.42) 50%, transparent 100%),
+    radial-gradient(circle, rgba(15, 44, 47, 0.22) 0.6px, transparent 0.7px);
+  background-size: 100% 100%, 14px 14px;
+  mix-blend-mode: multiply;
 }
 
 button,
@@ -34,3 +74,37 @@ select {
   font: inherit;
 }
 
+button {
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+}
+
+input,
+textarea,
+select {
+  color: var(--ink-strong);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: rgba(35, 76, 75, 0.18);
+}

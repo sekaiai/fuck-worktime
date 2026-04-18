@@ -29,7 +29,11 @@ const todayKey = getTodayKey();
 
 const days = computed(() => props.board?.days ?? []);
 const selectedDay = computed(() => days.value.find((day) => day.date === selectedDayDate.value) ?? null);
-
+const summaryItems = computed(() => [
+  { label: '总工时', value: `${props.totalHours} h` },
+  { label: '工作日', value: `${props.workDays} 天` },
+  { label: '日均投入', value: `${props.averageHours} h` },
+]);
 
 watch(
   days,
@@ -75,7 +79,7 @@ function getDayHint(day: WeekDay): string {
     return '';
   }
   if (day.totalHours > 0) {
-    return `${day.totalHours}h`;
+    return `${day.totalHours} h`;
   }
   return day.date <= todayKey ? '待填报' : '待开放';
 }
@@ -98,12 +102,12 @@ function getDetailKey(detail: WorkDetail, index: number): string {
 </script>
 
 <template>
-  <section class="panel board-panel">
+  <section class="board-panel">
     <header class="board-panel__header">
-      <div>
-        <p class="board-panel__eyebrow">{{ weekTitle }}</p>
-        <h2 class="board-panel__title">{{ weekRange || board?.weekRange || '本周填报状态' }}</h2>
-        <p class="board-panel__helper">{{ isCurrentWeek ? '当前周' : '历史周' }}</p>
+      <div class="board-panel__heading">
+        <p class="board-panel__eyebrow">Weekly Board</p>
+        <h2 class="board-panel__title">{{ weekTitle }}</h2>
+        <p class="board-panel__subtitle">{{ weekRange || board?.weekRange || '等待周区间数据' }}</p>
       </div>
 
       <div class="board-panel__actions">
@@ -128,56 +132,64 @@ function getDetailKey(detail: WorkDetail, index: number): string {
     <div v-else-if="isLoading && !board" class="board-panel__state">正在获取本周状态...</div>
     <div v-else-if="days.length === 0" class="board-panel__state">本周暂无填报数据。</div>
     <template v-else>
-   
-
-      <div class="board-panel__toolbar">
-        <p class="board-panel__helper">点击已填报日期可查看详细内容。</p>
-        <button
-          v-if="fillableCount > 0"
-          class="board-panel__fill board-panel__fill--mobile-sticky"
-          type="button"
-          @click="emit('openManualFill')"
-        >
-          剩 {{ fillableCount }} 天未填写
-        </button>
-      </div>
-
-      <div class="board-panel__grid">
-        <article
-          v-for="day in days"
-          :key="day.date"
-          class="board-panel__day"
-          :class="[getStateClass(day), { 'is-active': selectedDayDate === day.date, 'is-clickable': canInspect(day) }]"
-          @click="selectDay(day)"
-        >
-          <p class="board-panel__day-name">{{ day.dayOfWeek }}</p>
-          <p class="board-panel__day-date">{{ formatDisplayDate(day.date) }}</p>
-          <p class="board-panel__day-status">{{ getStatusText(day) }}</p>
-          <p v-if="getDayHint(day)" class="board-panel__day-hours">{{ getDayHint(day) }}</p>
+      <div class="board-panel__summary">
+        <article v-for="item in summaryItems" :key="item.label">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
         </article>
       </div>
 
-      <div v-if="selectedDay" class="board-panel__detail">
-        <header class="board-panel__detail-header">
-          <div>
-            <p class="board-panel__detail-eyebrow">{{ getStatusText(selectedDay) }}</p>
-            <h3 class="board-panel__detail-title">{{ selectedDay.date }} {{ selectedDay.dayOfWeek }}</h3>
-          </div>
-        </header>
+      <div class="board-panel__toolbar">
+        <p class="board-panel__helper">点击已填报日期可查看具体内容和时间段。</p>
+        <button
+          v-if="fillableCount > 0"
+          class="board-panel__fill"
+          type="button"
+          @click="emit('openManualFill')"
+        >
+          立即处理剩余 {{ fillableCount }} 天
+        </button>
+      </div>
 
-        <div class="board-panel__detail-list">
+      <div class="board-panel__body">
+        <div class="board-panel__grid">
           <article
-            v-for="(detail, index) in selectedDay.details"
-            :key="getDetailKey(detail, index)"
-            class="board-panel__detail-item"
+            v-for="day in days"
+            :key="day.date"
+            class="board-panel__day"
+            :class="[getStateClass(day), { 'is-active': selectedDayDate === day.date, 'is-clickable': canInspect(day) }]"
+            @click="selectDay(day)"
           >
-            <div class="board-panel__detail-meta">
-              <span>{{ detail.hours }}h</span>
-              <span v-if="detail.period">{{ detail.period }}</span>
-              <span>{{ detail.statusDesc || detail.status }}</span>
-            </div>
-            <p class="board-panel__detail-content">{{ detail.content || '无填报内容' }}</p>
+            <p class="board-panel__day-name">{{ day.dayOfWeek }}</p>
+            <p class="board-panel__day-date">{{ formatDisplayDate(day.date) }}</p>
+            <p class="board-panel__day-status">{{ getStatusText(day) }}</p>
+            <p v-if="getDayHint(day)" class="board-panel__day-hours">{{ getDayHint(day) }}</p>
           </article>
+        </div>
+
+        <div v-if="selectedDay" class="board-panel__detail">
+          <header class="board-panel__detail-header">
+            <div>
+              <p class="board-panel__eyebrow">Day Detail</p>
+              <h3 class="board-panel__detail-title">{{ selectedDay.date }} {{ selectedDay.dayOfWeek }}</h3>
+            </div>
+            <span class="board-panel__detail-badge">{{ getStatusText(selectedDay) }}</span>
+          </header>
+
+          <div class="board-panel__detail-list">
+            <article
+              v-for="(detail, index) in selectedDay.details"
+              :key="getDetailKey(detail, index)"
+              class="board-panel__detail-item"
+            >
+              <div class="board-panel__detail-meta">
+                <span>{{ detail.hours }} h</span>
+                <span v-if="detail.period">{{ detail.period }}</span>
+                <span>{{ detail.statusDesc || detail.status }}</span>
+              </div>
+              <p class="board-panel__detail-content">{{ detail.content || '无填报内容' }}</p>
+            </article>
+          </div>
         </div>
       </div>
     </template>
@@ -185,11 +197,14 @@ function getDetailKey(detail: WorkDetail, index: number): string {
 </template>
 
 <style scoped>
-.panel {
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.88);
-  padding: 1.1rem;
-  box-shadow: 0 16px 36px rgba(15, 61, 62, 0.08);
+.board-panel {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 30px;
+  padding: 1.25rem;
+  background: linear-gradient(180deg, rgba(255, 250, 244, 0.84), rgba(240, 233, 224, 0.72));
+  box-shadow: 0 28px 60px rgba(20, 41, 44, 0.1);
 }
 
 .board-panel__header,
@@ -202,23 +217,22 @@ function getDetailKey(detail: WorkDetail, index: number): string {
 }
 
 .board-panel__eyebrow {
-  margin: 0;
-  color: #7c6c54;
+  margin: 0 0 0.45rem;
+  color: var(--accent-amber);
+  font-family: var(--font-display);
   font-size: 0.76rem;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-}
-
-.board-panel__helper,
-.board-panel__detail-eyebrow {
-  margin: 0;
-  color: #6d7067;
 }
 
 .board-panel__title,
 .board-panel__detail-title {
-  margin: 0.25rem 0;
-  color: #13272c;
+  font-size: clamp(1.7rem, 4vw, 2.4rem);
+}
+
+.board-panel__subtitle,
+.board-panel__helper {
+  color: var(--ink-soft);
 }
 
 .board-panel__actions {
@@ -232,89 +246,105 @@ function getDetailKey(detail: WorkDetail, index: number): string {
 .board-panel__fill {
   border: 0;
   border-radius: 999px;
-  padding: 0.7rem 1rem;
-  font-size: 0.92rem;
+  min-height: 2.9rem;
+  padding: 0.72rem 1rem;
+  cursor: pointer;
 }
 
 .board-panel__ghost {
-  background: #ece8df;
-  color: #24383f;
+  background: rgba(19, 38, 40, 0.08);
+  color: var(--ink-strong);
 }
 
 .board-panel__fill {
-  background: #0f4f53;
-  color: #fff;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: rgba(255, 248, 238, 0.94);
 }
 
 .board-panel__summary {
-  margin-top: 1rem;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
+  gap: 0.8rem;
 }
 
-.board-panel__summary div,
+.board-panel__summary article,
 .board-panel__detail-item {
-  border-radius: 18px;
-  background: #f7f2e8;
-  padding: 0.85rem;
+  border-radius: 20px;
+  padding: 0.95rem 1rem;
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid rgba(19, 38, 40, 0.08);
+}
+
+.board-panel__summary span {
+  display: block;
+  color: var(--ink-muted);
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .board-panel__summary strong {
   display: block;
+  margin-top: 0.35rem;
+  font-family: var(--font-display);
   font-size: 1.2rem;
-  color: #13272c;
 }
 
-.board-panel__summary span {
-  color: #6d7067;
-  font-size: 0.86rem;
-}
-
-.board-panel__toolbar {
-  margin-top: 1rem;
+.board-panel__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr);
+  gap: 1rem;
 }
 
 .board-panel__grid {
-  margin-top: 1rem;
   display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
 .board-panel__day {
-  border-radius: 18px;
-  padding: 0.9rem;
-  background: #f4f1ea;
+  display: grid;
+  gap: 0.15rem;
+  min-height: 7.8rem;
+  padding: 1rem;
+  border-radius: 22px;
   border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.4);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .board-panel__day.is-clickable {
   cursor: pointer;
 }
 
+.board-panel__day.is-clickable:hover {
+  transform: translateY(-2px);
+}
+
 .board-panel__day.is-active {
-  border-color: #0f4f53;
-  box-shadow: 0 0 0 2px rgba(15, 79, 83, 0.12);
+  border-color: rgba(35, 76, 75, 0.32);
+  box-shadow: 0 0 0 1px rgba(35, 76, 75, 0.12);
 }
 
 .board-panel__day.is-weekend {
-  background: #efebe3;
-  color: #777;
+  background: rgba(226, 221, 212, 0.72);
+  color: #6d6a66;
 }
 
 .board-panel__day.is-pending {
-  background: #fff2d9;
-  color: #885f00;
+  background: rgba(255, 233, 195, 0.78);
+  color: #815711;
 }
 
 .board-panel__day.is-future {
-  background: #f7f6f3;
-  color: #888;
+  background: rgba(246, 243, 239, 0.86);
+  color: #8b867d;
 }
 
 .board-panel__day.is-done {
-  background: #e8f5ee;
-  color: #16553e;
+  background: rgba(222, 240, 228, 0.82);
+  color: #255948;
 }
 
 .board-panel__day-name,
@@ -325,87 +355,108 @@ function getDetailKey(detail: WorkDetail, index: number): string {
 }
 
 .board-panel__day-name {
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 1rem;
 }
 
 .board-panel__day-date {
-  font-size: 0.8rem;
+  font-size: 0.86rem;
 }
 
-.board-panel__day-status,
+.board-panel__day-status {
+  margin-top: auto;
+  font-family: var(--font-display);
+  font-size: 0.84rem;
+  letter-spacing: 0.08em;
+}
+
 .board-panel__day-hours {
-  margin-top: 0.45rem;
   font-size: 0.88rem;
 }
 
-.board-panel__state {
-  margin-top: 1rem;
-  border-radius: 18px;
-  padding: 1rem;
-  background: #f4f1ea;
-}
-
-.board-panel__state--error {
-  background: #fff0ee;
-  color: #b42318;
-}
-
 .board-panel__detail {
-  margin-top: 1rem;
-  padding: 1rem;
-  border-radius: 20px;
-  background: #fbf8f2;
   display: grid;
-  gap: 0.75rem;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 24px;
+  background: rgba(246, 242, 234, 0.88);
+  border: 1px solid rgba(19, 38, 40, 0.08);
+}
+
+.board-panel__detail-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.2rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  background: rgba(19, 38, 40, 0.08);
+  font-family: var(--font-display);
 }
 
 .board-panel__detail-list {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.7rem;
 }
 
 .board-panel__detail-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  color: #6d7067;
-  font-size: 0.86rem;
+  gap: 0.6rem;
+  color: var(--ink-muted);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
 }
 
 .board-panel__detail-content {
-  margin: 0.65rem 0 0;
-  color: #13272c;
-  line-height: 1.6;
+  margin-top: 0.55rem;
+  color: var(--ink-strong);
+  line-height: 1.65;
 }
 
-@media (max-width: 680px) {
-  .board-panel__grid,
-  .board-panel__summary {
+.board-panel__state {
+  border-radius: 22px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.board-panel__state--error {
+  background: rgba(170, 71, 55, 0.08);
+  color: var(--danger);
+}
+
+@media (max-width: 1120px) {
+  .board-panel__body {
     grid-template-columns: 1fr;
   }
+}
 
-  .board-panel__fill--mobile-sticky {
-    position: sticky;
-    bottom: 0.7rem;
-    z-index: 10;
-    width: 100%;
+@media (max-width: 860px) {
+  .board-panel__grid,
+  .board-panel__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
 
+@media (max-width: 640px) {
   .board-panel__header,
   .board-panel__toolbar,
   .board-panel__detail-header {
     flex-direction: column;
   }
 
+  .board-panel__grid,
+  .board-panel__summary {
+    grid-template-columns: 1fr;
+  }
+
   .board-panel__actions {
     width: 100%;
     justify-content: flex-start;
   }
-}
 
-@media (min-width: 900px) {
-  .board-panel__grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .board-panel__fill {
+    width: 100%;
   }
 }
 </style>

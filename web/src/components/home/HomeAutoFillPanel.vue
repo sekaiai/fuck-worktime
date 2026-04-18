@@ -63,6 +63,18 @@ const statusText = computed(() => {
   }
   return '已禁用';
 });
+const overviewItems = computed(() => {
+  if (!props.config) {
+    return [];
+  }
+
+  return [
+    { label: '项目', value: props.config.projectTitle || '未配置' },
+    { label: '工时类型', value: props.config.itemName || '未配置' },
+    { label: '填报时间', value: props.config.reportTime || DEFAULT_REPORT_TIME },
+    { label: '截止日期', value: props.config.deadline || '长期有效' },
+  ];
+});
 
 watch(
   () => props.config,
@@ -254,104 +266,121 @@ async function handleDisable(): Promise<void> {
 </script>
 
 <template>
-  <section class="panel">
-    <header class="section-header">
+  <section class="auto-fill-panel" :class="{ 'is-open': isOpen }">
+    <header class="auto-fill-panel__header">
       <div>
-        <p class="section-eyebrow">自动填报</p>
-        <h2 class="section-title">今日自动填报工时</h2>
-        <p class="section-status">
-          状态：
-          <strong>{{ statusText }}</strong>
-        </p>
-        <p v-if="config?.reportTime" class="section-helper">填报时间：{{ config.reportTime }}</p>
-        <p v-if="config?.deadline" class="section-helper">截止日期：{{ config.deadline }}</p>
+        <p class="auto-fill-panel__eyebrow">Auto Fill</p>
+        <h2 class="auto-fill-panel__title">自动填报策略</h2>
       </div>
-      <button class="action-button" type="button" @click="toggleOpen">
-        {{ isOpen ? '收起' : '配置' }}
-      </button>
+      <span class="auto-fill-panel__badge" :class="`is-${status}`">{{ statusText }}</span>
     </header>
 
-    <div v-if="isOpen" class="form-grid">
-      <label>
-        <span>项目</span>
-        <select :value="projectId" @change="handleProjectChange(($event.target as HTMLSelectElement).value)">
-          <option value="">请选择项目</option>
-          <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.title }}</option>
-        </select>
-      </label>
+    <p class="auto-fill-panel__copy">
+      维护一个固定策略后，系统会在设定时间自动为可填报工作日生成内容并提交。
+    </p>
 
-      <label>
-        <span>一级工时类型</span>
-        <select
-          :value="workTypeGroupId"
-          :disabled="workTypeGroups.length === 0"
-          @change="handleWorkTypeGroupChange(($event.target as HTMLSelectElement).value)"
-        >
-          <option value="">请选择一级类型</option>
-          <option v-for="group in workTypeGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
-        </select>
-      </label>
-
-      <label>
-        <span>二级工时类型</span>
-        <select
-          :value="itemId"
-          :disabled="availableWorkTypes.length === 0"
-          @change="handleWorkTypeChange(($event.target as HTMLSelectElement).value)"
-        >
-          <option value="">请选择二级类型</option>
-          <option v-for="item in availableWorkTypes" :key="item.id" :value="item.id">{{ item.name }}</option>
-        </select>
-      </label>
-
-      <label>
-        <span>工时</span>
-        <input v-model.number="hours" type="number" min="1" max="24" />
-      </label>
-
-      <label>
-        <span>填报时间</span>
-        <input v-model="reportTime" type="time" />
-      </label>
-
-      <label>
-        <span>截止日期</span>
-        <input v-model="deadline" type="date" />
-      </label>
-
-      <label class="full">
-        <span>工作内容</span>
-        <textarea v-model="work" rows="3" placeholder="输入自动填报的工作内容"></textarea>
-      </label>
-
-      <p class="field-helper full">
-        若未设置截止日期，调度器会在每个有效工作日的填报时间自动填报当天工时。
-      </p>
+    <div v-if="overviewItems.length > 0" class="auto-fill-panel__overview">
+      <article v-for="item in overviewItems" :key="item.label">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+      </article>
     </div>
+    <div v-else class="auto-fill-panel__empty">当前还没有自动填报配置，展开后即可开始设置。</div>
 
-    <div v-if="isOpen" class="actions">
-      <button class="primary-button" type="button" :disabled="isSaving || isProjectsLoading" @click="handleSave">
-        {{ isSaving ? '保存中...' : '保存自动填报配置' }}
-      </button>
-      <button
-        v-if="status === 'enabled'"
-        class="secondary-button"
-        type="button"
-        :disabled="isTriggering"
-        @click="handleRunNow"
-      >
-        {{ isTriggering ? '执行中...' : '立即执行自动填报' }}
-      </button>
-      <button
-        v-if="status === 'enabled'"
-        class="secondary-button"
-        type="button"
-        :disabled="isDisabling"
-        @click="handleDisable"
-      >
-        {{ isDisabling ? '禁用中...' : '禁用自动填报' }}
-      </button>
-    </div>
+    <button class="auto-fill-panel__toggle" type="button" @click="toggleOpen">
+      {{ isOpen ? '收起配置面板' : '展开配置面板' }}
+    </button>
+
+    <Transition name="auto-fill-expand">
+      <div v-if="isOpen" class="auto-fill-panel__editor">
+        <div class="auto-fill-panel__form">
+          <label>
+            <span>项目</span>
+            <select :value="projectId" @change="handleProjectChange(($event.target as HTMLSelectElement).value)">
+              <option value="">请选择项目</option>
+              <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.title }}</option>
+            </select>
+          </label>
+
+          <label>
+            <span>一级工时类型</span>
+            <select
+              :value="workTypeGroupId"
+              :disabled="workTypeGroups.length === 0"
+              @change="handleWorkTypeGroupChange(($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">请选择一级类型</option>
+              <option v-for="group in workTypeGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
+            </select>
+          </label>
+
+          <label>
+            <span>二级工时类型</span>
+            <select
+              :value="itemId"
+              :disabled="availableWorkTypes.length === 0"
+              @change="handleWorkTypeChange(($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">请选择二级类型</option>
+              <option v-for="item in availableWorkTypes" :key="item.id" :value="item.id">{{ item.name }}</option>
+            </select>
+          </label>
+
+          <label>
+            <span>工时</span>
+            <input v-model.number="hours" type="number" min="1" max="24" />
+          </label>
+
+          <label>
+            <span>填报时间</span>
+            <input v-model="reportTime" type="time" />
+          </label>
+
+          <label>
+            <span>截止日期</span>
+            <input v-model="deadline" type="date" />
+          </label>
+
+          <label class="auto-fill-panel__full">
+            <span>工作内容模板</span>
+            <textarea v-model="work" rows="4" placeholder="输入自动填报使用的工作内容模板"></textarea>
+          </label>
+        </div>
+
+        <p class="auto-fill-panel__hint">
+          若未设置截止日期，调度器会在每个有效工作日的指定时间自动尝试填报当天工时。
+        </p>
+
+        <div class="auto-fill-panel__actions">
+          <button
+            class="auto-fill-panel__primary"
+            type="button"
+            :disabled="isSaving || isProjectsLoading"
+            @click="handleSave"
+          >
+            {{ isSaving ? '保存中...' : '保存自动填报配置' }}
+          </button>
+          <button
+            v-if="status === 'enabled'"
+            class="auto-fill-panel__secondary"
+            type="button"
+            :disabled="isTriggering"
+            @click="handleRunNow"
+          >
+            {{ isTriggering ? '执行中...' : '立即执行' }}
+          </button>
+          <button
+            v-if="status === 'enabled'"
+            class="auto-fill-panel__secondary"
+            type="button"
+            :disabled="isDisabling"
+            @click="handleDisable"
+          >
+            {{ isDisabling ? '禁用中...' : '禁用策略' }}
+          </button>
+        </div>
+      </div>
+    </Transition>
 
     <InlineToast :message="toastMessage" />
     <ResultDialog
@@ -364,105 +393,179 @@ async function handleDisable(): Promise<void> {
 </template>
 
 <style scoped>
-.panel {
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.88);
-  padding: 1.1rem;
-  box-shadow: 0 16px 36px rgba(15, 61, 62, 0.08);
+.auto-fill-panel {
   position: relative;
+  display: grid;
+  gap: 1rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 28px;
+  padding: 1.25rem;
+  background: linear-gradient(180deg, rgba(255, 250, 244, 0.84), rgba(240, 233, 224, 0.72));
+  box-shadow: 0 22px 44px rgba(20, 41, 44, 0.09);
 }
 
-.section-header {
+.auto-fill-panel__header {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.8rem;
   align-items: flex-start;
 }
 
-.section-eyebrow {
-  margin: 0;
-  color: #7c6c54;
+.auto-fill-panel__eyebrow {
+  margin: 0 0 0.45rem;
+  color: var(--accent-amber);
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+}
+
+.auto-fill-panel__title {
+  font-size: 1.55rem;
+}
+
+.auto-fill-panel__copy,
+.auto-fill-panel__hint {
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.auto-fill-panel__badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.3rem;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  background: rgba(19, 38, 40, 0.08);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.auto-fill-panel__badge.is-enabled {
+  background: rgba(35, 76, 75, 0.14);
+  color: var(--accent);
+}
+
+.auto-fill-panel__badge.is-expired {
+  background: rgba(170, 71, 55, 0.1);
+  color: var(--danger);
+}
+
+.auto-fill-panel__overview {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.auto-fill-panel__overview article {
+  display: grid;
+  gap: 0.25rem;
+  border-radius: 18px;
+  padding: 0.9rem;
+  background: rgba(255, 255, 255, 0.46);
+  border: 1px solid rgba(19, 38, 40, 0.08);
+}
+
+.auto-fill-panel__overview span {
+  color: var(--ink-muted);
+  font-family: var(--font-display);
   font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
-.section-title {
-  margin: 0.25rem 0;
+.auto-fill-panel__overview strong {
+  font-family: var(--font-display);
+  font-size: 1rem;
 }
 
-.section-status,
-.section-helper {
-  margin: 0;
-  color: #5f645b;
+.auto-fill-panel__empty {
+  border-radius: 18px;
+  padding: 0.95rem;
+  background: rgba(255, 255, 255, 0.46);
+  color: var(--ink-soft);
 }
 
-.action-button,
-.primary-button,
-.secondary-button {
+.auto-fill-panel__toggle,
+.auto-fill-panel__primary,
+.auto-fill-panel__secondary {
   border: 0;
   border-radius: 999px;
+  min-height: 3rem;
   padding: 0.8rem 1rem;
   cursor: pointer;
 }
 
-.action-button {
-  background: #ece8df;
+.auto-fill-panel__toggle,
+.auto-fill-panel__secondary {
+  background: rgba(19, 38, 40, 0.08);
+  color: var(--ink-strong);
 }
 
-.primary-button {
-  background: #0f4f53;
-  color: #fff;
+.auto-fill-panel__primary {
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: rgba(255, 248, 238, 0.94);
 }
 
-.secondary-button {
-  background: #ece8df;
-  color: #24383f;
+.auto-fill-panel__editor {
+  display: grid;
+  gap: 1rem;
 }
 
-.form-grid {
-  margin-top: 1rem;
+.auto-fill-panel__form {
   display: grid;
   gap: 0.8rem;
 }
 
-.full {
+.auto-fill-panel__form label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--ink-strong);
+}
+
+.auto-fill-panel__full {
   grid-column: 1 / -1;
 }
 
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  color: #31454c;
+.auto-fill-panel__form span {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
 }
 
-.field-helper {
-  margin: 0;
-  color: #5f645b;
-  font-size: 0.88rem;
-}
-
-select,
-input,
-textarea {
+.auto-fill-panel__form select,
+.auto-fill-panel__form input,
+.auto-fill-panel__form textarea {
   width: 100%;
-  border: 1px solid #d6d3cc;
-  border-radius: 16px;
-  padding: 0.85rem 0.95rem;
-  background: #fffdf8;
+  border: 1px solid rgba(19, 38, 40, 0.14);
+  border-radius: 18px;
+  padding: 0.86rem 0.95rem;
+  background: rgba(255, 255, 255, 0.72);
 }
 
-.actions {
-  margin-top: 1rem;
+.auto-fill-panel__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
 }
 
-@media (max-width: 680px) {
-  .form-grid {
-    grid-template-columns: 1fr;
+.auto-fill-expand-enter-active,
+.auto-fill-expand-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.auto-fill-expand-enter-from,
+.auto-fill-expand-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+@media (max-width: 640px) {
+  .auto-fill-panel__header {
+    flex-direction: column;
   }
 }
 </style>

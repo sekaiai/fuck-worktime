@@ -12,14 +12,26 @@ defineEmits<{
 </script>
 
 <template>
-  <section class="panel user-panel">
-    <div v-if="isLoading" class="user-panel__loading">正在获取用户信息...</div>
+  <section class="user-panel">
+    <div v-if="isLoading" class="user-panel__loading">正在恢复用户身份...</div>
     <div v-else-if="userInfo" class="user-panel__content">
-      <div>
-        <p class="user-panel__eyebrow">当前登录</p>
-        <h1 class="user-panel__name">{{ userInfo.nickname }}</h1>
-        <p class="user-panel__meta">{{ userInfo.phone }}</p>
+      <div class="user-panel__meta">
+        <p class="user-panel__eyebrow">Authenticated User</p>
+        <h2 class="user-panel__name">{{ userInfo.nickname }}</h2>
+        <p class="user-panel__department">{{ userInfo.department }}</p>
       </div>
+
+      <div class="user-panel__facts">
+        <article>
+          <span>手机号</span>
+          <strong>{{ userInfo.phone || '未提供' }}</strong>
+        </article>
+        <article>
+          <span>用户 ID</span>
+          <strong>{{ userInfo.userId }}</strong>
+        </article>
+      </div>
+
       <button class="user-panel__logout" type="button" @click="$emit('logout')">退出登录</button>
     </div>
     <div v-else class="user-panel__loading">当前没有可用登录态。</div>
@@ -27,58 +39,99 @@ defineEmits<{
 </template>
 
 <style scoped>
-.panel {
-  border-radius: 24px;
-  background: linear-gradient(145deg, #0f4f53, #163a47);
-  color: #fff9ef;
-  padding: 1.2rem;
-  box-shadow: 0 16px 40px rgba(15, 61, 62, 0.18);
+.user-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 30px;
+  padding: 1.25rem;
+  background:
+    linear-gradient(135deg, rgba(16, 44, 47, 0.96), rgba(33, 50, 53, 0.86)),
+    radial-gradient(circle at right top, rgba(208, 147, 62, 0.22), transparent 34%);
+  color: rgba(255, 248, 238, 0.92);
+  box-shadow: 0 24px 44px rgba(20, 41, 44, 0.16);
+}
+
+.user-panel::before {
+  content: '';
+  position: absolute;
+  inset: 1rem;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
 }
 
 .user-panel__content {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
   gap: 1rem;
-  align-items: flex-start;
 }
 
 .user-panel__eyebrow {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.45rem;
+  color: rgba(225, 175, 103, 0.88);
+  font-family: var(--font-display);
   font-size: 0.78rem;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  opacity: 0.72;
 }
 
 .user-panel__name {
-  margin: 0;
-  font-size: 1.5rem;
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
 }
 
-.user-panel__meta {
-  margin: 0.25rem 0 0;
-  opacity: 0.84;
+.user-panel__department {
+  margin-top: 0.35rem;
+  color: rgba(255, 245, 232, 0.68);
+}
+
+.user-panel__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.user-panel__facts article {
+  display: grid;
+  gap: 0.2rem;
+  border-radius: 18px;
+  padding: 0.9rem;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.user-panel__facts span {
+  color: rgba(255, 245, 232, 0.54);
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.user-panel__facts strong {
+  font-family: var(--font-display);
+  font-size: 1rem;
 }
 
 .user-panel__logout {
+  justify-self: start;
   border: 0;
   border-radius: 999px;
-  padding: 0.75rem 1rem;
-  background: rgba(255, 255, 255, 0.14);
+  min-height: 2.85rem;
+  padding: 0.72rem 1rem;
+  background: rgba(255, 255, 255, 0.12);
   color: inherit;
   cursor: pointer;
 }
 
 .user-panel__loading {
-  min-height: 76px;
+  min-height: 140px;
   display: grid;
   place-items: center;
-  opacity: 0.84;
+  color: rgba(255, 245, 232, 0.68);
 }
 
-@media (max-width: 680px) {
-  .user-panel__content {
-    flex-direction: column;
+@media (max-width: 640px) {
+  .user-panel__facts {
+    grid-template-columns: 1fr;
   }
 }
 </style>

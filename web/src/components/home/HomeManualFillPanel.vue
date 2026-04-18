@@ -55,6 +55,17 @@ const selectedWorkType = computed(() => findWorkTypeById(workTypeGroups.value, w
 const availableWorkTypes = computed(
   () => workTypeGroups.value.find((group) => group.id === workTypeGroupId.value)?.children ?? [],
 );
+const stepSummary = computed(() => {
+  if (currentStep.value === 1) {
+    return '先选择项目、工时类型和要补填的天数。';
+  }
+  if (currentStep.value === 2) {
+    return '输入工作内容主题，系统会按天生成可提交描述。';
+  }
+  const totalEntryHours = entries.value.reduce((sum, entry) => sum + entry.hours, 0);
+  return `本次共 ${entries.value.length} 条记录，预计提交 ${totalEntryHours} 小时。`;
+});
+const previewDates = computed(() => sortedFillableDays.value.slice(0, 5));
 
 watch(
   () => props.visible,
@@ -282,27 +293,39 @@ async function handleSubmit(): Promise<void> {
 </script>
 
 <template>
-  <section v-if="visible" class="panel">
-    <header class="section-header">
+  <section v-if="visible" class="manual-panel">
+    <header class="manual-panel__header">
       <div>
-        <p class="section-eyebrow">手动补填</p>
-        <h2 class="section-title">批量补填未提交工时</h2>
+        <p class="manual-panel__eyebrow">Manual Fill</p>
+        <h2 class="manual-panel__title">批量补填未提交工时</h2>
       </div>
-      <button class="action-button" type="button" @click="closePanel">收起</button>
+      <button class="manual-panel__close" type="button" @click="closePanel">收起</button>
     </header>
 
-    <div v-if="maxFillDays === 0" class="state-block">当前这周没有可补填的工作日。</div>
+    <div v-if="maxFillDays === 0" class="manual-panel__state">当前这周没有可补填的工作日。</div>
     <template v-else>
-      <div class="stepper">
+      <div class="manual-panel__intro">
+        <p class="manual-panel__copy">{{ stepSummary }}</p>
+        <div class="manual-panel__dates">
+          <span>待处理日期</span>
+          <strong v-for="day in previewDates" :key="day.date">{{ formatDisplayDate(day.date) }}</strong>
+        </div>
+      </div>
+
+      <div class="manual-panel__stepper">
         <button type="button" :class="{ active: currentStep === 1 }" @click="goToStep(1)">1. 选择类型</button>
         <button type="button" :class="{ active: currentStep === 2 }" @click="goToStep(2)">2. 生成内容</button>
         <button type="button" :class="{ active: currentStep === 3 }" @click="goToStep(3)">3. 校对提交</button>
       </div>
 
-      <div v-show="currentStep === 1" class="form-grid">
+      <div v-show="currentStep === 1" class="manual-panel__form">
         <label>
           <span>项目</span>
-          <select ref="projectSelectRef" :value="projectId" @change="handleProjectChange(($event.target as HTMLSelectElement).value)">
+          <select
+            ref="projectSelectRef"
+            :value="projectId"
+            @change="handleProjectChange(($event.target as HTMLSelectElement).value)"
+          >
             <option value="">请选择项目</option>
             <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.title }}</option>
           </select>
@@ -338,38 +361,43 @@ async function handleSubmit(): Promise<void> {
         </label>
 
         <label>
-          <span>未填天数</span>
+          <span>生成天数</span>
           <input v-model.number="daysToGenerate" type="number" min="1" :max="maxFillDays" />
         </label>
       </div>
 
-      <label v-show="currentStep === 2" class="block-field">
-        <span>工作内容</span>
+      <label v-show="currentStep === 2" class="manual-panel__block-field">
+        <span>工作内容主题</span>
         <textarea
           v-model="work"
-          rows="3"
-          placeholder="输入工作内容，系统会生成适合工时填报的描述。"
+          rows="4"
+          placeholder="输入工作内容主题，系统会为每一天生成适合提交的描述。"
         />
       </label>
 
-      <p v-show="currentStep === 2 && daysToGenerate > maxFillDays" class="warning-text">
+      <p v-show="currentStep === 2 && daysToGenerate > maxFillDays" class="manual-panel__warning">
         生成天数不能超过当前可补填的未填天数。
       </p>
 
-      <div v-show="currentStep === 2" class="inline-actions">
-        <button class="primary-button" type="button" :disabled="isGenerating || isProjectsLoading" @click="handleGenerate">
-          {{ isGenerating ? '生成中...' : '生成工时' }}
+      <div v-show="currentStep === 2" class="manual-panel__inline-actions">
+        <button
+          class="manual-panel__primary"
+          type="button"
+          :disabled="isGenerating || isProjectsLoading"
+          @click="handleGenerate"
+        >
+          {{ isGenerating ? '生成中...' : '生成工时描述' }}
         </button>
-        <span class="helper-text" v-if="isProjectsLoading">正在获取项目列表...</span>
+        <span v-if="isProjectsLoading" class="manual-panel__helper">正在获取项目列表...</span>
       </div>
 
-      <div v-show="currentStep === 3 && entries.length > 0" class="entry-list">
-        <label class="compact-switch">
+      <div v-show="currentStep === 3 && entries.length > 0" class="manual-panel__entry-list">
+        <label class="manual-panel__compact-switch">
           <input v-model="compactReviewMode" type="checkbox" />
-          <span>简化校对模式（仅检查日期与摘要）</span>
+          <span>简化校对模式，仅检查日期与摘要</span>
         </label>
 
-        <article v-for="(entry, index) in entries" :key="`${entry.reportDate}-${index}`" class="entry-card">
+        <article v-for="(entry, index) in entries" :key="`${entry.reportDate}-${index}`" class="manual-panel__entry-card">
           <label>
             <span>日期</span>
             <select :value="entry.reportDate" @change="updateEntryDate(index, ($event.target as HTMLSelectElement).value)">
@@ -386,29 +414,54 @@ async function handleSubmit(): Promise<void> {
             <span>工时类型</span>
             <input :value="entry.itemName || selectedWorkType?.name || ''" disabled />
           </label>
+
           <template v-if="compactReviewMode">
-            <p class="entry-card__summary">{{ entry.hours }}h · {{ entry.content }}</p>
+            <p class="manual-panel__entry-summary">{{ entry.hours }}h · {{ entry.content }}</p>
           </template>
           <template v-else>
             <label>
               <span>工时</span>
-              <input :value="entry.hours" type="number" min="1" max="24" @input="updateEntryHours(index, Number(($event.target as HTMLInputElement).value))" />
+              <input
+                :value="entry.hours"
+                type="number"
+                min="1"
+                max="24"
+                @input="updateEntryHours(index, Number(($event.target as HTMLInputElement).value))"
+              />
             </label>
-            <label class="entry-card__content">
+            <label class="manual-panel__entry-content">
               <span>内容</span>
-              <textarea :value="entry.content" rows="3" @input="updateEntryContent(index, ($event.target as HTMLTextAreaElement).value)" />
+              <textarea
+                :value="entry.content"
+                rows="3"
+                @input="updateEntryContent(index, ($event.target as HTMLTextAreaElement).value)"
+              />
             </label>
           </template>
         </article>
 
-        <button class="primary-button" type="button" :disabled="isSubmitting" @click="handleSubmit">
+        <button class="manual-panel__primary" type="button" :disabled="isSubmitting" @click="handleSubmit">
           {{ isSubmitting ? '提交中...' : '提交补填工时' }}
         </button>
       </div>
 
-      <div class="inline-actions">
-        <button class="secondary-button" type="button" :disabled="currentStep === 1" @click="goToStep((currentStep - 1) as 1 | 2 | 3)">上一步</button>
-        <button class="primary-button" type="button" :disabled="currentStep === 3" @click="goToStep((currentStep + 1) as 1 | 2 | 3)">下一步</button>
+      <div class="manual-panel__inline-actions">
+        <button
+          class="manual-panel__secondary"
+          type="button"
+          :disabled="currentStep === 1"
+          @click="goToStep((currentStep - 1) as 1 | 2 | 3)"
+        >
+          上一步
+        </button>
+        <button
+          class="manual-panel__primary"
+          type="button"
+          :disabled="currentStep === 3"
+          @click="goToStep((currentStep + 1) as 1 | 2 | 3)"
+        >
+          下一步
+        </button>
       </div>
     </template>
 
@@ -423,177 +476,216 @@ async function handleSubmit(): Promise<void> {
 </template>
 
 <style scoped>
-.panel {
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.88);
-  padding: 1.1rem;
-  box-shadow: 0 16px 36px rgba(15, 61, 62, 0.08);
+.manual-panel {
   position: relative;
+  display: grid;
+  gap: 1rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 30px;
+  padding: 1.25rem;
+  background: linear-gradient(180deg, rgba(255, 250, 244, 0.84), rgba(240, 233, 224, 0.72));
+  box-shadow: 0 28px 60px rgba(20, 41, 44, 0.1);
 }
 
-.section-header {
+.manual-panel__header {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.8rem;
   align-items: flex-start;
 }
 
-.section-eyebrow {
-  margin: 0;
-  color: #7c6c54;
+.manual-panel__eyebrow {
+  margin: 0 0 0.45rem;
+  color: var(--accent-amber);
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.76rem;
 }
 
-.section-title {
-  margin: 0.25rem 0 0;
-  color: #13272c;
+.manual-panel__title {
+  font-size: clamp(1.7rem, 4vw, 2.3rem);
 }
 
-.action-button,
-.primary-button {
+.manual-panel__close,
+.manual-panel__primary,
+.manual-panel__secondary {
   border: 0;
   border-radius: 999px;
+  min-height: 3rem;
   padding: 0.8rem 1rem;
   cursor: pointer;
 }
 
-.action-button {
-  background: #ece8df;
-  color: #24383f;
+.manual-panel__close,
+.manual-panel__secondary {
+  background: rgba(19, 38, 40, 0.08);
+  color: var(--ink-strong);
 }
 
-.primary-button {
-  background: #0f4f53;
-  color: #fff;
+.manual-panel__primary {
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: rgba(255, 248, 238, 0.94);
 }
 
-.secondary-button {
-  background: #ece8df;
-  color: #24383f;
-}
-
-.stepper {
-  margin-top: 1rem;
+.manual-panel__intro {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
+  gap: 0.8rem;
+  border-radius: 22px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.44);
+  border: 1px solid rgba(19, 38, 40, 0.08);
 }
 
-.stepper button {
-  border: 0;
+.manual-panel__copy,
+.manual-panel__helper {
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.manual-panel__dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.manual-panel__dates span {
+  color: var(--ink-muted);
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.manual-panel__dates strong {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0 0.8rem;
   border-radius: 999px;
-  padding: 0.65rem 0.5rem;
-  background: #ece8df;
-  color: #4b595f;
+  background: rgba(19, 38, 40, 0.08);
+  font-family: var(--font-display);
   font-size: 0.82rem;
 }
 
-.stepper button.active {
-  background: #0f4f53;
-  color: #fff;
+.manual-panel__stepper {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
 }
 
-.form-grid {
-  margin-top: 1rem;
+.manual-panel__stepper button {
+  border: 0;
+  border-radius: 18px;
+  min-height: 3.3rem;
+  padding: 0.8rem;
+  background: rgba(19, 38, 40, 0.08);
+  color: var(--ink-strong);
+}
+
+.manual-panel__stepper button.active {
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: rgba(255, 248, 238, 0.94);
+}
+
+.manual-panel__form {
   display: grid;
   gap: 0.8rem;
 }
 
-label {
-  display: flex;
-  flex-direction: column;
+.manual-panel label {
+  display: grid;
   gap: 0.35rem;
-  color: #31454c;
 }
 
-select,
-input,
-textarea {
+.manual-panel span {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.manual-panel select,
+.manual-panel input,
+.manual-panel textarea {
   width: 100%;
-  border: 1px solid #d6d3cc;
-  border-radius: 16px;
-  padding: 0.85rem 0.95rem;
-  background: #fffdf8;
+  border: 1px solid rgba(19, 38, 40, 0.14);
+  border-radius: 18px;
+  padding: 0.86rem 0.95rem;
+  background: rgba(255, 255, 255, 0.72);
 }
 
-input:disabled {
-  color: #5f645b;
-  background: #f3f1eb;
+.manual-panel input:disabled {
+  color: var(--ink-soft);
+  background: rgba(229, 225, 217, 0.9);
 }
 
-.block-field,
-.entry-list {
-  margin-top: 0.9rem;
+.manual-panel__block-field,
+.manual-panel__entry-list {
+  display: grid;
+  gap: 0.8rem;
 }
 
-.inline-actions {
-  margin-top: 0.9rem;
+.manual-panel__inline-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
 }
 
-.helper-text {
-  color: #7c6c54;
-  font-size: 0.86rem;
+.manual-panel__warning {
+  color: var(--danger);
 }
 
-.warning-text {
-  margin: 0.9rem 0 0;
-  color: #b42318;
-}
-
-.entry-list {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.compact-switch {
+.manual-panel__compact-switch {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 0.45rem;
-  color: #445b62;
-  font-size: 0.88rem;
+  gap: 0.55rem;
 }
 
-.entry-card__summary {
-  margin: 0;
-  padding: 0.7rem 0.8rem;
-  border-radius: 14px;
-  background: #fff;
-  color: #24383f;
+.manual-panel__entry-list {
+  gap: 0.85rem;
 }
 
-.entry-card {
-  padding: 0.9rem;
-  border-radius: 18px;
-  background: #f6f3ec;
+.manual-panel__entry-card {
   display: grid;
-  gap: 0.7rem;
+  gap: 0.8rem;
+  padding: 1rem;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid rgba(19, 38, 40, 0.08);
 }
 
-.entry-card__content {
+.manual-panel__entry-summary {
+  margin: 0;
+  padding: 0.8rem 0.9rem;
+  border-radius: 16px;
+  background: rgba(19, 38, 40, 0.06);
+  line-height: 1.65;
+}
+
+.manual-panel__entry-content {
   grid-column: 1 / -1;
 }
 
-.state-block {
-  margin-top: 1rem;
-  border-radius: 18px;
+.manual-panel__state {
+  border-radius: 22px;
   padding: 1rem;
-  background: #f4f1ea;
-  color: #6c665b;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--ink-soft);
 }
 
-@media (max-width: 680px) {
-  .stepper {
-    grid-template-columns: 1fr;
+@media (max-width: 720px) {
+  .manual-panel__header,
+  .manual-panel__inline-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .form-grid {
+  .manual-panel__stepper {
     grid-template-columns: 1fr;
   }
 }

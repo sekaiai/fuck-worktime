@@ -1,14 +1,16 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { usePwaDetect } from '../../composables/usePwaDetect';
 
-defineProps<{
+const props = defineProps<{
   visible: boolean;
 }>();
 
 const { isPwa } = usePwaDetect();
 const router = useRouter();
+const environmentText = computed(() => (isPwa.value ? '已安装为应用' : '当前仍在浏览器环境'));
 
 function openNotifications(): void {
   void router.push('/notifications');
@@ -16,67 +18,84 @@ function openNotifications(): void {
 </script>
 
 <template>
-  <section v-if="visible" class="panel">
-    <div class="card-row">
+  <section v-if="visible" class="notification-card">
+    <div class="notification-card__header">
       <div>
-        <p class="card-eyebrow">消息订阅</p>
-        <h2 class="card-title">消息订阅通知</h2>
-        <p class="card-copy">自动填报开启后，可在通知页订阅成功/失败提醒。</p>
+        <p class="notification-card__eyebrow">Notification Relay</p>
+        <h2 class="notification-card__title">自动填报提醒已接通</h2>
       </div>
-      <button class="card-button" type="button" @click="openNotifications">前往通知页</button>
+      <span class="notification-card__badge">{{ environmentText }}</span>
     </div>
-    <p v-if="!isPwa" class="card-tip">当前不是 PWA 环境，建议先安装为应用后再订阅通知。</p>
+
+    <p class="notification-card__copy">
+      自动填报启用后，可以在通知页订阅成功、失败和过期提醒。建议安装为 PWA 以获得更稳定的前台与后台通知体验。
+    </p>
+
+    <button class="notification-card__button" type="button" @click="openNotifications">前往通知页</button>
   </section>
 </template>
 
 <style scoped>
-.panel {
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.88);
-  padding: 1.1rem;
-  box-shadow: 0 16px 36px rgba(15, 61, 62, 0.08);
+.notification-card {
+  display: grid;
+  gap: 1rem;
+  border: 1px solid var(--line-soft);
+  border-radius: 28px;
+  padding: 1.25rem;
+  background: linear-gradient(180deg, rgba(255, 250, 244, 0.82), rgba(239, 233, 225, 0.72));
+  box-shadow: 0 22px 44px rgba(20, 41, 44, 0.09);
 }
 
-.card-row {
+.notification-card__header {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.8rem;
+  align-items: flex-start;
 }
 
-.card-eyebrow {
-  margin: 0;
-  color: #7c6c54;
+.notification-card__eyebrow {
+  margin: 0 0 0.45rem;
+  color: var(--accent-amber);
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.76rem;
 }
 
-.card-title {
-  margin: 0.25rem 0;
+.notification-card__title {
+  font-size: 1.55rem;
 }
 
-.card-copy,
-.card-tip {
-  margin: 0;
-  color: #5f645b;
+.notification-card__badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.3rem;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  background: rgba(19, 38, 40, 0.08);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
 }
 
-.card-tip {
-  margin-top: 0.75rem;
-  color: #946200;
+.notification-card__copy {
+  color: var(--ink-soft);
+  line-height: 1.7;
 }
 
-.card-button {
+.notification-card__button {
+  justify-self: start;
   border: 0;
   border-radius: 999px;
-  padding: 0.8rem 1rem;
-  background: #0f4f53;
-  color: #fff;
+  min-height: 3rem;
+  padding: 0.8rem 1.05rem;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: rgba(255, 248, 238, 0.94);
   cursor: pointer;
 }
 
-@media (max-width: 680px) {
-  .card-row {
+@media (max-width: 640px) {
+  .notification-card__header {
     flex-direction: column;
   }
 }
