@@ -28,7 +28,6 @@ export function useWeekBoardData() {
   const weekTitle = computed(() => board.value?.currentWeek || '本周填报状态');
   const weekRange = computed(() => formatWeekRange(days.value.map((day) => day.date)));
   const weekStartOfToday = computed(() => getWeekStart());
-  const canGoNextWeek = computed(() => currentDate.value < weekStartOfToday.value);
   const isCurrentWeek = computed(() => currentDate.value === weekStartOfToday.value);
 
   async function loadWeek(date = currentDate.value): Promise<boolean> {
@@ -41,6 +40,7 @@ export function useWeekBoardData() {
       board.value = await getWeekBoard(currentDate.value);
       return true;
     } catch (error) {
+      console.log(error)
       if (error instanceof ApiError) {
         errorMessage.value = error.message;
         errorCode.value = error.code ?? '';
@@ -58,9 +58,7 @@ export function useWeekBoardData() {
   }
 
   async function goToNextWeek(): Promise<boolean> {
-    if (!canGoNextWeek.value) {
-      return false;
-    }
+
 
     return loadWeek(shiftDateKeyByDays(currentDate.value, 7));
   }
@@ -86,7 +84,6 @@ export function useWeekBoardData() {
     errorMessage,
     errorCode,
     currentDate,
-    canGoNextWeek,
     isCurrentWeek,
     loadWeek,
     goToPreviousWeek,

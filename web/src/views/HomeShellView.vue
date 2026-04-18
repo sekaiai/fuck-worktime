@@ -30,7 +30,6 @@ const {
   errorMessage,
   errorCode,
   isLoading: isWeekLoading,
-  canGoNextWeek,
   isCurrentWeek,
   loadWeek,
   goToPreviousWeek,
@@ -151,31 +150,8 @@ onMounted(() => {
     <div class="home-shell__container">
       <HomeUserPanel :user-info="userInfo" :is-loading="isLoading" @logout="logout" />
 
-      <section class="task-hub">
-        <p class="task-hub__eyebrow">今日任务</p>
-        <h2 class="task-hub__title">{{ mobileTaskSummary }}</h2>
-        <div class="task-hub__actions">
-          <button
-            class="task-hub__primary"
-            type="button"
-            :disabled="fillableDays.length === 0"
-            @click="openManualFill"
-          >
-            {{ fillableDays.length > 0 ? '立即补填工时' : '暂无可补填工时' }}
-          </button>
-          <button class="task-hub__ghost" type="button" @click="loadProjects">准备自动填报配置</button>
-          <button
-            v-if="fillableDays.length > 1"
-            class="task-hub__ghost"
-            type="button"
-            @click="quickFillOneDay"
-          >
-            快速补填 1 天
-          </button>
-        </div>
-      </section>
-
       <HomeWeekBoardPanel
+:autoFill="autoFill"
         :board="board"
         :is-loading="isWeekLoading"
         :error-message="errorMessage"
@@ -185,7 +161,6 @@ onMounted(() => {
         :work-days="workDays"
         :average-hours="averageHours"
         :fillable-count="fillableDays.length"
-        :can-go-next-week="canGoNextWeek"
         :is-current-week="isCurrentWeek"
         @previous-week="switchWeek('previous')"
         @current-week="switchWeek('current')"
@@ -288,7 +263,6 @@ onMounted(() => {
 
 @media (min-width: 960px) {
   .home-shell__container {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .home-shell__container > :first-child,

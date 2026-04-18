@@ -398,7 +398,6 @@ async function handleDisable(): Promise<void> {
 .form-grid {
   margin-top: 1rem;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.8rem;
 }
 

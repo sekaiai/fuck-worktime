@@ -5,7 +5,8 @@ import type { WeekBoardResponse, WeekDay, WorkDetail } from '../../types/timeshe
 import { formatDisplayDate, getTodayKey } from '../../utils/date';
 
 const props = defineProps<{
-  board: WeekBoardResponse | null;
+  autoFill:any;
+  board: any;
   isLoading: boolean;
   errorMessage: string;
   weekTitle: string;
@@ -14,7 +15,6 @@ const props = defineProps<{
   workDays: number;
   averageHours: number;
   fillableCount: number;
-  canGoNextWeek: boolean;
   isCurrentWeek: boolean;
 }>();
 
@@ -89,30 +89,11 @@ function getDetailKey(detail: WorkDetail, index: number): string {
   <section class="panel board-panel">
     <header class="board-panel__header">
       <div>
-        <p class="board-panel__eyebrow">{{ weekTitle }}</p>
-        <h2 class="board-panel__title">本周填报状态</h2>
-        <p class="board-panel__range">{{ weekRange || '等待加载周范围' }}</p>
-      </div>
+        <p class="board-panel__eyebrow">{{ board?.weekRange }}</p>
+        
+        <!-- <p class="board-panel__range">自动填报：{{ autoFill.status === 'enabled' ? '已启用' : autoFill.status === 'expired' ? '已过期' : '点击开启' }} </p>-->
 
-      <div class="board-panel__actions">
-        <button class="board-panel__ghost" type="button" :disabled="isLoading" @click="emit('previousWeek')">
-          上一周
-        </button>
-        <button class="board-panel__ghost" type="button" :disabled="isLoading || isCurrentWeek" @click="emit('currentWeek')">
-          本周
-        </button>
-        <button
-          class="board-panel__ghost"
-          type="button"
-          :disabled="isLoading || !canGoNextWeek"
-          @click="emit('nextWeek')"
-        >
-          下一周
-        </button>
-      </div>
-    </header>
-
-    <div v-if="errorMessage" class="board-panel__state board-panel__state--error">{{ errorMessage }}</div>
+           <div v-if="errorMessage" class="board-panel__state board-panel__state--error">{{ errorMessage }}</div>
     <div v-else-if="isLoading && !board" class="board-panel__state">正在获取本周状态...</div>
     <div v-else-if="!board || board.days.length === 0" class="board-panel__state">本周暂无填报数据。</div>
     <template v-else>
@@ -123,9 +104,8 @@ function getDetailKey(detail: WorkDetail, index: number): string {
           type="button"
           @click="emit('openManualFill')"
         >
-          填报工时（{{ fillableCount }}天）
+          剩{{ fillableCount }}天未填写
         </button>
-        <span v-else class="board-panel__helper">当前这周没有可补填的工作日。</span>
       </div>
 
       <div class="board-panel__grid">
@@ -136,38 +116,23 @@ function getDetailKey(detail: WorkDetail, index: number): string {
           :class="[getStateClass(day), { 'is-active': selectedDayDate === day.date, 'is-clickable': canInspect(day) }]"
           @click="selectDay(day)"
         >
-          <p class="board-panel__day-name">{{ day.dayOfWeek }}</p>
-          <p class="board-panel__day-date">{{ formatDisplayDate(day.date) }}</p>
-          <p class="board-panel__day-status">{{ getStatusText(day) }}</p>
-          <p v-if="!day.isWeekend" class="board-panel__day-hours">{{ day.totalHours }}h</p>
-          <p v-if="canInspect(day)" class="board-panel__day-tip">点击查看已填内容</p>
+        <p class="board-panel__day-name">{{ day.dayOfWeek }}</p>
+        <p class="board-panel__day-date">{{ formatDisplayDate(day.date) }}</p>
+          <p class="board-panel__day-status">{{ day.displayStatus }}</p>
+
         </article>
       </div>
 
-      <div class="board-panel__summary">
-        <div>
-          <strong>{{ totalHours }}</strong>
-          <span>总工时</span>
-        </div>
-        <div>
-          <strong>{{ workDays }}</strong>
-          <span>工作天数</span>
-        </div>
-        <div>
-          <strong>{{ averageHours }}</strong>
-          <span>平均工时</span>
-        </div>
-      </div>
+     
 
       <div v-if="selectedDay" class="board-panel__detail">
         <header class="board-panel__detail-header">
           <div>
-            <p class="board-panel__detail-eyebrow">已填报内容</p>
+            <p class="board-panel__detail-eyebrow">{{selectedDay.displayStatus}}</p>
             <h3 class="board-panel__detail-title">
-              {{ formatDisplayDate(selectedDay.date) }} {{ selectedDay.dayOfWeek }}
+              {{ selectedDay.date }} {{ selectedDay.dayOfWeek }}
             </h3>
           </div>
-          <span class="board-panel__detail-status">{{ selectedDay.status }}</span>
         </header>
 
         <div class="board-panel__detail-list">
@@ -186,6 +151,27 @@ function getDetailKey(detail: WorkDetail, index: number): string {
         </div>
       </div>
     </template>
+      </div>
+
+      <div class="board-panel__actions">
+        <button class="board-panel__ghost" type="button" :disabled="isLoading" @click="emit('previousWeek')">
+          上一周
+        </button>
+        <button class="board-panel__ghost" type="button" :disabled="isLoading || isCurrentWeek" @click="emit('currentWeek')">
+          本周
+        </button>
+        <button
+          class="board-panel__ghost"
+          type="button"
+          :disabled="isLoading"
+          @click="emit('nextWeek')"
+        >
+          下一周
+        </button>
+      </div>
+    </header>
+
+ 
   </section>
 </template>
 
@@ -206,6 +192,14 @@ function getDetailKey(detail: WorkDetail, index: number): string {
   align-items: flex-start;
 }
 
+.board-panel__eyebrow
+{
+    margin: 0;
+  color: #7c6c54;
+  font-size: 0.76rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
 .board-panel__eyebrow,
 .board-panel__range,
 .board-panel__helper,
@@ -252,7 +246,6 @@ function getDetailKey(detail: WorkDetail, index: number): string {
 .board-panel__grid {
   margin-top: 1rem;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
@@ -292,6 +285,9 @@ function getDetailKey(detail: WorkDetail, index: number): string {
   color: #16553e;
 }
 
+.board-panel__day-date{
+  font-size: 12px;
+}
 .board-panel__day-name,
 .board-panel__day-date,
 .board-panel__day-status,
@@ -304,7 +300,6 @@ function getDetailKey(detail: WorkDetail, index: number): string {
   font-weight: 700;
 }
 
-.board-panel__day-date,
 .board-panel__day-hours {
   margin-top: 0.25rem;
   font-size: 0.86rem;

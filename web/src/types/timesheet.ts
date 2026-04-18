@@ -17,6 +17,7 @@ export interface WorkDetail {
 }
 
 export interface WeekBoardResponse {
+  weekRange?:string;
   days: WeekDay[];
   userName?: string;
   deptName?: string;

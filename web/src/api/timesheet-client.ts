@@ -206,16 +206,14 @@ function normalizeWeekDay(day: unknown): WeekDay {
   };
 }
 
-function normalizeWeekBoard(value: unknown): WeekBoardResponse {
+function normalizeWeekBoard(value: unknown): any {
   const record = isRecord(value) ? value : {};
   const daysSource = Array.isArray(record.days) ? record.days : [];
-  const days = daysSource.map(normalizeWeekDay);
 
   return {
-    days,
+    days:record.days,
+    weekRange: record.weekRange,
     userName: toStringValue(record.userName ?? record.username, ''),
-    deptName: toStringValue(record.deptName ?? record.departmentName, ''),
-    totalHours: toNumberValue(record.totalHours, days.reduce((sum, day) => sum + day.totalHours, 0)),
     weekNumber: toNumberValue(record.weekNumber, 0) || undefined,
     reportPeriod: toStringValue(record.reportPeriod, ''),
     currentWeek: toStringValue(record.currentWeek, ''),
