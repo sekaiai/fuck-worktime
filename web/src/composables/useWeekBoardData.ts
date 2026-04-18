@@ -40,7 +40,6 @@ export function useWeekBoardData() {
       board.value = await getWeekBoard(currentDate.value);
       return true;
     } catch (error) {
-      console.log(error)
       if (error instanceof ApiError) {
         errorMessage.value = error.message;
         errorCode.value = error.code ?? '';
@@ -58,8 +57,6 @@ export function useWeekBoardData() {
   }
 
   async function goToNextWeek(): Promise<boolean> {
-
-
     return loadWeek(shiftDateKeyByDays(currentDate.value, 7));
   }
 

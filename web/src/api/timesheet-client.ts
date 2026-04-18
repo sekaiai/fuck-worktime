@@ -8,6 +8,7 @@ import type {
   WorkDetail,
   WorkTypeNode,
 } from '../types/timesheet';
+import { formatWeekRange } from '../utils/date';
 import { ApiError, apiRequest, clearAuthToken, getApiBase, getAuthToken, setAuthToken } from './request';
 
 const GZDATA_BASE = 'https://times.gzdata.com.cn:8099/prod-api';
@@ -206,14 +207,21 @@ function normalizeWeekDay(day: unknown): WeekDay {
   };
 }
 
-function normalizeWeekBoard(value: unknown): any {
+function normalizeWeekBoard(value: unknown): WeekBoardResponse {
   const record = isRecord(value) ? value : {};
   const daysSource = Array.isArray(record.days) ? record.days : [];
+  const days = daysSource.map(normalizeWeekDay).filter((day) => day.date);
+  const totalHours = toNumberValue(
+    record.totalHours ?? record.hours,
+    days.reduce((sum, day) => sum + day.totalHours, 0),
+  );
 
   return {
-    days:record.days,
-    weekRange: record.weekRange,
+    days,
+    weekRange: toStringValue(record.weekRange, formatWeekRange(days.map((day) => day.date))),
+    totalHours,
     userName: toStringValue(record.userName ?? record.username, ''),
+    deptName: toStringValue(record.deptName ?? record.departmentName, ''),
     weekNumber: toNumberValue(record.weekNumber, 0) || undefined,
     reportPeriod: toStringValue(record.reportPeriod, ''),
     currentWeek: toStringValue(record.currentWeek, ''),

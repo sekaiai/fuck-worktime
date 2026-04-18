@@ -34,7 +34,6 @@ const workTypes = shallowRef<WorkTypeNode[]>([]);
 const projectId = shallowRef('');
 const workTypeGroupId = shallowRef('');
 const itemId = shallowRef('');
-const itemName = shallowRef('');
 const hours = shallowRef(8);
 const work = shallowRef('');
 const reportTime = shallowRef(DEFAULT_REPORT_TIME);
@@ -47,48 +46,56 @@ const resultDialog = ref<{ open: boolean; title: string; message: string }>({
 });
 
 const workTypeGroups = computed(() => buildWorkTypeGroups(workTypes.value));
+const selectedProject = computed(() => props.projects.find((project) => project.id === projectId.value) ?? null);
+const selectedWorkTypeGroup = computed(
+  () => workTypeGroups.value.find((group) => group.id === workTypeGroupId.value) ?? null,
+);
+const selectedWorkType = computed(() => findWorkTypeById(workTypeGroups.value, itemId.value));
 const availableWorkTypes = computed(
   () => workTypeGroups.value.find((group) => group.id === workTypeGroupId.value)?.children ?? [],
 );
+const statusText = computed(() => {
+  if (props.status === 'enabled') {
+    return '已启用';
+  }
+  if (props.status === 'expired') {
+    return '已过期';
+  }
+  return '已禁用';
+});
 
 watch(
   () => props.config,
   async (config) => {
     if (!config) {
-      projectId.value = '';
-      workTypeGroupId.value = '';
-      itemId.value = '';
-      itemName.value = '';
-      hours.value = 8;
-      work.value = '';
-      reportTime.value = DEFAULT_REPORT_TIME;
-      deadline.value = '';
-      workTypes.value = [];
+      resetForm();
       return;
     }
 
     projectId.value = config.projectId;
     workTypeGroupId.value = config.workTypeGroupId ?? '';
     itemId.value = config.itemId;
-    itemName.value = config.itemName;
     hours.value = config.hours;
     work.value = config.work;
     reportTime.value = config.reportTime || DEFAULT_REPORT_TIME;
     deadline.value = config.deadline ?? '';
 
-    try {
-      workTypes.value = await props.loadWorkTypes(config.projectId);
-      if (!workTypeGroupId.value) {
-        workTypeGroupId.value =
-          workTypeGroups.value.find((group) => group.children.some((child) => child.id === config.itemId))?.id ?? '';
-      }
-    } catch {
-      workTypes.value = [];
-      workTypeGroupId.value = '';
-    }
+    await loadProjectWorkTypes(config.projectId, false);
+    syncWorkTypeGroup(config.itemId);
   },
   { immediate: true },
 );
+
+function resetForm(): void {
+  projectId.value = '';
+  workTypeGroupId.value = '';
+  itemId.value = '';
+  hours.value = 8;
+  work.value = '';
+  reportTime.value = DEFAULT_REPORT_TIME;
+  deadline.value = '';
+  workTypes.value = [];
+}
 
 function showToast(message: string): void {
   toastMessage.value = message;
@@ -102,6 +109,33 @@ function closeResultDialog(): void {
   resultDialog.value = { ...resultDialog.value, open: false };
 }
 
+function syncWorkTypeGroup(nextItemId = itemId.value): void {
+  if (!nextItemId || workTypeGroupId.value) {
+    return;
+  }
+
+  workTypeGroupId.value =
+    workTypeGroups.value.find((group) => group.children.some((child) => child.id === nextItemId))?.id ?? '';
+}
+
+async function loadProjectWorkTypes(nextProjectId: string, showError = true): Promise<void> {
+  if (!nextProjectId) {
+    workTypes.value = [];
+    workTypeGroupId.value = '';
+    return;
+  }
+
+  try {
+    workTypes.value = await props.loadWorkTypes(nextProjectId);
+  } catch (error) {
+    workTypes.value = [];
+    workTypeGroupId.value = '';
+    if (showError) {
+      showToast(error instanceof Error ? error.message : '加载工时类型失败。');
+    }
+  }
+}
+
 async function toggleOpen(): Promise<void> {
   isOpen.value = !isOpen.value;
   if (!isOpen.value) {
@@ -111,11 +145,8 @@ async function toggleOpen(): Promise<void> {
   try {
     await props.loadProjects();
     if (projectId.value) {
-      workTypes.value = await props.loadWorkTypes(projectId.value);
-      if (itemId.value) {
-        workTypeGroupId.value =
-          workTypeGroups.value.find((group) => group.children.some((child) => child.id === itemId.value))?.id ?? '';
-      }
+      await loadProjectWorkTypes(projectId.value, false);
+      syncWorkTypeGroup();
     }
   } catch (error) {
     showToast(error instanceof Error ? error.message : '加载项目或工时类型失败。');
@@ -126,25 +157,16 @@ async function handleProjectChange(nextProjectId: string): Promise<void> {
   projectId.value = nextProjectId;
   workTypeGroupId.value = '';
   itemId.value = '';
-  itemName.value = '';
-
-  try {
-    workTypes.value = await props.loadWorkTypes(nextProjectId);
-  } catch (error) {
-    workTypes.value = [];
-    showToast(error instanceof Error ? error.message : '加载工时类型失败。');
-  }
+  await loadProjectWorkTypes(nextProjectId);
 }
 
 function handleWorkTypeGroupChange(nextGroupId: string): void {
   workTypeGroupId.value = nextGroupId;
   itemId.value = '';
-  itemName.value = '';
 }
 
 function handleWorkTypeChange(nextItemId: string): void {
   itemId.value = nextItemId;
-  itemName.value = findWorkTypeById(workTypeGroups.value, nextItemId)?.name ?? '';
 }
 
 async function handleSave(): Promise<void> {
@@ -168,18 +190,21 @@ async function handleSave(): Promise<void> {
     return;
   }
 
-  const project = props.projects.find((item) => item.id === projectId.value);
-  const workTypeGroup = workTypeGroups.value.find((group) => group.id === workTypeGroupId.value);
+  if (!selectedProject.value || !selectedWorkTypeGroup.value || !selectedWorkType.value) {
+    showToast('请选择有效的项目和工时类型。');
+    return;
+  }
+
   const result = await props.saveConfig({
     userId: props.userId,
     enabled: true,
     projectId: projectId.value,
-    projectTitle: project?.title ?? '',
-    projectStatus: project?.status ?? 20,
+    projectTitle: selectedProject.value.title,
+    projectStatus: selectedProject.value.status,
     workTypeGroupId: workTypeGroupId.value,
-    workTypeGroupName: workTypeGroup?.name ?? '',
+    workTypeGroupName: selectedWorkTypeGroup.value.name,
     itemId: itemId.value,
-    itemName: itemName.value,
+    itemName: selectedWorkType.value.name,
     hours: hours.value,
     work: work.value.trim(),
     reportTime: reportTime.value.trim() || DEFAULT_REPORT_TIME,
@@ -236,7 +261,7 @@ async function handleDisable(): Promise<void> {
         <h2 class="section-title">今日自动填报工时</h2>
         <p class="section-status">
           状态：
-          <strong>{{ status === 'enabled' ? '已启用' : status === 'expired' ? '已过期' : '已禁用' }}</strong>
+          <strong>{{ statusText }}</strong>
         </p>
         <p v-if="config?.reportTime" class="section-helper">填报时间：{{ config.reportTime }}</p>
         <p v-if="config?.deadline" class="section-helper">截止日期：{{ config.deadline }}</p>

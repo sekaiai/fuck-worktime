@@ -79,7 +79,7 @@ export function useAutoFillManager() {
     } catch (error) {
       return {
         code: 500,
-        msg: error instanceof Error ? error.message : 'Trigger auto-fill failed',
+        msg: error instanceof Error ? error.message : '立即执行自动填报失败',
       };
     } finally {
       isTriggering.value = false;

@@ -5,8 +5,7 @@ import type { WeekBoardResponse, WeekDay, WorkDetail } from '../../types/timeshe
 import { formatDisplayDate, getTodayKey } from '../../utils/date';
 
 const props = defineProps<{
-  autoFill:any;
-  board: any;
+  board: WeekBoardResponse | null;
   isLoading: boolean;
   errorMessage: string;
   weekTitle: string;
@@ -28,30 +27,33 @@ const emit = defineEmits<{
 const selectedDayDate = shallowRef('');
 const todayKey = getTodayKey();
 
-const selectedDay = computed(() =>
-  props.board?.days.find((day) => day.date === selectedDayDate.value) ?? null,
-);
+const days = computed(() => props.board?.days ?? []);
+const selectedDay = computed(() => days.value.find((day) => day.date === selectedDayDate.value) ?? null);
+
 
 watch(
-  () => props.board?.days,
-  (days) => {
-    const list = days ?? [];
+  days,
+  (list) => {
     const stillExists = list.some((day) => day.date === selectedDayDate.value);
     if (stillExists) {
       return;
     }
 
-    const firstFilledDay = list.find((day) => !day.isWeekend && day.status !== '未提交' && day.details.length > 0);
+    const firstFilledDay = list.find((day) => canInspect(day));
     selectedDayDate.value = firstFilledDay?.date ?? '';
   },
   { immediate: true },
 );
 
+function isPendingDay(day: WeekDay): boolean {
+  return day.status === '未提交' && day.date <= todayKey;
+}
+
 function getStateClass(day: WeekDay): string {
   if (day.isWeekend) {
     return 'is-weekend';
   }
-  if (day.status === '未提交' && day.date <= todayKey) {
+  if (isPendingDay(day)) {
     return 'is-pending';
   }
   if (day.status === '未提交') {
@@ -65,11 +67,21 @@ function getStatusText(day: WeekDay): string {
     return '休息日';
   }
 
-  return day.status;
+  return day.status || (day.totalHours > 0 ? '已填报' : '未提交');
+}
+
+function getDayHint(day: WeekDay): string {
+  if (day.isWeekend) {
+    return '';
+  }
+  if (day.totalHours > 0) {
+    return `${day.totalHours}h`;
+  }
+  return day.date <= todayKey ? '待填报' : '待开放';
 }
 
 function canInspect(day: WeekDay): boolean {
-  return !day.isWeekend && day.status !== '未提交' && day.details.length > 0;
+  return !day.isWeekend && day.details.length > 0 && day.status !== '未提交';
 }
 
 function selectDay(day: WeekDay): void {
@@ -89,49 +101,67 @@ function getDetailKey(detail: WorkDetail, index: number): string {
   <section class="panel board-panel">
     <header class="board-panel__header">
       <div>
-        <p class="board-panel__eyebrow">{{ board?.weekRange }}</p>
-        
-        <!-- <p class="board-panel__range">自动填报：{{ autoFill.status === 'enabled' ? '已启用' : autoFill.status === 'expired' ? '已过期' : '点击开启' }} </p>-->
+        <p class="board-panel__eyebrow">{{ weekTitle }}</p>
+        <h2 class="board-panel__title">{{ weekRange || board?.weekRange || '本周填报状态' }}</h2>
+        <p class="board-panel__helper">{{ isCurrentWeek ? '当前周' : '历史周' }}</p>
+      </div>
 
-           <div v-if="errorMessage" class="board-panel__state board-panel__state--error">{{ errorMessage }}</div>
+      <div class="board-panel__actions">
+        <button class="board-panel__ghost" type="button" :disabled="isLoading" @click="emit('previousWeek')">
+          上一周
+        </button>
+        <button
+          class="board-panel__ghost"
+          type="button"
+          :disabled="isLoading || isCurrentWeek"
+          @click="emit('currentWeek')"
+        >
+          本周
+        </button>
+        <button class="board-panel__ghost" type="button" :disabled="isLoading" @click="emit('nextWeek')">
+          下一周
+        </button>
+      </div>
+    </header>
+
+    <div v-if="errorMessage" class="board-panel__state board-panel__state--error">{{ errorMessage }}</div>
     <div v-else-if="isLoading && !board" class="board-panel__state">正在获取本周状态...</div>
-    <div v-else-if="!board || board.days.length === 0" class="board-panel__state">本周暂无填报数据。</div>
+    <div v-else-if="days.length === 0" class="board-panel__state">本周暂无填报数据。</div>
     <template v-else>
+   
+
       <div class="board-panel__toolbar">
+        <p class="board-panel__helper">点击已填报日期可查看详细内容。</p>
         <button
           v-if="fillableCount > 0"
           class="board-panel__fill board-panel__fill--mobile-sticky"
           type="button"
           @click="emit('openManualFill')"
         >
-          剩{{ fillableCount }}天未填写
+          剩 {{ fillableCount }} 天未填写
         </button>
       </div>
 
       <div class="board-panel__grid">
         <article
-          v-for="day in board.days"
+          v-for="day in days"
           :key="day.date"
           class="board-panel__day"
           :class="[getStateClass(day), { 'is-active': selectedDayDate === day.date, 'is-clickable': canInspect(day) }]"
           @click="selectDay(day)"
         >
-        <p class="board-panel__day-name">{{ day.dayOfWeek }}</p>
-        <p class="board-panel__day-date">{{ formatDisplayDate(day.date) }}</p>
-          <p class="board-panel__day-status">{{ day.displayStatus }}</p>
-
+          <p class="board-panel__day-name">{{ day.dayOfWeek }}</p>
+          <p class="board-panel__day-date">{{ formatDisplayDate(day.date) }}</p>
+          <p class="board-panel__day-status">{{ getStatusText(day) }}</p>
+          <p v-if="getDayHint(day)" class="board-panel__day-hours">{{ getDayHint(day) }}</p>
         </article>
       </div>
-
-     
 
       <div v-if="selectedDay" class="board-panel__detail">
         <header class="board-panel__detail-header">
           <div>
-            <p class="board-panel__detail-eyebrow">{{selectedDay.displayStatus}}</p>
-            <h3 class="board-panel__detail-title">
-              {{ selectedDay.date }} {{ selectedDay.dayOfWeek }}
-            </h3>
+            <p class="board-panel__detail-eyebrow">{{ getStatusText(selectedDay) }}</p>
+            <h3 class="board-panel__detail-title">{{ selectedDay.date }} {{ selectedDay.dayOfWeek }}</h3>
           </div>
         </header>
 
@@ -151,27 +181,6 @@ function getDetailKey(detail: WorkDetail, index: number): string {
         </div>
       </div>
     </template>
-      </div>
-
-      <div class="board-panel__actions">
-        <button class="board-panel__ghost" type="button" :disabled="isLoading" @click="emit('previousWeek')">
-          上一周
-        </button>
-        <button class="board-panel__ghost" type="button" :disabled="isLoading || isCurrentWeek" @click="emit('currentWeek')">
-          本周
-        </button>
-        <button
-          class="board-panel__ghost"
-          type="button"
-          :disabled="isLoading"
-          @click="emit('nextWeek')"
-        >
-          下一周
-        </button>
-      </div>
-    </header>
-
- 
   </section>
 </template>
 
@@ -192,16 +201,14 @@ function getDetailKey(detail: WorkDetail, index: number): string {
   align-items: flex-start;
 }
 
-.board-panel__eyebrow
-{
-    margin: 0;
+.board-panel__eyebrow {
+  margin: 0;
   color: #7c6c54;
   font-size: 0.76rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.board-panel__eyebrow,
-.board-panel__range,
+
 .board-panel__helper,
 .board-panel__detail-eyebrow {
   margin: 0;
@@ -237,6 +244,31 @@ function getDetailKey(detail: WorkDetail, index: number): string {
 .board-panel__fill {
   background: #0f4f53;
   color: #fff;
+}
+
+.board-panel__summary {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.board-panel__summary div,
+.board-panel__detail-item {
+  border-radius: 18px;
+  background: #f7f2e8;
+  padding: 0.85rem;
+}
+
+.board-panel__summary strong {
+  display: block;
+  font-size: 1.2rem;
+  color: #13272c;
+}
+
+.board-panel__summary span {
+  color: #6d7067;
+  font-size: 0.86rem;
 }
 
 .board-panel__toolbar {
@@ -285,14 +317,10 @@ function getDetailKey(detail: WorkDetail, index: number): string {
   color: #16553e;
 }
 
-.board-panel__day-date{
-  font-size: 12px;
-}
 .board-panel__day-name,
 .board-panel__day-date,
 .board-panel__day-status,
-.board-panel__day-hours,
-.board-panel__day-tip {
+.board-panel__day-hours {
   margin: 0;
 }
 
@@ -300,43 +328,14 @@ function getDetailKey(detail: WorkDetail, index: number): string {
   font-weight: 700;
 }
 
-.board-panel__day-hours {
-  margin-top: 0.25rem;
-  font-size: 0.86rem;
+.board-panel__day-date {
+  font-size: 0.8rem;
 }
 
 .board-panel__day-status,
-.board-panel__day-tip {
+.board-panel__day-hours {
   margin-top: 0.45rem;
   font-size: 0.88rem;
-}
-
-.board-panel__day-tip {
-  opacity: 0.85;
-}
-
-.board-panel__summary {
-  margin-top: 1rem;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-
-.board-panel__summary div,
-.board-panel__detail-item {
-  border-radius: 18px;
-  background: #f7f2e8;
-  padding: 0.85rem;
-}
-
-.board-panel__summary strong {
-  font-size: 1.2rem;
-  color: #13272c;
-}
-
-.board-panel__summary span {
-  color: #6d7067;
-  font-size: 0.86rem;
 }
 
 .board-panel__state {
@@ -360,16 +359,6 @@ function getDetailKey(detail: WorkDetail, index: number): string {
   gap: 0.75rem;
 }
 
-.board-panel__detail-status {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2rem;
-  padding: 0 0.9rem;
-  border-radius: 999px;
-  background: #e8f5ee;
-  color: #16553e;
-}
-
 .board-panel__detail-list {
   display: grid;
   gap: 0.75rem;
@@ -390,7 +379,8 @@ function getDetailKey(detail: WorkDetail, index: number): string {
 }
 
 @media (max-width: 680px) {
-  .board-panel__grid {
+  .board-panel__grid,
+  .board-panel__summary {
     grid-template-columns: 1fr;
   }
 
@@ -410,10 +400,6 @@ function getDetailKey(detail: WorkDetail, index: number): string {
   .board-panel__actions {
     width: 100%;
     justify-content: flex-start;
-  }
-
-  .board-panel__summary {
-    grid-template-columns: 1fr;
   }
 }
 

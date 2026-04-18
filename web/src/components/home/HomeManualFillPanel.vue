@@ -29,7 +29,6 @@ const workTypes = shallowRef<WorkTypeNode[]>([]);
 const projectId = shallowRef('');
 const workTypeGroupId = shallowRef('');
 const workTypeId = shallowRef('');
-const workTypeName = shallowRef('');
 const hours = shallowRef(8);
 const work = shallowRef('');
 const daysToGenerate = shallowRef(0);
@@ -52,6 +51,7 @@ const sortedFillableDays = computed(() =>
 );
 const selectedProject = computed(() => props.projects.find((project) => project.id === projectId.value) ?? null);
 const workTypeGroups = computed(() => buildWorkTypeGroups(workTypes.value));
+const selectedWorkType = computed(() => findWorkTypeById(workTypeGroups.value, workTypeId.value));
 const availableWorkTypes = computed(
   () => workTypeGroups.value.find((group) => group.id === workTypeGroupId.value)?.children ?? [],
 );
@@ -138,7 +138,6 @@ async function handleProjectChange(nextProjectId: string): Promise<void> {
   projectId.value = nextProjectId;
   workTypeGroupId.value = '';
   workTypeId.value = '';
-  workTypeName.value = '';
   resetEntries();
 
   try {
@@ -152,18 +151,19 @@ async function handleProjectChange(nextProjectId: string): Promise<void> {
 function handleWorkTypeGroupChange(nextGroupId: string): void {
   workTypeGroupId.value = nextGroupId;
   workTypeId.value = '';
-  workTypeName.value = '';
   resetEntries();
 }
 
 function handleWorkTypeChange(nextWorkTypeId: string): void {
   workTypeId.value = nextWorkTypeId;
-  workTypeName.value = findWorkTypeById(workTypeGroups.value, nextWorkTypeId)?.name ?? '';
   resetEntries();
 }
 
 async function handleGenerate(): Promise<void> {
-  if (!selectedProject.value || !workTypeId.value) {
+  const project = selectedProject.value;
+  const workType = selectedWorkType.value;
+
+  if (!project || !workType) {
     showToast('请选择项目和二级工时类型。');
     return;
   }
@@ -193,11 +193,11 @@ async function handleGenerate(): Promise<void> {
         : sortedFillableDays.value.slice(0, daysToGenerate.value);
     entries.value = targetDays.map((day, index) => ({
       reportDate: day.date,
-      projectId: selectedProject.value!.id,
-      projectTitle: selectedProject.value!.title,
-      projectStatus: selectedProject.value!.status,
-      itemId: workTypeId.value,
-      itemName: workTypeName.value,
+      projectId: project.id,
+      projectTitle: project.title,
+      projectStatus: project.status,
+      itemId: workType.id,
+      itemName: workType.name,
       content: contents[index] ?? '日常工作处理',
       hours: hours.value,
     }));
@@ -218,12 +218,17 @@ function goToStep(step: 1 | 2 | 3): void {
   currentStep.value = step;
 }
 
-function applyTemplate(template: string): void {
-  work.value = template;
-}
-
 function isStepTwoReady(): boolean {
   return Boolean(projectId.value && workTypeId.value);
+}
+
+function updateEntry(index: number, patch: Partial<TimesheetEntry>): void {
+  const nextEntries = [...entries.value];
+  nextEntries[index] = {
+    ...nextEntries[index],
+    ...patch,
+  };
+  entries.value = nextEntries;
 }
 
 function updateEntryDate(index: number, nextDate: string): void {
@@ -234,31 +239,16 @@ function updateEntryDate(index: number, nextDate: string): void {
     return;
   }
 
-  const nextEntries = [...entries.value];
-  nextEntries[index] = {
-    ...nextEntries[index],
-    reportDate: nextDate,
-  };
-  entries.value = nextEntries;
+  updateEntry(index, { reportDate: nextDate });
 }
 
 function updateEntryContent(index: number, nextValue: string): void {
-  const nextEntries = [...entries.value];
-  nextEntries[index] = {
-    ...nextEntries[index],
-    content: nextValue,
-  };
-  entries.value = nextEntries;
+  updateEntry(index, { content: nextValue });
 }
 
 function updateEntryHours(index: number, nextValue: number): void {
   const safeHours = Number.isFinite(nextValue) && nextValue > 0 ? nextValue : 1;
-  const nextEntries = [...entries.value];
-  nextEntries[index] = {
-    ...nextEntries[index],
-    hours: safeHours,
-  };
-  entries.value = nextEntries;
+  updateEntry(index, { hours: safeHours });
 }
 
 async function handleSubmit(): Promise<void> {
@@ -394,7 +384,7 @@ async function handleSubmit(): Promise<void> {
           </label>
           <label>
             <span>工时类型</span>
-            <input :value="entry.itemName || workTypeName" disabled />
+            <input :value="entry.itemName || selectedWorkType?.name || ''" disabled />
           </label>
           <template v-if="compactReviewMode">
             <p class="entry-card__summary">{{ entry.hours }}h · {{ entry.content }}</p>
@@ -554,28 +544,6 @@ input:disabled {
 .warning-text {
   margin: 0.9rem 0 0;
   color: #b42318;
-}
-
-.quick-templates {
-  margin-top: 0.75rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  align-items: center;
-}
-
-.quick-templates > span {
-  color: #7c6c54;
-  font-size: 0.82rem;
-}
-
-.template-chip {
-  border: 0;
-  border-radius: 999px;
-  padding: 0.48rem 0.75rem;
-  background: #ece8df;
-  color: #31454c;
-  font-size: 0.82rem;
 }
 
 .entry-list {

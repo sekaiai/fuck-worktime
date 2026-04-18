@@ -16,7 +16,12 @@ const auth = useAuthSession();
 const weekBoard = useWeekBoardData();
 const catalog = useTimesheetCatalog();
 const autoFill = useAutoFillManager();
-const quickFill = useQuickFillLauncher();
+const {
+  recommendedDaysToGenerate,
+  preferredReportDate,
+  preferredStep,
+  openManualFill: prepareManualFill,
+} = useQuickFillLauncher();
 
 const { userId, userInfo, isLoading, restoreAuth, handleTokenExpired, logout } = auth;
 const {
@@ -51,12 +56,6 @@ const {
 
 const notifyVisible = computed(() => status.value === 'enabled');
 const isManualFillVisible = shallowRef(false);
-const { recommendedDaysToGenerate, preferredReportDate, preferredStep } = quickFill;
-const mobileTaskSummary = computed(() =>
-  fillableDays.value.length > 0
-    ? `今天可处理 ${fillableDays.value.length} 天待填工时`
-    : '本周暂无待补填工时',
-);
 
 watch(
   fillableDays,
@@ -76,15 +75,12 @@ async function refreshWeekBoard(): Promise<void> {
 }
 
 async function switchWeek(direction: 'previous' | 'current' | 'next'): Promise<void> {
-  let ok = false;
-
-  if (direction === 'previous') {
-    ok = await goToPreviousWeek();
-  } else if (direction === 'current') {
-    ok = await goToCurrentWeek();
-  } else {
-    ok = await goToNextWeek();
-  }
+  const actions = {
+    previous: goToPreviousWeek,
+    current: goToCurrentWeek,
+    next: goToNextWeek,
+  } as const;
+  const ok = await actions[direction]();
 
   if (!ok && errorCode.value === 'TOKEN_EXPIRED') {
     handleTokenExpired();
@@ -109,35 +105,16 @@ async function loadProjects(): Promise<void> {
 }
 
 function openManualFill(): void {
-  if (!quickFill.openManualFill(fillableDays.value)) {
+  if (!prepareManualFill(fillableDays.value)) {
     return;
   }
-  isManualFillVisible.value = true;
-  void loadProjects();
-}
 
-function quickFillOneDay(): void {
-  if (!quickFill.quickFillOneDay(fillableDays.value)) {
-    return;
-  }
   isManualFillVisible.value = true;
   void loadProjects();
 }
 
 function closeManualFill(): void {
   isManualFillVisible.value = false;
-}
-
-async function saveAutoFill(payload: Parameters<typeof saveAutoFillConfig>[0]) {
-  return saveAutoFillConfig(payload);
-}
-
-async function disableAutoFill(userIdValue: string) {
-  return disableAutoFillConfig(userIdValue);
-}
-
-async function triggerAutoFill(userIdValue: string) {
-  return triggerAutoFillConfig(userIdValue);
 }
 
 onMounted(() => {
@@ -151,7 +128,6 @@ onMounted(() => {
       <HomeUserPanel :user-info="userInfo" :is-loading="isLoading" @logout="logout" />
 
       <HomeWeekBoardPanel
-:autoFill="autoFill"
         :board="board"
         :is-loading="isWeekLoading"
         :error-message="errorMessage"
@@ -193,9 +169,9 @@ onMounted(() => {
         :is-triggering="isTriggering"
         :load-projects="loadProjects"
         :load-work-types="loadWorkTypes"
-        :save-config="saveAutoFill"
-        :disable-config="disableAutoFill"
-        :trigger-config="triggerAutoFill"
+        :save-config="saveAutoFillConfig"
+        :disable-config="disableAutoFillConfig"
+        :trigger-config="triggerAutoFillConfig"
         @updated="initialize"
       />
 
@@ -215,61 +191,5 @@ onMounted(() => {
   margin: 0 auto;
   display: grid;
   gap: 1rem;
-}
-
-.task-hub {
-  border-radius: 24px;
-  background: linear-gradient(180deg, #fff9ef, #f7f3ea);
-  padding: 1rem;
-  box-shadow: 0 12px 24px rgba(15, 61, 62, 0.08);
-}
-
-.task-hub__eyebrow {
-  margin: 0;
-  color: #7c6c54;
-  font-size: 0.76rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.task-hub__title {
-  margin: 0.35rem 0 0;
-  font-size: 1.1rem;
-  color: #13272c;
-}
-
-.task-hub__actions {
-  margin-top: 0.75rem;
-  display: grid;
-  gap: 0.55rem;
-}
-
-.task-hub__primary,
-.task-hub__ghost {
-  border: 0;
-  border-radius: 999px;
-  padding: 0.85rem 1rem;
-}
-
-.task-hub__primary {
-  background: #0f4f53;
-  color: #fff;
-}
-
-.task-hub__ghost {
-  background: #ece8df;
-  color: #24383f;
-}
-
-@media (min-width: 960px) {
-  .home-shell__container {
-  }
-
-  .home-shell__container > :first-child,
-  .home-shell__container > :last-child,
-  .home-shell__container > :nth-child(2),
-  .home-shell__container > :nth-child(3) {
-    grid-column: 1 / -1;
-  }
 }
 </style>
