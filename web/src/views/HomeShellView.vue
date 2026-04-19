@@ -215,6 +215,7 @@ onMounted(() => {
   }
 
   .home-shell__hero {
+    margin-left: 8px;
     grid-template-columns: 1fr;
     padding: 0;
     border-radius: 0;

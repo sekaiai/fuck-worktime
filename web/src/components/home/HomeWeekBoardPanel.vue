@@ -441,6 +441,14 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
     flex-direction: column;
   }
 
+  .board-panel__header {
+    margin-left: 8px;
+  }
+
+  .board-panel__summary-strip {
+    margin-left: 14px;
+  }
+
   .board-panel__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
