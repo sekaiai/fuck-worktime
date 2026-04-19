@@ -19,6 +19,7 @@ export class ApiError extends Error {
 const API_BASE = import.meta.env.PROD ? 'https://example.com/api' : 'http://localhost:10002/api';
 // const API_BASE = 'https://w2.logacg.com/api'
 let authToken = '';
+let authGate: Promise<unknown> | null = null;
 
 export function getApiBase(): string {
   return API_BASE;
@@ -36,8 +37,21 @@ export function clearAuthToken(): void {
   authToken = '';
 }
 
+export function setAuthRequestGate(promise: Promise<unknown> | null): void {
+  authGate = promise;
+}
+
 export function getStoredUserId(): string | null {
   return getLocalStorage('userId');
+}
+
+function shouldBypassAuthGate(path: string): boolean {
+  return (
+    path.startsWith('/dingtalk/user') ||
+    path.startsWith('/dingtalk/user-by-phone') ||
+    path.startsWith('/dingtalk/qrcode') ||
+    path.startsWith('/dingtalk/status')
+  );
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -53,6 +67,10 @@ export async function apiRequest<T>(
   path: string,
   init?: RequestInit,
 ): Promise<ApiEnvelope<T>> {
+  if (authGate && !shouldBypassAuthGate(path)) {
+    await authGate.catch(() => undefined);
+  }
+
   const headers = new Headers(init?.headers);
   headers.set('Content-Type', 'application/json');
   if (authToken) {

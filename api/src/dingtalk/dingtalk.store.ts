@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import type { AutoFillConfig } from '../timesheet/scheduler/auto-fill.types';
+import type { DingtalkLoginStatus } from './dto/user-info.dto';
 
 export interface DingtalkUserRecord {
   userId: string;
@@ -12,6 +13,7 @@ export interface DingtalkUserRecord {
   department?: string;
   updatedAt: string;
   autoFill?: AutoFillConfig | null;
+  status: DingtalkLoginStatus;
 }
 
 const DATA_FILE = 'data/user-config.json';
@@ -56,7 +58,10 @@ export class DingtalkStore {
     }
 
     try {
-      return JSON.parse(trimmed) as Record<string, DingtalkUserRecord>;
+      const parsed = JSON.parse(trimmed) as Record<string, Partial<DingtalkUserRecord>>;
+      return Object.fromEntries(
+        Object.entries(parsed).map(([userId, record]) => [userId, this.normalizeRecord(userId, record)]),
+      );
     } catch {
       this.logger.error(`Failed to parse ${DATA_FILE}`);
       return {};
@@ -69,6 +74,7 @@ export class DingtalkStore {
       ...data[record.userId],
       ...record,
       autoFill: record.autoFill ?? data[record.userId]?.autoFill ?? null,
+      status: record.status ?? data[record.userId]?.status ?? this.deriveStatus(record.token),
       updatedAt: new Date().toISOString(),
     };
     await this.writeAll(data);
@@ -92,6 +98,29 @@ export class DingtalkStore {
       .filter((config): config is AutoFillConfig => config !== null);
   }
 
+  async getUsersByStatus(status: DingtalkLoginStatus): Promise<DingtalkUserRecord[]> {
+    const data = await this.readAll();
+    return Object.values(data).filter((record) => record.status === status);
+  }
+
+  async updateUserStatus(userId: string, status: DingtalkLoginStatus): Promise<DingtalkUserRecord | null> {
+    const data = await this.readAll();
+    const current = data[userId];
+    if (!current) {
+      return null;
+    }
+
+    const nextRecord: DingtalkUserRecord = {
+      ...current,
+      status,
+      updatedAt: new Date().toISOString(),
+    };
+
+    data[userId] = nextRecord;
+    await this.writeAll(data);
+    return nextRecord;
+  }
+
   async setAutoFill(config: AutoFillConfig): Promise<void> {
     const data = await this.readAll();
     const current = data[config.userId];
@@ -104,6 +133,7 @@ export class DingtalkStore {
       department: current?.department ?? '',
       updatedAt: current?.updatedAt ?? new Date().toISOString(),
       autoFill: config,
+      status: current?.status ?? this.deriveStatus(current?.token),
     };
     await this.writeAll(data);
   }
@@ -127,10 +157,31 @@ export class DingtalkStore {
         return {};
       }
 
-      return JSON.parse(trimmed) as Record<string, DingtalkUserRecord>;
+      const parsed = JSON.parse(trimmed) as Record<string, Partial<DingtalkUserRecord>>;
+      return Object.fromEntries(
+        Object.entries(parsed).map(([userId, record]) => [userId, this.normalizeRecord(userId, record)]),
+      );
     } catch {
       this.logger.error(`Failed to parse ${LEGACY_DATA_FILE}`);
       return {};
     }
+  }
+
+  private normalizeRecord(userId: string, record: Partial<DingtalkUserRecord> | undefined): DingtalkUserRecord {
+    return {
+      userId: record?.userId ?? userId,
+      token: record?.token ?? '',
+      dingtalkCookies: record?.dingtalkCookies ?? {},
+      nickname: record?.nickname ?? '',
+      phone: record?.phone ?? '',
+      department: record?.department ?? '',
+      updatedAt: record?.updatedAt ?? new Date().toISOString(),
+      autoFill: record?.autoFill ?? null,
+      status: record?.status ?? this.deriveStatus(record?.token),
+    };
+  }
+
+  private deriveStatus(token?: string): DingtalkLoginStatus {
+    return token && token.trim() ? 'logged_in' : 'expired';
   }
 }

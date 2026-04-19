@@ -3,8 +3,8 @@ import { randomUUID } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 
-import { DingtalkStore } from './dingtalk.store';
-import { UserInfoData } from './dto/user-info.dto';
+import { DingtalkStore, type DingtalkUserRecord } from './dingtalk.store';
+import { type DingtalkLoginStatus, type UserInfoData } from './dto/user-info.dto';
 import { TimesClient } from '../user/times.client';
 
 interface DingAuthResponse {
@@ -30,6 +30,7 @@ interface LoginSession {
 export class DingtalkService {
   private readonly logger = new Logger(DingtalkService.name);
   private readonly sessions = new Map<string, LoginSession>();
+  private readonly refreshPromises = new Map<string, Promise<UserInfoData>>();
   private readonly TIMEOUT_MS = 60000;
   private readonly LOGIN_BUTTON_SELECTORS = [
     '.app-page-curr div.module-confirm-button.base-comp-button.base-comp-button-type-primary:has-text("立即登录")',
@@ -68,7 +69,7 @@ export class DingtalkService {
       // ============================================
       this.logger.log('[步骤1] 启动浏览器');
       browser = await chromium.launch({
-        headless: true,
+        headless: false,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -232,8 +233,6 @@ export class DingtalkService {
     page: Page,
     context: BrowserContext,
   ): Promise<{ userId: string; token: string } | null> {
-
-    console.log({page})
     return new Promise<{ userId: string; token: string } | null>((resolve) => {
       const timeout = setTimeout(() => {
         this.logger.warn('[ding-auth] 等待超时（15秒），未捕获到响应');
@@ -243,7 +242,6 @@ export class DingtalkService {
 
       const responseHandler = async (response: import('playwright').Response) => {
         const url = response.url();
-        console.log("URL:", url)
         if (!url.includes('/prod-api/ding-auth')) {
           return;
         }
@@ -274,6 +272,9 @@ export class DingtalkService {
           this.logger.log(`[ding-auth] 获取到 ${Object.keys(cookieMap).length} 个钉钉 Cookie`);
 
           // 保存到本地 JSON（以 userId 为键）
+          const authorization = `Bearer ${body.token}`;
+          const authHeader = `Bearer ${body.token}`;
+          await this.timesClient.ping(authHeader);
           const userProfile = await this.fetchUserProfile(body.token);
 
           await this.dingtalkStore.upsertUser({
@@ -284,6 +285,7 @@ export class DingtalkService {
             phone: userProfile.phone,
             department: userProfile.department,
             updatedAt: new Date().toISOString(),
+            status: 'logged_in',
           });
 
           this.logger.log(`[ding-auth] 用户 ${body.userId} 数据已保存`);
@@ -380,7 +382,7 @@ export class DingtalkService {
       return null;
     }
 
-    return this.buildUserInfo(record);
+    return this.resolveUserInfo(record);
   }
 
   async getUserByPhone(phone: string): Promise<UserInfoData | null> {
@@ -390,18 +392,19 @@ export class DingtalkService {
     }
 
     const records = Object.values(await this.dingtalkStore.readAll());
-    for (const record of records) {
-      const userInfo = await this.buildUserInfo(record);
-      if (this.normalizePhone(userInfo.phone) === normalizedPhone) {
-        return userInfo;
-      }
+    const matchedRecord = records.find(
+      (record) => this.normalizePhone(record.phone) === normalizedPhone,
+    );
+
+    if (!matchedRecord) {
+      return null;
     }
 
-    return null;
+    return this.resolveUserInfo(matchedRecord);
   }
 
   private async buildUserInfo(
-    record: UserInfoData | { userId: string; token: string; updatedAt: string; nickname?: string; phone?: string; department?: string },
+    record: { userId: string; token: string; updatedAt: string; nickname?: string; phone?: string; department?: string },
   ): Promise<UserInfoData> {
     try {
       const userProfile = await this.fetchUserProfile(record.token);
@@ -413,6 +416,7 @@ export class DingtalkService {
         phone: userProfile.phone,
         department: userProfile.department,
         updatedAt: record.updatedAt,
+        status: 'logged_in',
       };
     } catch (error) {
       this.logger.warn(
@@ -426,6 +430,7 @@ export class DingtalkService {
         phone: record.phone ?? '',
         department: record.department ?? '',
         updatedAt: record.updatedAt,
+        status: 'expired',
       };
     }
   }
@@ -436,8 +441,115 @@ export class DingtalkService {
     return this.extractUserInfo(remoteResponse);
   }
 
-  private normalizePhone(phone: string): string {
-    return phone.replace(/[^\d]/g, '');
+  private normalizePhone(phone?: string): string {
+    return (phone ?? '').replace(/[^\d]/g, '');
+  }
+
+  private async resolveUserInfo(record: DingtalkUserRecord): Promise<UserInfoData> {
+    const inFlight = this.refreshPromises.get(record.userId);
+    if (record.status === 'refreshing' && inFlight) {
+      return inFlight;
+    }
+
+    const latestUserInfo = await this.tryFetchLatestUserInfo(record);
+    if (latestUserInfo) {
+      return latestUserInfo;
+    }
+
+    return this.refreshUserInfo(record);
+  }
+
+  private async tryFetchLatestUserInfo(record: DingtalkUserRecord): Promise<UserInfoData | null> {
+    if (!record.token.trim()) {
+      return null;
+    }
+
+    try {
+      const userProfile = await this.fetchUserProfile(record.token);
+      const nextRecord: DingtalkUserRecord = {
+        ...record,
+        nickname: userProfile.nickname,
+        phone: userProfile.phone,
+        department: userProfile.department,
+        status: 'logged_in',
+        updatedAt: new Date().toISOString(),
+      };
+
+      await this.dingtalkStore.upsertUser(nextRecord);
+      return this.toUserInfo(nextRecord);
+    } catch (error) {
+      this.logger.warn(
+        `resolveUserInfo: getInfo failed, userId=${record.userId}, error=${error instanceof Error ? error.message : error}`,
+      );
+      return null;
+    }
+  }
+
+  private async refreshUserInfo(record: DingtalkUserRecord): Promise<UserInfoData> {
+    const inFlight = this.refreshPromises.get(record.userId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const refreshPromise = this.doRefreshUserInfo(record).finally(() => {
+      this.refreshPromises.delete(record.userId);
+    });
+
+    this.refreshPromises.set(record.userId, refreshPromise);
+    return refreshPromise;
+  }
+
+  private async doRefreshUserInfo(record: DingtalkUserRecord): Promise<UserInfoData> {
+    const refreshingRecord =
+      (await this.dingtalkStore.updateUserStatus(record.userId, 'refreshing')) ?? {
+        ...record,
+        status: 'refreshing' satisfies DingtalkLoginStatus,
+      };
+
+    const refreshedToken = await this.refreshUserToken(record.userId);
+    if (!refreshedToken) {
+      const expiredRecord =
+        (await this.dingtalkStore.updateUserStatus(record.userId, 'expired')) ?? {
+          ...refreshingRecord,
+          status: 'expired' satisfies DingtalkLoginStatus,
+        };
+
+      return this.toUserInfo(expiredRecord);
+    }
+
+    const refreshedRecord = await this.dingtalkStore.getUser(record.userId);
+    if (!refreshedRecord) {
+      return this.toUserInfo({
+        ...refreshingRecord,
+        token: refreshedToken,
+        status: 'expired',
+      });
+    }
+
+    const latestUserInfo = await this.tryFetchLatestUserInfo(refreshedRecord);
+    if (latestUserInfo) {
+      return latestUserInfo;
+    }
+
+    const expiredRecord =
+      (await this.dingtalkStore.updateUserStatus(record.userId, 'expired')) ?? {
+        ...refreshedRecord,
+        status: 'expired' satisfies DingtalkLoginStatus,
+      };
+
+    return this.toUserInfo(expiredRecord);
+  }
+
+  private toUserInfo(record: DingtalkUserRecord): UserInfoData {
+    return {
+      userId: record.userId,
+      token: record.status === 'logged_in' ? record.token : null,
+      nickname: record.nickname ?? '',
+      phone: record.phone ?? '',
+      department: record.department ?? '',
+      updatedAt: record.updatedAt,
+      status: record.status,
+    };
   }
 
   async refreshUserToken(userId: string): Promise<string | null> {
@@ -452,7 +564,7 @@ export class DingtalkService {
 
     try {
       browser = await chromium.launch({
-        headless: true,
+        headless: false,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',

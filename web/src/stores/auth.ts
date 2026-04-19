@@ -2,88 +2,166 @@ import { computed, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
 
 import router from '../router';
-import { getUserByPhone, getUserByUserId, type UserByUserIdResult } from '../api/dingtalk-client';
+import {
+  getUserByPhone,
+  getUserByUserId,
+  type UserByUserIdResult,
+  type UserLoginStatus,
+} from '../api/dingtalk-client';
+import { setAuthRequestGate } from '../api/request';
 import { clearGzdataToken, setAuthToken } from '../api/timesheet-client';
 import type { UserInfo } from '../types/user';
 import { clearSessionCache, getLocalStorage, removeLocalStorage, setLocalStorage } from '../utils/cache';
+
+type HydrateStatus = UserLoginStatus | 'not_found' | 'error';
+
+interface HydrateResult {
+  ok: boolean;
+  status: HydrateStatus;
+  userId: string | null;
+}
 
 export const useAuthStore = defineStore('auth', () => {
   const userId = shallowRef<string | null>(getLocalStorage('userId'));
   const userInfo = shallowRef<UserInfo | null>(null);
   const isLoading = shallowRef(false);
+  const isRestoring = shallowRef(false);
+  let restorePromise: Promise<boolean> | null = null;
 
   const isAuthenticated = computed(() => Boolean(userId.value && userInfo.value));
 
   function applyUserSession(data: UserByUserIdResult): boolean {
-    if (!data.token) {
+    if (data.status !== 'logged_in' || !data.token) {
       return false;
     }
 
     setAuthToken(data.token);
     userId.value = data.userId;
+    setLocalStorage('userId', data.userId);
     userInfo.value = {
       userId: data.userId,
-      nickname: data.nickname || '未知',
+      nickname: data.nickname || 'Unknown',
       phone: data.phone || '',
-      department: data.department || '未分配部门',
+      department: data.department || 'Unassigned',
     };
     return true;
   }
 
-  async function hydrateUser(targetUserId = userId.value): Promise<boolean> {
-    if (!targetUserId) {
-      return false;
+  function clearRuntimeSession(): void {
+    userInfo.value = null;
+    clearSessionCache();
+    clearGzdataToken();
+  }
+
+  function finalizeHydration(response: UserByUserIdResult | null): HydrateResult {
+    if (!response) {
+      return {
+        ok: false,
+        status: 'not_found',
+        userId: null,
+      };
     }
 
+    const ok = applyUserSession(response);
+    if (ok) {
+      return {
+        ok: true,
+        status: response.status,
+        userId: response.userId,
+      };
+    }
+
+    clearRuntimeSession();
+    if (response.userId) {
+      userId.value = response.userId;
+      setLocalStorage('userId', response.userId);
+    }
+
+    return {
+      ok: false,
+      status: response.status,
+      userId: response.userId,
+    };
+  }
+
+  async function runAuthTask<T>(task: () => Promise<T>): Promise<T> {
     isLoading.value = true;
+    const promise = task();
+    setAuthRequestGate(promise);
+
     try {
-      const response = await getUserByUserId(targetUserId);
-      return response.data ? applyUserSession(response.data) : false;
-    } catch {
-      return false;
+      return await promise;
     } finally {
       isLoading.value = false;
+      setAuthRequestGate(null);
     }
   }
 
-  async function hydrateUserByPhone(phone: string): Promise<boolean> {
+  async function hydrateUser(targetUserId = userId.value): Promise<HydrateResult> {
+    if (!targetUserId) {
+      return { ok: false, status: 'not_found', userId: null };
+    }
+
+    return runAuthTask(async () => {
+      try {
+        const response = await getUserByUserId(targetUserId);
+        return finalizeHydration(response.data);
+      } catch {
+        return { ok: false, status: 'error', userId: targetUserId };
+      }
+    });
+  }
+
+  async function hydrateUserByPhone(phone: string): Promise<HydrateResult> {
     const normalizedPhone = phone.replace(/[^\d]/g, '');
     if (!normalizedPhone) {
-      return false;
+      return { ok: false, status: 'not_found', userId: null };
     }
 
-    isLoading.value = true;
-    try {
-      const response = await getUserByPhone(normalizedPhone);
-      if (!response.data) {
-        return false;
+    return runAuthTask(async () => {
+      try {
+        const response = await getUserByPhone(normalizedPhone);
+        return finalizeHydration(response.data);
+      } catch {
+        return { ok: false, status: 'error', userId: null };
       }
-
-      const ok = applyUserSession(response.data);
-      if (ok) {
-        storeUserId(response.data.userId);
-      }
-      return ok;
-    } catch {
-      return false;
-    } finally {
-      isLoading.value = false;
-    }
+    });
   }
 
   async function restoreAuth(): Promise<boolean> {
-    if (!userId.value) {
-      redirectToLogin('required');
-      return false;
+    if (restorePromise) {
+      return restorePromise;
     }
 
-    const ok = await hydrateUser(userId.value);
-    if (!ok) {
+    isRestoring.value = true;
+    restorePromise = (async () => {
+      if (!userId.value) {
+        redirectToLogin('required');
+        return false;
+      }
+
+      const result = await hydrateUser(userId.value);
+      if (result.ok) {
+        return true;
+      }
+
+      if (result.status === 'expired' || result.status === 'refreshing') {
+        clearRuntimeSession();
+        redirectToLogin('expired');
+        return false;
+      }
+
       clearSession();
       redirectToLogin('required');
-    }
+      return false;
+    })();
 
-    return ok;
+    try {
+      return await restorePromise;
+    } finally {
+      restorePromise = null;
+      isRestoring.value = false;
+    }
   }
 
   function storeUserId(nextUserId: string): void {
@@ -92,11 +170,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function clearSession(): void {
+    clearRuntimeSession();
     userId.value = null;
-    userInfo.value = null;
     removeLocalStorage('userId');
-    clearSessionCache();
-    clearGzdataToken();
   }
 
   function redirectToLogin(reason: 'required' | 'expired' = 'required'): void {
@@ -110,8 +186,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function handleTokenExpired(): void {
-    userInfo.value = null;
-    clearGzdataToken();
+    clearRuntimeSession();
     redirectToLogin('expired');
   }
 
@@ -124,6 +199,7 @@ export const useAuthStore = defineStore('auth', () => {
     userId,
     userInfo,
     isLoading,
+    isRestoring,
     isAuthenticated,
     hydrateUser,
     hydrateUserByPhone,

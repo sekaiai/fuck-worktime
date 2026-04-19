@@ -34,28 +34,29 @@ const heroTitle = computed(() => {
   }
 
   return route.query.reason === 'expired'
-    ? '会话已失效，请重新校验身份。'
-    : '进入工时控制台前，先完成一次身份校验。';
+    ? '登录信息已失效'
+    : '进入云上工时前，先完成身份校验';
 });
 
 const heroCopy = computed(() => {
   if (showInstallGuide.value) {
-    return '手机浏览器里不能直接登录。先安装到桌面，再从应用进入。';
+    return '手机浏览器不提供登录入口，先安装为 PWA 应用。';
   }
 
   if (isPhoneLoginMode.value) {
-    return 'PWA 端默认通过手机号恢复已保存的登录数据，不再展示扫码流程。';
+    return 'PWA 端通过手机号查找已保存的登录记录，最终仍以用户资料返回的 userId 作为本地标识。';
   }
 
   return loginState.value === 'auto_login'
-    ? '系统正在尝试复用已保存的钉钉授权，成功后会自动恢复用户资料并跳转。'
-    : '使用钉钉扫码后，系统会自动换取 gzdata token，并恢复你本周的填报数据。';
+    ? '系统正在复用网页端已有的钉钉授权，成功后会直接恢复登录。'
+    : '使用钉钉扫码完成授权，系统会自动换取工时系统 token 并恢复会话。';
 });
 
 const accessModeLabel = computed(() => {
   if (showInstallGuide.value) {
     return '安装 PWA';
   }
+
   return isPhoneLoginMode.value ? '手机号恢复' : '钉钉扫码授权';
 });
 
@@ -63,6 +64,7 @@ const cardTitle = computed(() => {
   if (showInstallGuide.value) {
     return '安装指引';
   }
+
   return isPhoneLoginMode.value ? '手机号登录' : '扫码登录';
 });
 
@@ -70,6 +72,7 @@ const statusLabel = computed(() => {
   if (showInstallGuide.value) {
     return '';
   }
+
   if (status.value === 'loading') {
     return isPhoneLoginMode.value ? '待输入' : '准备中';
   }
@@ -87,7 +90,7 @@ const statusLabel = computed(() => {
 
 const hintText = computed(() => {
   if (showInstallGuide.value) {
-    return '安装后从桌面图标打开，再用手机号登录。';
+    return '安装后从桌面图标打开，再进入登录流程。';
   }
 
   if (isLoading.value || status.value === 'success') {
@@ -98,12 +101,17 @@ const hintText = computed(() => {
     if (status.value === 'error') {
       return message.value || '请输入手机号后重试。';
     }
-    return '请输入你在 gzdata 中绑定的手机号，系统会直接恢复已保存的登录数据。';
+
+    if (route.query.reason === 'expired') {
+      return '如果提示已失效，请回到网页端重新扫码登录。';
+    }
+
+    return '请输入在工时系统中绑定的手机号，系统会先取用户资料，再决定最终使用的 userId。';
   }
 
   if (status.value === 'waiting') {
     return loginState.value === 'auto_login'
-      ? '系统正在复用钉钉登录状态，授权成功后会自动跳转。'
+      ? '系统正在复用当前钉钉登录状态，授权成功后会自动跳转。'
       : '请使用钉钉扫码完成授权，成功后会自动恢复数据。';
   }
 
@@ -128,16 +136,18 @@ function clearTimer(): void {
 }
 
 async function finishLogin(targetUserId: string): Promise<void> {
-  authStore.storeUserId(targetUserId);
-  const ok = await authStore.hydrateUser(targetUserId);
-  if (ok) {
+  const result = await authStore.hydrateUser(targetUserId);
+  if (result.ok) {
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
     await router.replace(redirect);
     return;
   }
 
   status.value = 'error';
-  message.value = '获取用户信息失败，请重新登录。';
+  message.value =
+    result.status === 'expired' || result.status === 'refreshing'
+      ? '登录信息已失效，请在网页端重新登录。'
+      : '获取用户信息失败，请重新登录。';
 }
 
 async function startPolling(): Promise<void> {
@@ -209,9 +219,14 @@ async function submitPhoneLogin(): Promise<void> {
   status.value = 'waiting';
   message.value = '';
 
-  const ok = await authStore.hydrateUserByPhone(normalizedPhone);
-  if (!ok) {
+  const result = await authStore.hydrateUserByPhone(normalizedPhone);
+  if (!result.ok) {
     status.value = 'error';
+    if (result.status === 'expired' || result.status === 'refreshing') {
+      message.value = '登录信息已失效，请在网页端重新登录。';
+      return;
+    }
+
     message.value = '未找到该手机号的登录数据，请先在网页上扫码登录。';
     return;
   }
@@ -237,31 +252,30 @@ onUnmounted(() => {
       <p v-if="showHeroEyebrow" class="login-page__eyebrow">DingTalk Gateway</p>
       <h1 class="login-page__title">{{ heroTitle }}</h1>
       <p class="login-page__copy">{{ heroCopy }}</p>
-
     </section>
 
     <section class="login-card">
       <div class="login-card__header">
         <div>
-          <p class="login-card__eyebrow">Identity Checkpoint</p>
+          <p class="login-card__eyebrow">{{ accessModeLabel }}</p>
           <h2 class="login-card__title">{{ cardTitle }}</h2>
         </div>
-        <span class="login-card__badge" :class="`is-${status}`" v-if="statusLabel">{{ statusLabel }}</span>
+        <span v-if="statusLabel" class="login-card__badge" :class="`is-${status}`">{{ statusLabel }}</span>
       </div>
 
       <div v-if="showInstallGuide" class="install-guide">
         <div class="install-guide__steps">
           <article class="install-guide__step">
-            <strong>1.浏览器菜单</strong>
-            <p>打开右上或底部分享按钮。</p>
+            <strong>1. 打开菜单</strong>
+            <p>点击浏览器右上角或底部分享菜单。</p>
           </article>
           <article class="install-guide__step">
-            <strong>2.添加到桌面</strong>
+            <strong>2. 添加到桌面</strong>
             <p>选择“安装应用”或“添加到主屏幕”。</p>
           </article>
           <article class="install-guide__step">
-            <strong>3.从桌面打开</strong>
-            <p>回到应用内再登录。</p>
+            <strong>3. 从桌面进入</strong>
+            <p>安装完成后从应用图标打开。</p>
           </article>
         </div>
       </div>
@@ -282,7 +296,7 @@ onUnmounted(() => {
         </label>
 
         <button class="login-card__button" type="button" :disabled="isLoading" @click="submitPhoneLogin">
-          {{ isLoading ? '登录中...' : '手机号登录' }}
+          {{ isLoading ? '处理中...' : '手机号登录' }}
         </button>
       </div>
 
@@ -317,7 +331,7 @@ onUnmounted(() => {
   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 420px);
   gap: 1.2rem;
   align-items: stretch;
-          box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 .login-page__hero,
@@ -330,8 +344,6 @@ onUnmounted(() => {
   box-shadow: 0 28px 60px rgba(20, 41, 44, 0.12);
   backdrop-filter: blur(16px);
 }
-
-
 
 .login-page__hero {
   display: grid;
@@ -366,8 +378,6 @@ onUnmounted(() => {
   font-size: 1.04rem;
   line-height: 1.75;
 }
-
-
 
 .login-card {
   display: grid;

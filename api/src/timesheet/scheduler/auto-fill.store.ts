@@ -62,6 +62,7 @@ export class AutoFillStore {
             dingtalkCookies: existing?.dingtalkCookies ?? {},
             updatedAt: existing?.updatedAt ?? new Date().toISOString(),
             autoFill: config,
+            status: existing?.status ?? (existing?.token ? 'logged_in' : 'expired'),
           };
         } catch (error) {
           this.logger.error(`Failed to migrate legacy auto-fill file ${entry.name}`, error);

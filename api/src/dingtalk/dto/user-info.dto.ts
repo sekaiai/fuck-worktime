@@ -10,11 +10,14 @@ export class GetUserByPhoneQueryDto {
   phone!: string;
 }
 
+export type DingtalkLoginStatus = 'logged_in' | 'refreshing' | 'expired';
+
 export interface UserInfoData {
   userId: string;
-  token: string;
+  token: string | null;
   nickname: string;
   phone: string;
   department: string;
   updatedAt: string;
+  status: DingtalkLoginStatus;
 }

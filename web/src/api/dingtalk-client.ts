@@ -12,13 +12,16 @@ export interface LoginStatusResult {
   token?: string | null;
 }
 
+export type UserLoginStatus = 'logged_in' | 'refreshing' | 'expired';
+
 export interface UserByUserIdResult {
   userId: string;
-  token: string;
+  token: string | null;
   nickname: string;
   phone: string;
   department: string;
   updatedAt: string;
+  status: UserLoginStatus;
 }
 
 export async function getQrcode(): Promise<QrcodeResult> {
