@@ -68,7 +68,7 @@ export class DingtalkService {
       // ============================================
       this.logger.log('[步骤1] 启动浏览器');
       browser = await chromium.launch({
-        headless: false,
+        headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -452,7 +452,7 @@ export class DingtalkService {
 
     try {
       browser = await chromium.launch({
-        headless: false,
+        headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',

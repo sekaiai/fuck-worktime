@@ -441,10 +441,6 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
     flex-direction: column;
   }
 
-  .board-panel__header {
-    margin-left: 8px;
-  }
-
   .board-panel__summary-strip {
     margin-left: 14px;
   }
@@ -467,6 +463,7 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
   .board-panel__header,
   .board-panel__toolbar {
     gap: 0.5rem;
+    margin-left: 8px;
   }
 
   .board-panel__eyebrow {
