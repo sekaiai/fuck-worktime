@@ -202,6 +202,10 @@ function normalizeWeekDay(day: unknown): WeekDay {
     dayOfWeek: toStringValue(record.dayOfWeek ?? record.weekDay ?? record.weekName, getWeekdayLabel(date)),
     isWeekend: Boolean(record.isWeekend),
     status: toStringValue(record.status ?? record.statusDesc ?? '未提交'),
+    displayStatus: toStringValue(
+      record.displayStatus ?? record.statusDesc ?? record.statusLabel ?? record.status,
+      '',
+    ),
     totalHours,
     details,
   };

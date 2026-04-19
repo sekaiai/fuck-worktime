@@ -3,6 +3,7 @@ export interface WeekDay {
   dayOfWeek: string;
   isWeekend: boolean;
   status: string;
+  displayStatus: string;
   totalHours: number;
   details: WorkDetail[];
 }
