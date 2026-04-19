@@ -1,14 +1,10 @@
 <script setup lang="ts">
-import type { UserInfo } from '../../types/user';
+import { storeToRefs } from 'pinia';
 
-defineProps<{
-  userInfo: UserInfo | null;
-  isLoading: boolean;
-}>();
+import { useAuthStore } from '../../stores/auth';
 
-defineEmits<{
-  logout: [];
-}>();
+const authStore = useAuthStore();
+const { userInfo, isLoading } = storeToRefs(authStore);
 </script>
 
 <template>
@@ -32,7 +28,7 @@ defineEmits<{
         </article>
       </div>
 
-      <button class="user-panel__logout" type="button" @click="$emit('logout')">退出登录</button>
+      <button class="user-panel__logout" type="button" @click="authStore.logout()">退出登录</button>
     </div>
     <div v-else class="user-panel__loading">当前没有可用登录态。</div>
   </section>
@@ -50,15 +46,6 @@ defineEmits<{
     radial-gradient(circle at right top, rgba(208, 147, 62, 0.22), transparent 34%);
   color: rgba(255, 248, 238, 0.92);
   box-shadow: 0 24px 44px rgba(20, 41, 44, 0.16);
-}
-
-.user-panel::before {
-  content: '';
-  position: absolute;
-  inset: 1rem;
-  border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  pointer-events: none;
 }
 
 .user-panel__content {

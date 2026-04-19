@@ -1,331 +1,86 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, shallowRef, watch } from 'vue';
+import { computed } from 'vue';
+import { storeToRefs } from 'pinia';
 
-import { buildBatchPayload, generateContent, submitBatch } from '../../api/timesheet-client';
 import InlineToast from '../common/InlineToast.vue';
 import ResultDialog from '../common/ResultDialog.vue';
-import type { Project, TimesheetEntry, WeekDay, WorkTypeNode } from '../../types/timesheet';
+import { useHomeStore } from '../../stores/home';
 import { formatDisplayDate } from '../../utils/date';
-import { buildWorkTypeGroups, findWorkTypeById } from '../../utils/work-types';
 
-const props = defineProps<{
-  visible: boolean;
-  fillableDays: WeekDay[];
-  projects: Project[];
-  isProjectsLoading: boolean;
-  recommendedDaysToGenerate?: number | null;
-  preferredReportDate?: string | null;
-  preferredStep?: 1 | 2 | 3;
-  loadProjects: () => Promise<void>;
-  loadWorkTypes: (projectId: string) => Promise<WorkTypeNode[]>;
-}>();
+const homeStore = useHomeStore();
+const {
+  isManualFillVisible,
+  projects,
+  isProjectsLoading,
+  manualProjectId,
+  manualWorkTypeGroupId,
+  manualWorkTypeId,
+  manualHours,
+  manualWork,
+  manualDaysToGenerate,
+  manualEntries,
+  isGenerating,
+  isSubmitting,
+  manualToastMessage,
+  manualResultDialog,
+  manualCurrentStep,
+  compactReviewMode,
+  manualMaxFillDays,
+  sortedFillableDays,
+  manualWorkTypeGroups,
+  manualSelectedWorkType,
+  manualAvailableWorkTypes,
+  manualPreviewDates,
+} = storeToRefs(homeStore);
 
-const emit = defineEmits<{
-  close: [];
-  submitted: [];
-}>();
-
-const workTypes = shallowRef<WorkTypeNode[]>([]);
-const projectId = shallowRef('');
-const workTypeGroupId = shallowRef('');
-const workTypeId = shallowRef('');
-const hours = shallowRef(8);
-const work = shallowRef('');
-const daysToGenerate = shallowRef(0);
-const entries = shallowRef<TimesheetEntry[]>([]);
-const isGenerating = shallowRef(false);
-const isSubmitting = shallowRef(false);
-const toastMessage = shallowRef('');
-const resultDialog = ref<{ open: boolean; title: string; message: string }>({
-  open: false,
-  title: '',
-  message: '',
-});
-const currentStep = shallowRef<1 | 2 | 3>(1);
-const compactReviewMode = shallowRef(true);
-const projectSelectRef = ref<HTMLSelectElement | null>(null);
-
-const maxFillDays = computed(() => props.fillableDays.length);
-const sortedFillableDays = computed(() =>
-  [...props.fillableDays].sort((left, right) => left.date.localeCompare(right.date)),
-);
-const selectedProject = computed(() => props.projects.find((project) => project.id === projectId.value) ?? null);
-const workTypeGroups = computed(() => buildWorkTypeGroups(workTypes.value));
-const selectedWorkType = computed(() => findWorkTypeById(workTypeGroups.value, workTypeId.value));
-const availableWorkTypes = computed(
-  () => workTypeGroups.value.find((group) => group.id === workTypeGroupId.value)?.children ?? [],
-);
 const stepSummary = computed(() => {
-  if (currentStep.value === 1) {
+  if (manualCurrentStep.value === 1) {
     return '先选择项目、工时类型和要补填的天数。';
   }
-  if (currentStep.value === 2) {
+  if (manualCurrentStep.value === 2) {
     return '输入工作内容主题，系统会按天生成可提交描述。';
   }
-  const totalEntryHours = entries.value.reduce((sum, entry) => sum + entry.hours, 0);
-  return `本次共 ${entries.value.length} 条记录，预计提交 ${totalEntryHours} 小时。`;
+  const totalEntryHours = manualEntries.value.reduce((sum, entry) => sum + entry.hours, 0);
+  return `本次共 ${manualEntries.value.length} 条记录，预计提交 ${totalEntryHours} 小时。`;
 });
-const previewDates = computed(() => sortedFillableDays.value.slice(0, 5));
-
-watch(
-  () => props.visible,
-  async (visible) => {
-    if (!visible) {
-      return;
-    }
-
-    currentStep.value = props.preferredStep ?? 1;
-
-    if (props.projects.length === 0) {
-      try {
-        await props.loadProjects();
-      } catch (error) {
-        showToast(error instanceof Error ? error.message : '获取项目列表失败。');
-      }
-    }
-
-    if (currentStep.value > 1 && !isStepTwoReady()) {
-      currentStep.value = 1;
-      showToast('请先在第 1 步选择项目和二级工时类型，再继续快速补填。');
-      await nextTick();
-      projectSelectRef.value?.focus();
-      return;
-    }
-
-    if (currentStep.value === 2 && !work.value.trim()) {
-      showToast('请填写工作内容后再继续。');
-    }
-  },
-);
-
-watch(
-  () => props.recommendedDaysToGenerate,
-  (recommended) => {
-    if (!recommended || recommended <= 0) {
-      return;
-    }
-
-    daysToGenerate.value = Math.min(recommended, maxFillDays.value || 1);
-  },
-);
-
-watch(
-  () => props.fillableDays,
-  (days) => {
-    if (daysToGenerate.value === 0 || daysToGenerate.value > days.length) {
-      daysToGenerate.value = days.length;
-    }
-
-    if (days.length === 0) {
-      entries.value = [];
-    }
-  },
-  { immediate: true },
-);
-
-function resetEntries(): void {
-  entries.value = [];
-}
-
-function closePanel(): void {
-  resultDialog.value = { ...resultDialog.value, open: false };
-  currentStep.value = 1;
-  emit('close');
-}
-
-function closeResultDialog(): void {
-  resultDialog.value = { ...resultDialog.value, open: false };
-}
-
-function showToast(message: string): void {
-  toastMessage.value = message;
-  window.clearTimeout((showToast as typeof showToast & { timer?: number }).timer);
-  (showToast as typeof showToast & { timer?: number }).timer = window.setTimeout(() => {
-    toastMessage.value = '';
-  }, 2600);
-}
-
-async function handleProjectChange(nextProjectId: string): Promise<void> {
-  projectId.value = nextProjectId;
-  workTypeGroupId.value = '';
-  workTypeId.value = '';
-  resetEntries();
-
-  try {
-    workTypes.value = await props.loadWorkTypes(nextProjectId);
-  } catch (error) {
-    workTypes.value = [];
-    showToast(error instanceof Error ? error.message : '获取工时类型失败。');
-  }
-}
-
-function handleWorkTypeGroupChange(nextGroupId: string): void {
-  workTypeGroupId.value = nextGroupId;
-  workTypeId.value = '';
-  resetEntries();
-}
-
-function handleWorkTypeChange(nextWorkTypeId: string): void {
-  workTypeId.value = nextWorkTypeId;
-  resetEntries();
-}
-
-async function handleGenerate(): Promise<void> {
-  const project = selectedProject.value;
-  const workType = selectedWorkType.value;
-
-  if (!project || !workType) {
-    showToast('请选择项目和二级工时类型。');
-    return;
-  }
-  if (!work.value.trim()) {
-    showToast('请先填写工作内容。');
-    return;
-  }
-  if (daysToGenerate.value <= 0) {
-    showToast('生成天数至少为 1。');
-    return;
-  }
-  if (daysToGenerate.value > maxFillDays.value) {
-    showToast('生成天数不能超过当前可补填的未填天数。');
-    return;
-  }
-
-  isGenerating.value = true;
-  try {
-    const contents = await generateContent(work.value.trim(), daysToGenerate.value);
-    const preferredDays =
-      daysToGenerate.value === 1 && props.preferredReportDate
-        ? sortedFillableDays.value.filter((day) => day.date === props.preferredReportDate).slice(0, 1)
-        : [];
-    const targetDays =
-      preferredDays.length > 0
-        ? preferredDays
-        : sortedFillableDays.value.slice(0, daysToGenerate.value);
-    entries.value = targetDays.map((day, index) => ({
-      reportDate: day.date,
-      projectId: project.id,
-      projectTitle: project.title,
-      projectStatus: project.status,
-      itemId: workType.id,
-      itemName: workType.name,
-      content: contents[index] ?? '日常工作处理',
-      hours: hours.value,
-    }));
-    currentStep.value = 3;
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '生成工时失败。');
-  } finally {
-    isGenerating.value = false;
-  }
-}
-
-function goToStep(step: 1 | 2 | 3): void {
-  if (step === 3 && entries.value.length === 0) {
-    showToast('请先生成工时列表。');
-    return;
-  }
-
-  currentStep.value = step;
-}
-
-function isStepTwoReady(): boolean {
-  return Boolean(projectId.value && workTypeId.value);
-}
-
-function updateEntry(index: number, patch: Partial<TimesheetEntry>): void {
-  const nextEntries = [...entries.value];
-  nextEntries[index] = {
-    ...nextEntries[index],
-    ...patch,
-  };
-  entries.value = nextEntries;
-}
-
-function updateEntryDate(index: number, nextDate: string): void {
-  const fillableDateSet = new Set(props.fillableDays.map((day) => day.date));
-  const duplicated = entries.value.some((entry, entryIndex) => entryIndex !== index && entry.reportDate === nextDate);
-  if (!fillableDateSet.has(nextDate) || duplicated) {
-    showToast('日期只能选择当前可补填日期，且不能重复。');
-    return;
-  }
-
-  updateEntry(index, { reportDate: nextDate });
-}
-
-function updateEntryContent(index: number, nextValue: string): void {
-  updateEntry(index, { content: nextValue });
-}
-
-function updateEntryHours(index: number, nextValue: number): void {
-  const safeHours = Number.isFinite(nextValue) && nextValue > 0 ? nextValue : 1;
-  updateEntry(index, { hours: safeHours });
-}
-
-async function handleSubmit(): Promise<void> {
-  if (entries.value.length === 0) {
-    showToast('请先生成工时列表。');
-    return;
-  }
-
-  isSubmitting.value = true;
-  try {
-    const result = await submitBatch(buildBatchPayload(entries.value));
-    resultDialog.value = {
-      open: true,
-      title: result.code === 200 ? '提交结果' : '提交失败',
-      message: result.msg,
-    };
-    if (result.code === 200) {
-      resetEntries();
-      emit('submitted');
-    }
-  } catch (error) {
-    resultDialog.value = {
-      open: true,
-      title: '提交失败',
-      message: error instanceof Error ? error.message : '提交工时失败。',
-    };
-  } finally {
-    isSubmitting.value = false;
-  }
-}
 </script>
 
 <template>
-  <section v-if="visible" class="manual-panel">
+  <section v-if="isManualFillVisible" class="manual-panel">
     <header class="manual-panel__header">
       <div>
         <p class="manual-panel__eyebrow">Manual Fill</p>
         <h2 class="manual-panel__title">批量补填未提交工时</h2>
       </div>
-      <button class="manual-panel__close" type="button" @click="closePanel">收起</button>
+      <button class="manual-panel__close" type="button" @click="homeStore.closeManualFill()">收起</button>
     </header>
 
-    <div v-if="maxFillDays === 0" class="manual-panel__state">当前这周没有可补填的工作日。</div>
+    <div v-if="manualMaxFillDays === 0" class="manual-panel__state">当前这周没有可补填的工作日。</div>
     <template v-else>
       <div class="manual-panel__intro">
         <p class="manual-panel__copy">{{ stepSummary }}</p>
         <div class="manual-panel__dates">
           <span>待处理日期</span>
-          <strong v-for="day in previewDates" :key="day.date">{{ formatDisplayDate(day.date) }}</strong>
+          <strong v-for="day in manualPreviewDates" :key="day.date">{{ formatDisplayDate(day.date) }}</strong>
         </div>
       </div>
 
       <div class="manual-panel__stepper">
-        <button type="button" :class="{ active: currentStep === 1 }" @click="goToStep(1)">1. 选择类型</button>
-        <button type="button" :class="{ active: currentStep === 2 }" @click="goToStep(2)">2. 生成内容</button>
-        <button type="button" :class="{ active: currentStep === 3 }" @click="goToStep(3)">3. 校对提交</button>
+        <button type="button" :class="{ active: manualCurrentStep === 1 }" @click="homeStore.setManualCurrentStep(1)">
+          1. 选择类型
+        </button>
+        <button type="button" :class="{ active: manualCurrentStep === 2 }" @click="homeStore.setManualCurrentStep(2)">
+          2. 生成内容
+        </button>
+        <button type="button" :class="{ active: manualCurrentStep === 3 }" @click="homeStore.setManualCurrentStep(3)">
+          3. 核对提交
+        </button>
       </div>
 
-      <div v-show="currentStep === 1" class="manual-panel__form">
+      <div v-show="manualCurrentStep === 1" class="manual-panel__form">
         <label>
           <span>项目</span>
-          <select
-            ref="projectSelectRef"
-            :value="projectId"
-            @change="handleProjectChange(($event.target as HTMLSelectElement).value)"
-          >
+          <select :value="manualProjectId" @change="homeStore.setManualProject(($event.target as HTMLSelectElement).value)">
             <option value="">请选择项目</option>
             <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.title }}</option>
           </select>
@@ -334,73 +89,97 @@ async function handleSubmit(): Promise<void> {
         <label>
           <span>一级工时类型</span>
           <select
-            :value="workTypeGroupId"
-            :disabled="workTypeGroups.length === 0"
-            @change="handleWorkTypeGroupChange(($event.target as HTMLSelectElement).value)"
+            :value="manualWorkTypeGroupId"
+            :disabled="manualWorkTypeGroups.length === 0"
+            @change="homeStore.setManualWorkTypeGroup(($event.target as HTMLSelectElement).value)"
           >
             <option value="">请选择一级类型</option>
-            <option v-for="group in workTypeGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
+            <option v-for="group in manualWorkTypeGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
           </select>
         </label>
 
         <label>
           <span>二级工时类型</span>
           <select
-            :value="workTypeId"
-            :disabled="availableWorkTypes.length === 0"
-            @change="handleWorkTypeChange(($event.target as HTMLSelectElement).value)"
+            :value="manualWorkTypeId"
+            :disabled="manualAvailableWorkTypes.length === 0"
+            @change="homeStore.setManualWorkType(($event.target as HTMLSelectElement).value)"
           >
             <option value="">请选择二级类型</option>
-            <option v-for="item in availableWorkTypes" :key="item.id" :value="item.id">{{ item.name }}</option>
+            <option v-for="item in manualAvailableWorkTypes" :key="item.id" :value="item.id">{{ item.name }}</option>
           </select>
         </label>
 
         <label>
           <span>工时</span>
-          <input v-model.number="hours" type="number" min="1" max="24" />
+          <input
+            :value="manualHours"
+            type="number"
+            min="1"
+            max="24"
+            @input="homeStore.setManualHours(Number(($event.target as HTMLInputElement).value))"
+          />
         </label>
 
         <label>
           <span>生成天数</span>
-          <input v-model.number="daysToGenerate" type="number" min="1" :max="maxFillDays" />
+          <input
+            :value="manualDaysToGenerate"
+            type="number"
+            min="1"
+            :max="manualMaxFillDays"
+            @input="homeStore.setManualDaysToGenerate(Number(($event.target as HTMLInputElement).value))"
+          />
         </label>
       </div>
 
-      <label v-show="currentStep === 2" class="manual-panel__block-field">
+      <label v-show="manualCurrentStep === 2" class="manual-panel__block-field">
         <span>工作内容主题</span>
         <textarea
-          v-model="work"
+          :value="manualWork"
           rows="4"
           placeholder="输入工作内容主题，系统会为每一天生成适合提交的描述。"
+          @input="homeStore.setManualWork(($event.target as HTMLTextAreaElement).value)"
         />
       </label>
 
-      <p v-show="currentStep === 2 && daysToGenerate > maxFillDays" class="manual-panel__warning">
+      <p v-show="manualCurrentStep === 2 && manualDaysToGenerate > manualMaxFillDays" class="manual-panel__warning">
         生成天数不能超过当前可补填的未填天数。
       </p>
 
-      <div v-show="currentStep === 2" class="manual-panel__inline-actions">
+      <div v-show="manualCurrentStep === 2" class="manual-panel__inline-actions">
         <button
           class="manual-panel__primary"
           type="button"
           :disabled="isGenerating || isProjectsLoading"
-          @click="handleGenerate"
+          @click="homeStore.generateManualEntries()"
         >
           {{ isGenerating ? '生成中...' : '生成工时描述' }}
         </button>
         <span v-if="isProjectsLoading" class="manual-panel__helper">正在获取项目列表...</span>
       </div>
 
-      <div v-show="currentStep === 3 && entries.length > 0" class="manual-panel__entry-list">
+      <div v-show="manualCurrentStep === 3 && manualEntries.length > 0" class="manual-panel__entry-list">
         <label class="manual-panel__compact-switch">
-          <input v-model="compactReviewMode" type="checkbox" />
+          <input
+            :checked="compactReviewMode"
+            type="checkbox"
+            @change="homeStore.setCompactReviewMode(($event.target as HTMLInputElement).checked)"
+          />
           <span>简化校对模式，仅检查日期与摘要</span>
         </label>
 
-        <article v-for="(entry, index) in entries" :key="`${entry.reportDate}-${index}`" class="manual-panel__entry-card">
+        <article
+          v-for="(entry, index) in manualEntries"
+          :key="`${entry.reportDate}-${index}`"
+          class="manual-panel__entry-card"
+        >
           <label>
             <span>日期</span>
-            <select :value="entry.reportDate" @change="updateEntryDate(index, ($event.target as HTMLSelectElement).value)">
+            <select
+              :value="entry.reportDate"
+              @change="homeStore.updateManualEntryDate(index, ($event.target as HTMLSelectElement).value)"
+            >
               <option v-for="day in sortedFillableDays" :key="day.date" :value="day.date">
                 {{ formatDisplayDate(day.date) }}
               </option>
@@ -412,11 +191,11 @@ async function handleSubmit(): Promise<void> {
           </label>
           <label>
             <span>工时类型</span>
-            <input :value="entry.itemName || selectedWorkType?.name || ''" disabled />
+            <input :value="entry.itemName || manualSelectedWorkType?.name || ''" disabled />
           </label>
 
           <template v-if="compactReviewMode">
-            <p class="manual-panel__entry-summary">{{ entry.hours }}h · {{ entry.content }}</p>
+            <p class="manual-panel__entry-summary">{{ entry.hours }}h / {{ entry.content }}</p>
           </template>
           <template v-else>
             <label>
@@ -426,7 +205,7 @@ async function handleSubmit(): Promise<void> {
                 type="number"
                 min="1"
                 max="24"
-                @input="updateEntryHours(index, Number(($event.target as HTMLInputElement).value))"
+                @input="homeStore.updateManualEntryHours(index, Number(($event.target as HTMLInputElement).value))"
               />
             </label>
             <label class="manual-panel__entry-content">
@@ -434,13 +213,13 @@ async function handleSubmit(): Promise<void> {
               <textarea
                 :value="entry.content"
                 rows="3"
-                @input="updateEntryContent(index, ($event.target as HTMLTextAreaElement).value)"
+                @input="homeStore.updateManualEntryContent(index, ($event.target as HTMLTextAreaElement).value)"
               />
             </label>
           </template>
         </article>
 
-        <button class="manual-panel__primary" type="button" :disabled="isSubmitting" @click="handleSubmit">
+        <button class="manual-panel__primary" type="button" :disabled="isSubmitting" @click="homeStore.submitManualEntries()">
           {{ isSubmitting ? '提交中...' : '提交补填工时' }}
         </button>
       </div>
@@ -449,28 +228,28 @@ async function handleSubmit(): Promise<void> {
         <button
           class="manual-panel__secondary"
           type="button"
-          :disabled="currentStep === 1"
-          @click="goToStep((currentStep - 1) as 1 | 2 | 3)"
+          :disabled="manualCurrentStep === 1"
+          @click="homeStore.setManualCurrentStep((manualCurrentStep - 1) as 1 | 2 | 3)"
         >
           上一步
         </button>
         <button
           class="manual-panel__primary"
           type="button"
-          :disabled="currentStep === 3"
-          @click="goToStep((currentStep + 1) as 1 | 2 | 3)"
+          :disabled="manualCurrentStep === 3"
+          @click="homeStore.setManualCurrentStep((manualCurrentStep + 1) as 1 | 2 | 3)"
         >
           下一步
         </button>
       </div>
     </template>
 
-    <InlineToast :message="toastMessage" />
+    <InlineToast :message="manualToastMessage" />
     <ResultDialog
-      :open="resultDialog.open"
-      :title="resultDialog.title"
-      :message="resultDialog.message"
-      @close="closeResultDialog"
+      :open="manualResultDialog.open"
+      :title="manualResultDialog.title"
+      :message="manualResultDialog.message"
+      @close="homeStore.closeManualResultDialog()"
     />
   </section>
 </template>

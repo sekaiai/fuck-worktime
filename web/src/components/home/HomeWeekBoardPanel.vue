@@ -1,53 +1,34 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from 'vue';
+import { computed } from 'vue';
+import { storeToRefs } from 'pinia';
 
-import type { WeekBoardResponse, WeekDay, WorkDetail } from '../../types/timesheet';
+import type { WeekDay, WorkDetail } from '../../types/timesheet';
+import { useHomeStore } from '../../stores/home';
 import { formatDisplayDate, getTodayKey } from '../../utils/date';
 
-const props = defineProps<{
-  board: WeekBoardResponse | null;
-  isLoading: boolean;
-  errorMessage: string;
-  weekTitle: string;
-  weekRange: string;
-  totalHours: number;
-  workDays: number;
-  averageHours: number;
-  fillableCount: number;
-  isCurrentWeek: boolean;
-}>();
-
-const emit = defineEmits<{
-  previousWeek: [];
-  currentWeek: [];
-  nextWeek: [];
-  openManualFill: [];
-}>();
-
-const selectedDayDate = shallowRef('');
+const homeStore = useHomeStore();
+const {
+  board,
+  isWeekLoading,
+  errorMessage,
+  weekTitle,
+  weekRange,
+  totalHours,
+  workDays,
+  averageHours,
+  fillableDays,
+  isCurrentWeek,
+  selectedDayDate,
+  selectedDay,
+  days,
+} = storeToRefs(homeStore);
 const todayKey = getTodayKey();
 
-const days = computed(() => props.board?.days ?? []);
-const selectedDay = computed(() => days.value.find((day) => day.date === selectedDayDate.value) ?? null);
 const summaryItems = computed(() => [
-  { label: '总工时', value: `${props.totalHours} h` },
-  { label: '工作日', value: `${props.workDays} 天` },
-  { label: '日均投入', value: `${props.averageHours} h` },
+  { label: '总工时', value: `${totalHours.value} h` },
+  { label: '工作日', value: `${workDays.value} 天` },
+  { label: '日均投入', value: `${averageHours.value} h` },
 ]);
-
-watch(
-  days,
-  (list) => {
-    const stillExists = list.some((day) => day.date === selectedDayDate.value);
-    if (stillExists) {
-      return;
-    }
-
-    const firstFilledDay = list.find((day) => canInspect(day));
-    selectedDayDate.value = firstFilledDay?.date ?? '';
-  },
-  { immediate: true },
-);
 
 function isPendingDay(day: WeekDay): boolean {
   return day.status === '未提交' && day.date <= todayKey;
@@ -85,15 +66,7 @@ function getDayHint(day: WeekDay): string {
 }
 
 function canInspect(day: WeekDay): boolean {
-  return !day.isWeekend && day.details.length > 0 && day.status !== '未提交';
-}
-
-function selectDay(day: WeekDay): void {
-  if (!canInspect(day)) {
-    return;
-  }
-
-  selectedDayDate.value = day.date;
+  return homeStore.canInspectDay(day);
 }
 
 function getDetailKey(detail: WorkDetail, index: number): string {
@@ -111,25 +84,25 @@ function getDetailKey(detail: WorkDetail, index: number): string {
       </div>
 
       <div class="board-panel__actions">
-        <button class="board-panel__ghost" type="button" :disabled="isLoading" @click="emit('previousWeek')">
+        <button class="board-panel__ghost" type="button" :disabled="isWeekLoading" @click="homeStore.switchWeek('previous')">
           上一周
         </button>
         <button
           class="board-panel__ghost"
           type="button"
-          :disabled="isLoading || isCurrentWeek"
-          @click="emit('currentWeek')"
+          :disabled="isWeekLoading || isCurrentWeek"
+          @click="homeStore.switchWeek('current')"
         >
           本周
         </button>
-        <button class="board-panel__ghost" type="button" :disabled="isLoading" @click="emit('nextWeek')">
+        <button class="board-panel__ghost" type="button" :disabled="isWeekLoading" @click="homeStore.switchWeek('next')">
           下一周
         </button>
       </div>
     </header>
 
     <div v-if="errorMessage" class="board-panel__state board-panel__state--error">{{ errorMessage }}</div>
-    <div v-else-if="isLoading && !board" class="board-panel__state">正在获取本周状态...</div>
+    <div v-else-if="isWeekLoading && !board" class="board-panel__state">正在获取本周状态...</div>
     <div v-else-if="days.length === 0" class="board-panel__state">本周暂无填报数据。</div>
     <template v-else>
       <div class="board-panel__summary">
@@ -142,12 +115,12 @@ function getDetailKey(detail: WorkDetail, index: number): string {
       <div class="board-panel__toolbar">
         <p class="board-panel__helper">点击已填报日期可查看具体内容和时间段。</p>
         <button
-          v-if="fillableCount > 0"
+          v-if="fillableDays.length > 0"
           class="board-panel__fill"
           type="button"
-          @click="emit('openManualFill')"
+          @click="homeStore.openManualFill()"
         >
-          立即处理剩余 {{ fillableCount }} 天
+          立即处理剩余 {{ fillableDays.length }} 天
         </button>
       </div>
 
@@ -158,7 +131,7 @@ function getDetailKey(detail: WorkDetail, index: number): string {
             :key="day.date"
             class="board-panel__day"
             :class="[getStateClass(day), { 'is-active': selectedDayDate === day.date, 'is-clickable': canInspect(day) }]"
-            @click="selectDay(day)"
+            @click="homeStore.selectBoardDay(day)"
           >
             <p class="board-panel__day-name">{{ day.dayOfWeek }}</p>
             <p class="board-panel__day-date">{{ formatDisplayDate(day.date) }}</p>

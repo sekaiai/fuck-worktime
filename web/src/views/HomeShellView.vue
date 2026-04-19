@@ -1,67 +1,24 @@
 <script setup lang="ts">
-import { computed, onMounted, shallowRef, watch } from 'vue';
+import { computed, onMounted } from 'vue';
+import { storeToRefs } from 'pinia';
 
 import HomeAutoFillPanel from '../components/home/HomeAutoFillPanel.vue';
 import HomeManualFillPanel from '../components/home/HomeManualFillPanel.vue';
 import HomeNotificationCard from '../components/home/HomeNotificationCard.vue';
 import HomeUserPanel from '../components/home/HomeUserPanel.vue';
 import HomeWeekBoardPanel from '../components/home/HomeWeekBoardPanel.vue';
-import { useAuthSession } from '../composables/useAuthSession';
-import { useAutoFillManager } from '../composables/useAutoFillManager';
-import { useQuickFillLauncher } from '../composables/useQuickFillLauncher';
-import { useTimesheetCatalog } from '../composables/useTimesheetCatalog';
-import { useWeekBoardData } from '../composables/useWeekBoardData';
+import { useHomeStore } from '../stores/home';
 
-const auth = useAuthSession();
-const weekBoard = useWeekBoardData();
-const catalog = useTimesheetCatalog();
-const autoFill = useAutoFillManager();
-const {
-  recommendedDaysToGenerate,
-  preferredReportDate,
-  preferredStep,
-  openManualFill: prepareManualFill,
-} = useQuickFillLauncher();
+const homeStore = useHomeStore();
+const { board, fillableDays, totalHours, weekRange, errorMessage, isCurrentWeek, autoFillStatus } =
+  storeToRefs(homeStore);
 
-const { userId, userInfo, isLoading, restoreAuth, handleTokenExpired, logout } = auth;
-const {
-  board,
-  fillableDays,
-  totalHours,
-  workDays,
-  averageHours,
-  weekTitle,
-  weekRange,
-  errorMessage,
-  errorCode,
-  isLoading: isWeekLoading,
-  isCurrentWeek,
-  loadWeek,
-  goToPreviousWeek,
-  goToNextWeek,
-  goToCurrentWeek,
-} = weekBoard;
-const { projects, isProjectsLoading, loadProjects: loadCatalogProjects, loadWorkTypes } = catalog;
-const {
-  config,
-  status,
-  isSaving,
-  isDisabling,
-  isTriggering,
-  load: loadAutoFill,
-  save: saveAutoFillConfig,
-  disable: disableAutoFillConfig,
-  trigger: triggerAutoFillConfig,
-} = autoFill;
-
-const notifyVisible = computed(() => status.value === 'enabled');
-const isManualFillVisible = shallowRef(false);
 const headline = computed(() => (isCurrentWeek.value ? '本周工时控制台' : '历史周工时归档'));
 const statusLabel = computed(() => {
-  if (status.value === 'enabled') {
+  if (autoFillStatus.value === 'enabled') {
     return '自动填报运行中';
   }
-  if (status.value === 'expired') {
+  if (autoFillStatus.value === 'expired') {
     return '自动填报已过期';
   }
   return fillableDays.value.length > 0 ? '待人工补填' : '本周记录完整';
@@ -73,7 +30,7 @@ const headlineCopy = computed(() => {
   if (fillableDays.value.length > 0) {
     return `当前仍有 ${fillableDays.value.length} 个工作日未填报，可立即进入手动补填流程。`;
   }
-  return '本周记录已齐，可以专注检查明细、维护自动填报策略和通知链路。';
+  return '本周记录已齐，可继续检查明细、维护自动填报策略和通知链路。';
 });
 const heroStats = computed(() => [
   {
@@ -94,68 +51,8 @@ const heroStats = computed(() => [
   },
 ]);
 
-watch(
-  fillableDays,
-  (days) => {
-    if (days.length === 0) {
-      isManualFillVisible.value = false;
-    }
-  },
-  { immediate: true },
-);
-
-async function refreshWeekBoard(): Promise<void> {
-  const ok = await loadWeek();
-  if (!ok && errorCode.value === 'TOKEN_EXPIRED') {
-    handleTokenExpired();
-  }
-}
-
-async function switchWeek(direction: 'previous' | 'current' | 'next'): Promise<void> {
-  const actions = {
-    previous: goToPreviousWeek,
-    current: goToCurrentWeek,
-    next: goToNextWeek,
-  } as const;
-  const ok = await actions[direction]();
-
-  if (!ok && errorCode.value === 'TOKEN_EXPIRED') {
-    handleTokenExpired();
-  }
-}
-
-async function initialize(): Promise<void> {
-  const ok = await restoreAuth();
-  if (!ok || !userId.value) {
-    return;
-  }
-
-  await Promise.all([refreshWeekBoard(), loadAutoFill(userId.value)]);
-}
-
-async function loadProjects(): Promise<void> {
-  if (!userId.value) {
-    return;
-  }
-
-  await loadCatalogProjects(userId.value);
-}
-
-function openManualFill(): void {
-  if (!prepareManualFill(fillableDays.value)) {
-    return;
-  }
-
-  isManualFillVisible.value = true;
-  void loadProjects();
-}
-
-function closeManualFill(): void {
-  isManualFillVisible.value = false;
-}
-
 onMounted(() => {
-  void initialize();
+  void homeStore.initialize();
 });
 </script>
 
@@ -178,59 +75,17 @@ onMounted(() => {
 
     <section class="home-shell__layout">
       <div class="home-shell__primary">
-        <HomeUserPanel :user-info="userInfo" :is-loading="isLoading" @logout="logout" />
+        <HomeUserPanel />
 
-        <HomeWeekBoardPanel
-          :board="board"
-          :is-loading="isWeekLoading"
-          :error-message="errorMessage"
-          :week-title="weekTitle"
-          :week-range="weekRange"
-          :total-hours="totalHours"
-          :work-days="workDays"
-          :average-hours="averageHours"
-          :fillable-count="fillableDays.length"
-          :is-current-week="isCurrentWeek"
-          @previous-week="switchWeek('previous')"
-          @current-week="switchWeek('current')"
-          @next-week="switchWeek('next')"
-          @open-manual-fill="openManualFill"
-        />
+        <HomeWeekBoardPanel />
 
-        <HomeManualFillPanel
-          :visible="isManualFillVisible"
-          :fillable-days="fillableDays"
-          :projects="projects"
-          :is-projects-loading="isProjectsLoading"
-          :recommended-days-to-generate="recommendedDaysToGenerate"
-          :preferred-report-date="preferredReportDate"
-          :preferred-step="preferredStep"
-          :load-projects="loadProjects"
-          :load-work-types="loadWorkTypes"
-          @close="closeManualFill"
-          @submitted="refreshWeekBoard"
-        />
+        <HomeManualFillPanel />
       </div>
 
       <aside class="home-shell__secondary">
-        <HomeAutoFillPanel
-          :user-id="userId"
-          :config="config"
-          :status="status"
-          :projects="projects"
-          :is-projects-loading="isProjectsLoading"
-          :is-saving="isSaving"
-          :is-disabling="isDisabling"
-          :is-triggering="isTriggering"
-          :load-projects="loadProjects"
-          :load-work-types="loadWorkTypes"
-          :save-config="saveAutoFillConfig"
-          :disable-config="disableAutoFillConfig"
-          :trigger-config="triggerAutoFillConfig"
-          @updated="initialize"
-        />
+        <HomeAutoFillPanel />
 
-        <HomeNotificationCard :visible="notifyVisible" />
+        <HomeNotificationCard />
       </aside>
     </section>
   </main>

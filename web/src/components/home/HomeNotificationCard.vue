@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 
 import { usePwaDetect } from '../../composables/usePwaDetect';
-
-const props = defineProps<{
-  visible: boolean;
-}>();
+import { useHomeStore } from '../../stores/home';
 
 const { isPwa } = usePwaDetect();
 const router = useRouter();
+const { notifyVisible } = storeToRefs(useHomeStore());
 const environmentText = computed(() => (isPwa.value ? '已安装为应用' : '当前仍在浏览器环境'));
 
 function openNotifications(): void {
@@ -18,17 +17,17 @@ function openNotifications(): void {
 </script>
 
 <template>
-  <section v-if="visible" class="notification-card">
+  <section v-if="notifyVisible" class="notification-card">
     <div class="notification-card__header">
       <div>
         <p class="notification-card__eyebrow">Notification Relay</p>
-        <h2 class="notification-card__title">自动填报提醒已接通</h2>
+        <h2 class="notification-card__title">自动填报提醒已接入</h2>
       </div>
       <span class="notification-card__badge">{{ environmentText }}</span>
     </div>
 
     <p class="notification-card__copy">
-      自动填报启用后，可以在通知页订阅成功、失败和过期提醒。建议安装为 PWA 以获得更稳定的前台与后台通知体验。
+      自动填报启用后，可在通知页订阅成功、失败和过期提醒。建议安装为 PWA，以获得更稳定的前台与后台通知体验。
     </p>
 
     <button class="notification-card__button" type="button" @click="openNotifications">前往通知页</button>

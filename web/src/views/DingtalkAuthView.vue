@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, shallowRef } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 
 import { getQrcode, pollStatus } from '../api/dingtalk-client';
-import { useAuthSession } from '../composables/useAuthSession';
+import { useAuthStore } from '../stores/auth';
 
 const router = useRouter();
 const route = useRoute();
-const auth = useAuthSession();
+const authStore = useAuthStore();
+const { isLoading } = storeToRefs(authStore);
 
 const qrcode = shallowRef('');
 const taskId = shallowRef('');
@@ -59,8 +61,8 @@ async function startPolling(): Promise<void> {
       if (result.status === 'success' && result.userId) {
         clearTimer();
         status.value = 'success';
-        auth.storeUserId(result.userId);
-        const ok = await auth.hydrateUser(result.userId);
+        authStore.storeUserId(result.userId);
+        const ok = await authStore.hydrateUser(result.userId);
         if (ok) {
           const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
           await router.replace(redirect);
@@ -157,13 +159,15 @@ onUnmounted(() => {
 
       <p class="login-card__hint">
         {{
-          status === 'waiting'
-            ? loginState === 'auto_login'
-              ? '系统正在复用钉钉登录状态，授权成功后会自动跳转。'
-              : '请使用钉钉扫一扫完成授权，成功后会自动恢复数据。'
-            : status === 'success'
-              ? '登录成功，正在恢复用户信息。'
-              : message || '如页面停滞，可手动刷新二维码重试。'
+          isLoading
+            ? '登录成功，正在恢复用户信息。'
+            : status === 'waiting'
+              ? loginState === 'auto_login'
+                ? '系统正在复用钉钉登录状态，授权成功后会自动跳转。'
+                : '请使用钉钉扫码完成授权，成功后会自动恢复数据。'
+              : status === 'success'
+                ? '登录成功，正在恢复用户信息。'
+                : message || '如页面停滞，可手动刷新二维码重试。'
         }}
       </p>
 
