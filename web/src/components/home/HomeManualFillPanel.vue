@@ -35,10 +35,10 @@ const {
 
 const stepSummary = computed(() => {
   if (manualCurrentStep.value === 1) {
-    return '先选择项目、工时类型和要补填的天数。';
+    return '先选择项目、工时类型和待补填天数。';
   }
   if (manualCurrentStep.value === 2) {
-    return '输入工作内容主题，系统会按天生成可提交描述。';
+    return '输入工作主题后，系统会按天生成可提交描述。';
   }
   const totalEntryHours = manualEntries.value.reduce((sum, entry) => sum + entry.hours, 0);
   return `本次共 ${manualEntries.value.length} 条记录，预计提交 ${totalEntryHours} 小时。`;
@@ -138,7 +138,7 @@ const stepSummary = computed(() => {
         <textarea
           :value="manualWork"
           rows="4"
-          placeholder="输入工作内容主题，系统会为每一天生成适合提交的描述。"
+          placeholder="输入工作内容主题，系统会为每天生成适合提交的描述"
           @input="homeStore.setManualWork(($event.target as HTMLTextAreaElement).value)"
         />
       </label>
@@ -262,7 +262,7 @@ const stepSummary = computed(() => {
   border: 1px solid var(--line-soft);
   border-radius: 30px;
   padding: 1.25rem;
-  background: linear-gradient(180deg, rgba(255, 250, 244, 0.84), rgba(240, 233, 224, 0.72));
+  background: linear-gradient(180deg, rgba(255, 250, 244, 0.88), rgba(240, 233, 224, 0.74));
   box-shadow: 0 28px 60px rgba(20, 41, 44, 0.1);
 }
 
@@ -283,7 +283,7 @@ const stepSummary = computed(() => {
 }
 
 .manual-panel__title {
-  font-size: clamp(1.7rem, 4vw, 2.3rem);
+  font-size: clamp(1.7rem, 4vw, 2.2rem);
 }
 
 .manual-panel__close,
@@ -312,7 +312,7 @@ const stepSummary = computed(() => {
   gap: 0.8rem;
   border-radius: 22px;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.44);
+  background: rgba(255, 255, 255, 0.46);
   border: 1px solid rgba(19, 38, 40, 0.08);
 }
 
@@ -370,6 +370,7 @@ const stepSummary = computed(() => {
 
 .manual-panel__form {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.8rem;
 }
 
@@ -425,12 +426,14 @@ const stepSummary = computed(() => {
   gap: 0.55rem;
 }
 
-.manual-panel__entry-list {
-  gap: 0.85rem;
+.manual-panel__compact-switch span {
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .manual-panel__entry-card {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.8rem;
   padding: 1rem;
   border-radius: 22px;
@@ -439,6 +442,7 @@ const stepSummary = computed(() => {
 }
 
 .manual-panel__entry-summary {
+  grid-column: 1 / -1;
   margin: 0;
   padding: 0.8rem 0.9rem;
   border-radius: 16px;
@@ -455,6 +459,13 @@ const stepSummary = computed(() => {
   padding: 1rem;
   background: rgba(255, 255, 255, 0.5);
   color: var(--ink-soft);
+}
+
+@media (max-width: 960px) {
+  .manual-panel__form,
+  .manual-panel__entry-card {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 720px) {
