@@ -122,7 +122,7 @@ onMounted(() => {
 }
 
 .home-shell__title {
-  font-size: clamp(2.4rem, 6vw, 4.8rem);
+  font-size: clamp(2.4rem, 2vw, 4.8rem);
   line-height: 0.94;
 }
 

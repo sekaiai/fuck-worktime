@@ -218,7 +218,7 @@ onMounted(() => {
               <textarea
                 :value="autoWork"
                 rows="4"
-                placeholder="输入自动填报使用的工作内容模板"
+                placeholder="把你所有工作都写进去AI会随机生成对应的工作内容，你写的越多生成的越好"
                 @input="homeStore.setAutoWork(($event.target as HTMLTextAreaElement).value)"
               />
             </label>

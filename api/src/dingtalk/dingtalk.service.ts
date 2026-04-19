@@ -69,7 +69,7 @@ export class DingtalkService {
       // ============================================
       this.logger.log('[步骤1] 启动浏览器');
       browser = await chromium.launch({
-        headless: false,
+        headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -144,7 +144,7 @@ export class DingtalkService {
         );
 
         // 等待 300ms，确保 Canvas 渲染完成
-        await page.waitForTimeout(300);
+        await page.waitForTimeout(1000);
 
         const canvasLocator = page.locator('canvas');
         const hasCanvas = await canvasLocator.count() > 0;
@@ -564,7 +564,7 @@ export class DingtalkService {
 
     try {
       browser = await chromium.launch({
-        headless: false,
+        headless: true,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
