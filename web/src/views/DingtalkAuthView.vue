@@ -4,34 +4,77 @@ import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 
 import { getQrcode, pollStatus } from '../api/dingtalk-client';
+import { usePwaDetect } from '../composables/usePwaDetect';
 import { useAuthStore } from '../stores/auth';
+
+type LoginStatus = 'loading' | 'waiting' | 'success' | 'timeout' | 'error';
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 const { isLoading } = storeToRefs(authStore);
+const { isPwa } = usePwaDetect();
 
 const qrcode = shallowRef('');
 const taskId = shallowRef('');
-const status = shallowRef<'loading' | 'waiting' | 'success' | 'timeout' | 'error'>('loading');
+const phone = shallowRef('');
+const status = shallowRef<LoginStatus>('loading');
 const loginState = shallowRef<'qrcode' | 'auto_login'>('qrcode');
 const message = shallowRef('');
+const isMobileDevice = shallowRef(false);
 let pollTimer: number | null = null;
 
-const heroTitle = computed(() =>
-  route.query.reason === 'expired' ? '会话已失效，请重新校验身份。' : '进入工时控制台前，先完成一次安全扫码。',
-);
-const heroCopy = computed(() =>
-  loginState.value === 'auto_login'
-    ? '系统正在尝试复用已保存的钉钉授权，若成功会自动恢复用户资料并跳转。'
-    : '使用钉钉扫码后，系统会自动换取 gzdata token，并恢复你本周的填报数据。',
-);
+const showInstallGuide = computed(() => isMobileDevice.value && !isPwa.value);
+const isPhoneLoginMode = computed(() => isPwa.value);
+const showHeroEyebrow = computed(() => !isPhoneLoginMode.value);
+
+const heroTitle = computed(() => {
+  if (showInstallGuide.value) {
+    return '先安装应用';
+  }
+
+  return route.query.reason === 'expired'
+    ? '会话已失效，请重新校验身份。'
+    : '进入工时控制台前，先完成一次身份校验。';
+});
+
+const heroCopy = computed(() => {
+  if (showInstallGuide.value) {
+    return '手机浏览器里不能直接登录。先安装到桌面，再从应用进入。';
+  }
+
+  if (isPhoneLoginMode.value) {
+    return 'PWA 端默认通过手机号恢复已保存的登录数据，不再展示扫码流程。';
+  }
+
+  return loginState.value === 'auto_login'
+    ? '系统正在尝试复用已保存的钉钉授权，成功后会自动恢复用户资料并跳转。'
+    : '使用钉钉扫码后，系统会自动换取 gzdata token，并恢复你本周的填报数据。';
+});
+
+const accessModeLabel = computed(() => {
+  if (showInstallGuide.value) {
+    return '安装 PWA';
+  }
+  return isPhoneLoginMode.value ? '手机号恢复' : '钉钉扫码授权';
+});
+
+const cardTitle = computed(() => {
+  if (showInstallGuide.value) {
+    return '安装指引';
+  }
+  return isPhoneLoginMode.value ? '手机号登录' : '扫码登录';
+});
+
 const statusLabel = computed(() => {
+  if (showInstallGuide.value) {
+    return '';
+  }
   if (status.value === 'loading') {
-    return '准备中';
+    return isPhoneLoginMode.value ? '待输入' : '准备中';
   }
   if (status.value === 'waiting') {
-    return loginState.value === 'auto_login' ? '自动恢复' : '等待扫码';
+    return loginState.value === 'auto_login' ? '自动恢复' : '等待处理';
   }
   if (status.value === 'success') {
     return '已通过';
@@ -42,11 +85,59 @@ const statusLabel = computed(() => {
   return '异常';
 });
 
+const hintText = computed(() => {
+  if (showInstallGuide.value) {
+    return '安装后从桌面图标打开，再用手机号登录。';
+  }
+
+  if (isLoading.value || status.value === 'success') {
+    return '登录成功，正在恢复用户信息。';
+  }
+
+  if (isPhoneLoginMode.value) {
+    if (status.value === 'error') {
+      return message.value || '请输入手机号后重试。';
+    }
+    return '请输入你在 gzdata 中绑定的手机号，系统会直接恢复已保存的登录数据。';
+  }
+
+  if (status.value === 'waiting') {
+    return loginState.value === 'auto_login'
+      ? '系统正在复用钉钉登录状态，授权成功后会自动跳转。'
+      : '请使用钉钉扫码完成授权，成功后会自动恢复数据。';
+  }
+
+  return message.value || '如页面停滞，可手动刷新二维码重试。';
+});
+
+function detectMobileDevice(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const mobileUserAgent = /Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(navigator.userAgent);
+  const smallScreen = window.matchMedia('(max-width: 768px)').matches;
+  return mobileUserAgent || smallScreen;
+}
+
 function clearTimer(): void {
   if (pollTimer !== null) {
     window.clearInterval(pollTimer);
     pollTimer = null;
   }
+}
+
+async function finishLogin(targetUserId: string): Promise<void> {
+  authStore.storeUserId(targetUserId);
+  const ok = await authStore.hydrateUser(targetUserId);
+  if (ok) {
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
+    await router.replace(redirect);
+    return;
+  }
+
+  status.value = 'error';
+  message.value = '获取用户信息失败，请重新登录。';
 }
 
 async function startPolling(): Promise<void> {
@@ -61,15 +152,7 @@ async function startPolling(): Promise<void> {
       if (result.status === 'success' && result.userId) {
         clearTimer();
         status.value = 'success';
-        authStore.storeUserId(result.userId);
-        const ok = await authStore.hydrateUser(result.userId);
-        if (ok) {
-          const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
-          await router.replace(redirect);
-        } else {
-          status.value = 'error';
-          message.value = '获取用户信息失败，请重新扫码。';
-        }
+        await finishLogin(result.userId);
       } else if (result.status === 'timeout') {
         clearTimer();
         status.value = 'timeout';
@@ -88,6 +171,14 @@ async function startPolling(): Promise<void> {
 }
 
 async function loadQrcode(): Promise<void> {
+  if (showInstallGuide.value || isPhoneLoginMode.value) {
+    status.value = 'loading';
+    message.value = '';
+    qrcode.value = '';
+    taskId.value = '';
+    return;
+  }
+
   clearTimer();
   status.value = 'loading';
   message.value = '';
@@ -107,7 +198,31 @@ async function loadQrcode(): Promise<void> {
   }
 }
 
+async function submitPhoneLogin(): Promise<void> {
+  const normalizedPhone = phone.value.replace(/[^\d]/g, '');
+  if (!normalizedPhone) {
+    status.value = 'error';
+    message.value = '请输入手机号。';
+    return;
+  }
+
+  status.value = 'waiting';
+  message.value = '';
+
+  const ok = await authStore.hydrateUserByPhone(normalizedPhone);
+  if (!ok) {
+    status.value = 'error';
+    message.value = '未找到该手机号的登录数据，请先在网页上扫码登录。';
+    return;
+  }
+
+  status.value = 'success';
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
+  await router.replace(redirect);
+}
+
 onMounted(() => {
+  isMobileDevice.value = detectMobileDevice();
   void loadQrcode();
 });
 
@@ -119,36 +234,59 @@ onUnmounted(() => {
 <template>
   <main class="login-page">
     <section class="login-page__hero">
-      <p class="login-page__eyebrow">DingTalk Gateway</p>
+      <p v-if="showHeroEyebrow" class="login-page__eyebrow">DingTalk Gateway</p>
       <h1 class="login-page__title">{{ heroTitle }}</h1>
       <p class="login-page__copy">{{ heroCopy }}</p>
 
-      <div class="login-page__rail">
-        <article>
-          <span>接入方式</span>
-          <strong>钉钉扫码授权</strong>
-        </article>
-        <article>
-          <span>当前状态</span>
-          <strong>{{ statusLabel }}</strong>
-        </article>
-        <article>
-          <span>成功后跳转</span>
-          <strong>工时控制台</strong>
-        </article>
-      </div>
     </section>
 
     <section class="login-card">
       <div class="login-card__header">
         <div>
           <p class="login-card__eyebrow">Identity Checkpoint</p>
-          <h2 class="login-card__title">扫码登录</h2>
+          <h2 class="login-card__title">{{ cardTitle }}</h2>
         </div>
-        <span class="login-card__badge" :class="`is-${status}`">{{ statusLabel }}</span>
+        <span class="login-card__badge" :class="`is-${status}`" v-if="statusLabel">{{ statusLabel }}</span>
       </div>
 
-      <div class="login-card__frame">
+      <div v-if="showInstallGuide" class="install-guide">
+        <div class="install-guide__steps">
+          <article class="install-guide__step">
+            <strong>1.浏览器菜单</strong>
+            <p>打开右上或底部分享按钮。</p>
+          </article>
+          <article class="install-guide__step">
+            <strong>2.添加到桌面</strong>
+            <p>选择“安装应用”或“添加到主屏幕”。</p>
+          </article>
+          <article class="install-guide__step">
+            <strong>3.从桌面打开</strong>
+            <p>回到应用内再登录。</p>
+          </article>
+        </div>
+      </div>
+
+      <div v-else-if="isPhoneLoginMode" class="login-card__form">
+        <label class="login-card__field">
+          <span>手机号</span>
+          <input
+            v-model.trim="phone"
+            class="login-card__input"
+            type="tel"
+            inputmode="numeric"
+            autocomplete="tel"
+            placeholder="请输入绑定手机号"
+            :disabled="isLoading"
+            @keyup.enter="submitPhoneLogin"
+          />
+        </label>
+
+        <button class="login-card__button" type="button" :disabled="isLoading" @click="submitPhoneLogin">
+          {{ isLoading ? '登录中...' : '手机号登录' }}
+        </button>
+      </div>
+
+      <div v-else class="login-card__frame">
         <div v-if="status === 'loading'" class="login-card__state">正在获取二维码...</div>
         <img v-else-if="qrcode" :src="`data:image/png;base64,${qrcode}`" alt="钉钉登录二维码" />
         <div v-else-if="loginState === 'auto_login' && status === 'waiting'" class="login-card__state">
@@ -157,21 +295,15 @@ onUnmounted(() => {
         <div v-else class="login-card__state">{{ message || '二维码暂不可用。' }}</div>
       </div>
 
-      <p class="login-card__hint">
-        {{
-          isLoading
-            ? '登录成功，正在恢复用户信息。'
-            : status === 'waiting'
-              ? loginState === 'auto_login'
-                ? '系统正在复用钉钉登录状态，授权成功后会自动跳转。'
-                : '请使用钉钉扫码完成授权，成功后会自动恢复数据。'
-              : status === 'success'
-                ? '登录成功，正在恢复用户信息。'
-                : message || '如页面停滞，可手动刷新二维码重试。'
-        }}
-      </p>
+      <p class="login-card__hint">{{ hintText }}</p>
 
-      <button class="login-card__button" type="button" @click="loadQrcode">
+      <button
+        v-if="!showInstallGuide && !isPhoneLoginMode"
+        class="login-card__button"
+        type="button"
+        :disabled="status === 'loading'"
+        @click="loadQrcode"
+      >
         {{ status === 'loading' ? '处理中...' : '刷新二维码' }}
       </button>
     </section>
@@ -180,19 +312,18 @@ onUnmounted(() => {
 
 <style scoped>
 .login-page {
-  min-height: 100vh;
   padding: clamp(1rem, 3vw, 2rem);
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 420px);
   gap: 1.2rem;
   align-items: stretch;
+          box-sizing: border-box;
 }
 
 .login-page__hero,
 .login-card {
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--line-soft);
   border-radius: 30px;
   padding: clamp(1.2rem, 2.5vw, 2rem);
   background: linear-gradient(180deg, rgba(255, 251, 245, 0.82), rgba(240, 233, 224, 0.7));
@@ -200,15 +331,7 @@ onUnmounted(() => {
   backdrop-filter: blur(16px);
 }
 
-.login-page__hero::before,
-.login-card::before {
-  content: '';
-  position: absolute;
-  inset: 1rem;
-  border: 1px solid rgba(19, 38, 40, 0.08);
-  border-radius: 22px;
-  pointer-events: none;
-}
+
 
 .login-page__hero {
   display: grid;
@@ -244,34 +367,7 @@ onUnmounted(() => {
   line-height: 1.75;
 }
 
-.login-page__rail {
-  margin-top: 2rem;
-  display: grid;
-  gap: 0.8rem;
-}
 
-.login-page__rail article {
-  display: grid;
-  gap: 0.2rem;
-  padding: 0.95rem 1rem;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.login-page__rail span {
-  font-family: var(--font-display);
-  font-size: 0.76rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(255, 245, 232, 0.56);
-}
-
-.login-page__rail strong {
-  font-family: var(--font-display);
-  font-size: 1.02rem;
-  font-weight: 600;
-}
 
 .login-card {
   display: grid;
@@ -314,6 +410,63 @@ onUnmounted(() => {
   color: var(--danger);
 }
 
+.install-guide {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.install-guide__steps {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.install-guide__step {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1rem;
+  border-radius: 22px;
+  background-color: #efe8db;
+}
+
+.install-guide__step strong {
+  color: var(--accent-strong);
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+}
+
+.install-guide__step p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.65;
+}
+
+.login-card__form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.login-card__field {
+  display: grid;
+  gap: 0.55rem;
+  color: var(--ink-soft);
+}
+
+.login-card__input {
+  width: 100%;
+  min-height: 3.2rem;
+  border-radius: 18px;
+  padding: 0.85rem 1rem;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+  font: inherit;
+}
+
+.login-card__input:focus {
+  outline: 2px solid rgba(201, 137, 56, 0.25);
+  outline-offset: 1px;
+}
+
 .login-card__frame {
   width: min(100%, 310px);
   aspect-ratio: 1;
@@ -321,7 +474,6 @@ onUnmounted(() => {
   border-radius: 28px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(233, 227, 218, 0.76));
-  border: 1px solid var(--line-soft);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.58);
   display: grid;
   place-items: center;
@@ -356,18 +508,26 @@ onUnmounted(() => {
   transition: transform 180ms ease, box-shadow 180ms ease;
 }
 
-.login-card__button:hover {
+.login-card__button:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 16px 24px rgba(15, 44, 47, 0.18);
 }
 
+.login-card__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 @media (max-width: 900px) {
   .login-page {
+    padding: 8px;
     grid-template-columns: 1fr;
   }
 
-  .login-page__hero {
+  .login-page__hero,
+  .login-card {
     min-height: auto;
+    box-shadow: none;
   }
 }
 

@@ -2,9 +2,9 @@ import { computed, shallowRef } from 'vue';
 import { useRouter } from 'vue-router';
 
 import type { UserInfo } from '../types/user';
-import { getUserByUserId } from '../api/dingtalk-client';
+import { getUserByPhone, getUserByUserId, type UserByUserIdResult } from '../api/dingtalk-client';
 import { clearGzdataToken, setAuthToken } from '../api/timesheet-client';
-import { getLocalStorage, removeLocalStorage, setLocalStorage, clearSessionCache } from '../utils/cache';
+import { clearSessionCache, getLocalStorage, removeLocalStorage, setLocalStorage } from '../utils/cache';
 
 const userId = shallowRef<string | null>(getLocalStorage('userId'));
 const userInfo = shallowRef<UserInfo | null>(null);
@@ -15,6 +15,22 @@ export function useAuthSession() {
 
   const isAuthenticated = computed(() => Boolean(userId.value && userInfo.value));
 
+  function applyUserSession(data: UserByUserIdResult): boolean {
+    if (!data.token) {
+      return false;
+    }
+
+    setAuthToken(data.token);
+    userId.value = data.userId;
+    userInfo.value = {
+      userId: data.userId,
+      nickname: data.nickname || '未知',
+      phone: data.phone || '',
+      department: data.department || '未分配部门',
+    };
+    return true;
+  }
+
   async function hydrateUser(targetUserId = userId.value): Promise<boolean> {
     if (!targetUserId) {
       return false;
@@ -23,19 +39,32 @@ export function useAuthSession() {
     isLoading.value = true;
     try {
       const response = await getUserByUserId(targetUserId);
-      if (!response.data?.token) {
+      return response.data ? applyUserSession(response.data) : false;
+    } catch {
+      return false;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  async function hydrateUserByPhone(phone: string): Promise<boolean> {
+    const normalizedPhone = phone.replace(/[^\d]/g, '');
+    if (!normalizedPhone) {
+      return false;
+    }
+
+    isLoading.value = true;
+    try {
+      const response = await getUserByPhone(normalizedPhone);
+      if (!response.data) {
         return false;
       }
 
-      setAuthToken(response.data.token);
-      userId.value = response.data.userId;
-      userInfo.value = {
-        userId: response.data.userId,
-        nickname: response.data.nickname || '未知',
-        phone: response.data.phone || '',
-        department: response.data.department || '未分配部门',
-      };
-      return true;
+      const ok = applyUserSession(response.data);
+      if (ok) {
+        storeUserId(response.data.userId);
+      }
+      return ok;
     } catch {
       return false;
     } finally {
@@ -98,6 +127,7 @@ export function useAuthSession() {
     isLoading,
     isAuthenticated,
     hydrateUser,
+    hydrateUserByPhone,
     restoreAuth,
     storeUserId,
     handleTokenExpired,

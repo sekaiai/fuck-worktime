@@ -7,6 +7,9 @@ export interface DingtalkUserRecord {
   userId: string;
   token: string;
   dingtalkCookies: Record<string, string>;
+  nickname?: string;
+  phone?: string;
+  department?: string;
   updatedAt: string;
   autoFill?: AutoFillConfig | null;
 }
@@ -96,6 +99,9 @@ export class DingtalkStore {
       userId: config.userId,
       token: current?.token ?? '',
       dingtalkCookies: current?.dingtalkCookies ?? {},
+      nickname: current?.nickname ?? '',
+      phone: current?.phone ?? '',
+      department: current?.department ?? '',
       updatedAt: current?.updatedAt ?? new Date().toISOString(),
       autoFill: config,
     };

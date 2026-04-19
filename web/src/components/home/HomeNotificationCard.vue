@@ -38,7 +38,6 @@ function openNotifications(): void {
 .notification-card {
   display: grid;
   gap: 1rem;
-  border: 1px solid var(--line-soft);
   border-radius: 28px;
   padding: 1.25rem;
   background: linear-gradient(180deg, rgba(255, 250, 244, 0.82), rgba(239, 233, 225, 0.72));

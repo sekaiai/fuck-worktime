@@ -189,11 +189,21 @@ onMounted(() => {
 
             <label>
               <span>截止日期</span>
-              <input
-                :value="autoDeadline"
-                type="date"
-                @input="homeStore.setAutoDeadline(($event.target as HTMLInputElement).value)"
-              />
+              <div class="auto-fill-panel__date-field">
+                <input
+                  :value="autoDeadline"
+                  type="date"
+                  @input="homeStore.setAutoDeadline(($event.target as HTMLInputElement).value)"
+                />
+                <button
+                  v-if="autoDeadline"
+                  class="auto-fill-panel__date-clear"
+                  type="button"
+                  @click="homeStore.setAutoDeadline('')"
+                >
+                  清空
+                </button>
+              </div>
             </label>
 
             <label class="auto-fill-panel__full">
@@ -258,7 +268,6 @@ onMounted(() => {
   overflow: hidden;
   display: grid;
   gap: 1rem;
-  border: 1px solid rgba(19, 38, 40, 0.14);
   border-radius: 34px;
   padding: 1.4rem;
   background:
@@ -512,6 +521,13 @@ onMounted(() => {
   grid-column: 1 / -1;
 }
 
+.auto-fill-panel__date-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 .auto-fill-panel__form span {
   color: var(--ink-muted);
   font-family: var(--font-display);
@@ -537,6 +553,17 @@ onMounted(() => {
   outline: none;
   border-color: rgba(35, 76, 75, 0.34);
   box-shadow: 0 0 0 3px rgba(35, 76, 75, 0.08);
+}
+
+.auto-fill-panel__date-clear {
+  border: 0;
+  min-height: 2.9rem;
+  padding: 0.72rem 0.9rem;
+  border-radius: 16px;
+  background: rgba(19, 38, 40, 0.08);
+  color: var(--ink-strong);
+  font-family: var(--font-display);
+  cursor: pointer;
 }
 
 .auto-fill-panel__actions {
@@ -581,11 +608,14 @@ onMounted(() => {
 
   .auto-fill-panel__heading {
     padding-right: 0;
-    padding-top: 2.6rem;
   }
 
   .auto-fill-panel__metric,
   .auto-fill-panel__form {
+    grid-template-columns: 1fr;
+  }
+
+  .auto-fill-panel__date-field {
     grid-template-columns: 1fr;
   }
 

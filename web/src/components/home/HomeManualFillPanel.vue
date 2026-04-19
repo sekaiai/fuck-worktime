@@ -259,7 +259,6 @@ const stepSummary = computed(() => {
   position: relative;
   display: grid;
   gap: 1rem;
-  border: 1px solid var(--line-soft);
   border-radius: 30px;
   padding: 1.25rem;
   background: linear-gradient(180deg, rgba(255, 250, 244, 0.88), rgba(240, 233, 224, 0.74));

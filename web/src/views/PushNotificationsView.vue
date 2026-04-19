@@ -160,7 +160,6 @@ onUnmounted(() => {
 .notification-page__hero,
 .notification-page__overview,
 .notification-panel {
-  border: 1px solid var(--line-soft);
   border-radius: 30px;
   background: linear-gradient(180deg, rgba(255, 250, 244, 0.84), rgba(240, 234, 226, 0.72));
   padding: clamp(1.2rem, 2.4vw, 1.8rem);

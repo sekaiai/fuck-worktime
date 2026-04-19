@@ -15,20 +15,21 @@
 <style scoped>
 .app-shell {
   position: relative;
-  min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
+  padding-bottom: var(--safe-bottom);
 }
 
 .app-shell__mesh,
 .app-shell__grid {
   position: fixed;
-  inset: 0;
+  inset: 116px 0 0;
   pointer-events: none;
 }
 
 .app-shell__mesh {
   filter: blur(72px);
-  opacity: 0.48;
+  opacity: 0.28;
 }
 
 .app-shell__mesh--amber {
@@ -36,7 +37,7 @@
   left: -6rem;
   width: 38rem;
   height: 38rem;
-  background: radial-gradient(circle, rgba(214, 150, 63, 0.34), transparent 68%);
+  background: radial-gradient(circle, rgba(214, 150, 63, 0.22), transparent 68%);
 }
 
 .app-shell__mesh--teal {
@@ -44,13 +45,13 @@
   bottom: -10rem;
   width: 34rem;
   height: 34rem;
-  background: radial-gradient(circle, rgba(52, 103, 103, 0.28), transparent 70%);
+  background: radial-gradient(circle, rgba(231, 214, 187, 0.42), transparent 72%);
 }
 
 .app-shell__grid {
   background-image:
-    linear-gradient(rgba(17, 43, 46, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(17, 43, 46, 0.06) 1px, transparent 1px);
+    linear-gradient(rgba(125, 115, 95, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 115, 95, 0.04) 1px, transparent 1px);
   background-size: 2rem 2rem;
   mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent 88%);
 }

@@ -17,6 +17,10 @@
   --accent-strong: #0f2c2f;
   --accent-amber: #c4832d;
   --danger: #aa4737;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
   line-height: 1.5;
   font-weight: 400;
   font-family: var(--font-body);
@@ -40,18 +44,21 @@ body,
 }
 
 html {
+  min-height: 100dvh;
   background:
     radial-gradient(circle at 20% 0%, rgba(212, 166, 104, 0.28), transparent 30%),
     linear-gradient(180deg, #efe8db 0%, #d6d0c4 100%);
+  background-color: #efe8db;
+  touch-action: manipulation;
 }
 
 body {
   margin: 0;
   color: var(--ink-strong);
-  background:
-    radial-gradient(circle at top, rgba(255, 221, 172, 0.2), transparent 24%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 44%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(207, 201, 189, 0.18));
+  background-color: #efe8db;
+  min-height: 100dvh;
+  padding-bottom: var(--safe-bottom);
+  overscroll-behavior-y: none;
 }
 
 body::before {
@@ -60,11 +67,13 @@ body::before {
   inset: 0;
   pointer-events: none;
   opacity: 0.08;
-  background-image:
-    linear-gradient(120deg, transparent 0%, rgba(15, 44, 47, 0.42) 50%, transparent 100%),
-    radial-gradient(circle, rgba(15, 44, 47, 0.22) 0.6px, transparent 0.7px);
   background-size: 100% 100%, 14px 14px;
   mix-blend-mode: multiply;
+}
+
+#app {
+  min-height: 100dvh;
+  padding-bottom: var(--safe-bottom);
 }
 
 button,
@@ -83,6 +92,31 @@ input,
 textarea,
 select {
   color: var(--ink-strong);
+}
+
+select,
+input[type='date'],
+input[type='time'] {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 18px;
+}
+
+select {
+  padding-right: 2.5rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(19, 38, 40, 0.72) 50%),
+    linear-gradient(135deg, rgba(19, 38, 40, 0.72) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% - 2px),
+    calc(100% - 12px) calc(50% - 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+input[type='date']::-webkit-date-and-time-value,
+input[type='time']::-webkit-date-and-time-value {
+  text-align: left;
 }
 
 h1,

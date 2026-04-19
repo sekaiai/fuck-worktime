@@ -1,6 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
 
-import { GetUserQueryDto } from './dto/user-info.dto';
+import { GetUserByPhoneQueryDto, GetUserQueryDto } from './dto/user-info.dto';
 import { DingtalkService } from './dingtalk.service';
 
 @Controller('dingtalk')
@@ -42,6 +42,23 @@ export class DingtalkController {
       return {
         code: 500,
         msg: error instanceof Error ? error.message : '获取用户信息失败',
+        data: null,
+      };
+    }
+  }
+
+  @Get('user-by-phone')
+  async getUserByPhone(@Query() dto: GetUserByPhoneQueryDto) {
+    try {
+      const result = await this.dingtalkService.getUserByPhone(dto.phone);
+      if (!result) {
+        return { code: 404, msg: '未找到对应手机号的登录数据', data: null };
+      }
+      return { code: 200, msg: 'success', data: result };
+    } catch (error) {
+      return {
+        code: 500,
+        msg: error instanceof Error ? error.message : '根据手机号获取用户信息失败',
         data: null,
       };
     }

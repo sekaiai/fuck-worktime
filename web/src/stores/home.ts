@@ -433,6 +433,11 @@ export const useHomeStore = defineStore('home', () => {
       return;
     }
 
+    if (selectedDayDate.value === day.date) {
+      selectedDayDate.value = '';
+      return;
+    }
+
     selectedDayDate.value = day.date;
   }
 

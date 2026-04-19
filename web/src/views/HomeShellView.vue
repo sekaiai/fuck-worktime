@@ -96,7 +96,6 @@ onMounted(() => {
 .home-shell__hero {
   grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.72fr);
   align-items: stretch;
-  border: 1px solid var(--line-soft);
   border-radius: 34px;
   padding: clamp(1.2rem, 2.4vw, 2.2rem);
   background:
@@ -208,12 +207,44 @@ onMounted(() => {
 }
 
 @media (max-width: 860px) {
+  .home-shell {
+    width: 100%;
+    min-height: auto;
+    padding: 8px;
+    gap: 0.85rem;
+  }
+
   .home-shell__hero {
     grid-template-columns: 1fr;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink-strong);
+    box-shadow: none;
+    overflow: visible;
+    margin-bottom: 16px;
   }
 
   .home-shell__hero-copy {
     padding-right: 0;
+    gap: 0.2rem;
+  }
+
+  .home-shell__title {
+    font-size: 1.8rem;
+    line-height: 1;
+  }
+
+  .home-shell__meta {
+    margin-top: 0.2rem;
+    color: var(--ink-soft);
+    font-size: 0.86rem;
+    letter-spacing: 0.04em;
+  }
+
+  .home-shell__subtitle,
+  .home-shell__hero-panel {
+    display: none;
   }
 }
 </style>

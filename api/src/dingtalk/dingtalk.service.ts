@@ -274,10 +274,15 @@ export class DingtalkService {
           this.logger.log(`[ding-auth] 获取到 ${Object.keys(cookieMap).length} 个钉钉 Cookie`);
 
           // 保存到本地 JSON（以 userId 为键）
+          const userProfile = await this.fetchUserProfile(body.token);
+
           await this.dingtalkStore.upsertUser({
             userId: body.userId,
             token: body.token,
             dingtalkCookies: cookieMap,
+            nickname: userProfile.nickname,
+            phone: userProfile.phone,
+            department: userProfile.department,
             updatedAt: new Date().toISOString(),
           });
 
@@ -375,11 +380,31 @@ export class DingtalkService {
       return null;
     }
 
-    const authorization = `Bearer ${record.token}`;
+    return this.buildUserInfo(record);
+  }
 
+  async getUserByPhone(phone: string): Promise<UserInfoData | null> {
+    const normalizedPhone = this.normalizePhone(phone);
+    if (!normalizedPhone) {
+      return null;
+    }
+
+    const records = Object.values(await this.dingtalkStore.readAll());
+    for (const record of records) {
+      const userInfo = await this.buildUserInfo(record);
+      if (this.normalizePhone(userInfo.phone) === normalizedPhone) {
+        return userInfo;
+      }
+    }
+
+    return null;
+  }
+
+  private async buildUserInfo(
+    record: UserInfoData | { userId: string; token: string; updatedAt: string; nickname?: string; phone?: string; department?: string },
+  ): Promise<UserInfoData> {
     try {
-      const remoteResponse = await this.timesClient.getUserInfo(authorization);
-      const userProfile = this.extractUserInfo(remoteResponse);
+      const userProfile = await this.fetchUserProfile(record.token);
 
       return {
         userId: record.userId,
@@ -390,17 +415,29 @@ export class DingtalkService {
         updatedAt: record.updatedAt,
       };
     } catch (error) {
-      this.logger.warn(`getUserByUserId: 远程获取用户信息失败，userId=${userId}，${error instanceof Error ? error.message : error}`);
+      this.logger.warn(
+        `getUserByUserId: 远程获取用户信息失败，userId=${record.userId}，${error instanceof Error ? error.message : error}`,
+      );
 
       return {
         userId: record.userId,
         token: record.token,
-        nickname: '',
-        phone: '',
-        department: '',
+        nickname: record.nickname ?? '',
+        phone: record.phone ?? '',
+        department: record.department ?? '',
         updatedAt: record.updatedAt,
       };
     }
+  }
+
+  private async fetchUserProfile(token: string): Promise<{ nickname: string; phone: string; department: string }> {
+    const authorization = `Bearer ${token}`;
+    const remoteResponse = await this.timesClient.getUserInfo(authorization);
+    return this.extractUserInfo(remoteResponse);
+  }
+
+  private normalizePhone(phone: string): string {
+    return phone.replace(/[^\d]/g, '');
   }
 
   async refreshUserToken(userId: string): Promise<string | null> {

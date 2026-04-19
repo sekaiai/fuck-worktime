@@ -5,6 +5,11 @@ export class GetUserQueryDto {
   userId!: string;
 }
 
+export class GetUserByPhoneQueryDto {
+  @IsString()
+  phone!: string;
+}
+
 export interface UserInfoData {
   userId: string;
   token: string;

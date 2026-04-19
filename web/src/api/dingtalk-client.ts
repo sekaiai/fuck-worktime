@@ -50,3 +50,9 @@ export async function getUserByUserId(userId: string) {
     `/dingtalk/user?userId=${encodeURIComponent(userId)}`,
   );
 }
+
+export async function getUserByPhone(phone: string) {
+  return apiRequest<UserByUserIdResult | null>(
+    `/dingtalk/user-by-phone?phone=${encodeURIComponent(phone)}`,
+  );
+}

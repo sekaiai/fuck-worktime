@@ -11,30 +11,30 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.ts',
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg}'],
       },
       manifest: {
         name: '云上工时',
-        short_name: '工时',
-        theme_color: '#0f3d3e',
+        short_name: '云上工时',
+        theme_color: '#efe8db',
         background_color: '#f4efe7',
         display: 'standalone',
         start_url: '/',
         icons: [
           {
-            src: 'icons/icon-192.svg',
+            src: 'pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/svg+xml',
+            type: 'image/png',
           },
           {
-            src: 'icons/icon-512.svg',
+            src: 'pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
+            type: 'image/png',
           },
           {
-            src: 'icons/icon-maskable.svg',
+            src: 'pwa-maskable-512x512.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
+            type: 'image/png',
             purpose: 'maskable',
           },
         ],
@@ -60,9 +60,9 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'https://example.com',
-         changeOrigin: true,
-secure: false,
-      }
-    }
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
 });
