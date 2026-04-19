@@ -135,7 +135,8 @@ onMounted(() => {
       <div v-if="autoIsOpen" class="auto-fill-panel__editor">
         <section class="auto-fill-panel__workspace">
           <div class="auto-fill-panel__form">
-            <label>
+            <div class="auto-fill-panel__field">
+              <label for="auto-fill-deadline">
               <span>项目</span>
               <select :value="autoProjectId" @change="homeStore.setAutoProject(($event.target as HTMLSelectElement).value)">
                 <option value="">请选择项目</option>
@@ -146,6 +147,7 @@ onMounted(() => {
             <label>
               <span>一级工时类型</span>
               <select
+              placeholder="请先选择项目"
                 :value="autoWorkTypeGroupId"
                 :disabled="autoWorkTypeGroups.length === 0"
                 @change="homeStore.setAutoWorkTypeGroup(($event.target as HTMLSelectElement).value)"
@@ -158,6 +160,7 @@ onMounted(() => {
             <label>
               <span>二级工时类型</span>
               <select
+                placeholder="请先选择一级类型"
                 :value="autoItemId"
                 :disabled="autoAvailableWorkTypes.length === 0"
                 @change="homeStore.setAutoItem(($event.target as HTMLSelectElement).value)"
@@ -173,7 +176,8 @@ onMounted(() => {
                 :value="autoHours"
                 type="number"
                 min="1"
-                max="24"
+                max="8"
+                placeholder="小时"
                 @input="homeStore.setAutoHours(Number(($event.target as HTMLInputElement).value))"
               />
             </label>
@@ -183,28 +187,34 @@ onMounted(() => {
               <input
                 :value="autoReportTime"
                 type="time"
+                placeholder="自动提交时间"
                 @input="homeStore.setAutoReportTime(($event.target as HTMLInputElement).value)"
               />
             </label>
 
             <label>
               <span>截止日期</span>
+              </label>
               <div class="auto-fill-panel__date-field">
                 <input
+                  id="auto-fill-deadline"
                   :value="autoDeadline"
                   type="date"
+                  placeholder="不填默认永久有效"
                   @input="homeStore.setAutoDeadline(($event.target as HTMLInputElement).value)"
                 />
+
                 <button
                   v-if="autoDeadline"
                   class="auto-fill-panel__date-clear"
                   type="button"
-                  @click="homeStore.setAutoDeadline('')"
+                  @pointerdown.stop.prevent
+                  @click.stop.prevent="homeStore.setAutoDeadline('')"
                 >
                   清空
                 </button>
               </div>
-            </label>
+            </div>
 
             <label class="auto-fill-panel__full">
               <span>工作内容模板</span>
@@ -512,7 +522,13 @@ onMounted(() => {
   gap: 0.85rem;
 }
 
-.auto-fill-panel__form label {
+.auto-fill-panel__form label,
+.auto-fill-panel__field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.auto-fill-panel__field > label {
   display: grid;
   gap: 0.4rem;
 }
