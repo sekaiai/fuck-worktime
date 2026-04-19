@@ -1,4 +1,4 @@
-import { apiRequest } from './request';
+import { apiRequest, type ApiEnvelope } from './request';
 
 export interface PushSubscriptionPayload {
   userId: string;
@@ -18,9 +18,18 @@ export interface PushTestResult {
   failed: number;
 }
 
+function unwrapApiResponse<T>(response: ApiEnvelope<T> | T): T {
+  return typeof response === 'object' && response !== null && 'data' in response
+    ? response.data
+    : response;
+}
+
 export async function getPushPublicKey(): Promise<string> {
-  const response = await apiRequest<{ publicKey: string }>('/push/public-key');
-  return response.data.publicKey;
+  const response = (await apiRequest<{ publicKey: string }>(
+    '/push/public-key',
+  )) as ApiEnvelope<{ publicKey: string }> | { publicKey: string };
+
+  return unwrapApiResponse(response).publicKey;
 }
 
 export async function subscribePush(payload: PushSubscriptionPayload): Promise<void> {
@@ -37,14 +46,14 @@ export async function unsubscribePush(endpoint: string): Promise<void> {
 }
 
 export async function sendPushTest(): Promise<PushTestResult> {
-  const response = await apiRequest<PushTestResult>('/push/test', {
+  const response = (await apiRequest<PushTestResult>('/push/test', {
     method: 'POST',
     body: JSON.stringify({
       title: '云上工时测试通知',
       body: '通知链路已触发，请检查设备是否收到提醒。',
       url: '/',
     }),
-  });
+  })) as ApiEnvelope<PushTestResult> | PushTestResult;
 
-  return response.data;
+  return unwrapApiResponse(response);
 }

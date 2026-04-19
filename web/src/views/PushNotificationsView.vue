@@ -116,6 +116,7 @@ onUnmounted(() => {
 
       <div class="notification-panel__actions">
         <button
+          v-if="!notifications.hasSubscription.value"
           class="notification-panel__primary"
           type="button"
           :disabled="notifications.isLoading.value || !notifications.canSubscribe.value"
@@ -124,17 +125,19 @@ onUnmounted(() => {
           {{ notifications.isLoading.value ? '处理中...' : '订阅通知' }}
         </button>
         <button
+          v-if="notifications.hasSubscription.value"
           class="notification-panel__secondary"
           type="button"
-          :disabled="notifications.isLoading.value || !notifications.hasSubscription.value"
+          :disabled="notifications.isLoading.value"
           @click="notifications.unsubscribe"
         >
           取消订阅
         </button>
         <button
+          v-if="notifications.hasSubscription.value"
           class="notification-panel__secondary"
           type="button"
-          :disabled="notifications.isLoading.value || !notifications.hasSubscription.value"
+          :disabled="notifications.isLoading.value"
           @click="notifications.sendTest"
         >
           发送测试通知
@@ -232,10 +235,12 @@ onUnmounted(() => {
 }
 
 .notification-panel__header {
+  position: relative;
   display: flex;
   justify-content: space-between;
   gap: 1rem;
   align-items: flex-start;
+  padding-right: 7.5rem;
 }
 
 .notification-panel__title {
@@ -243,6 +248,9 @@ onUnmounted(() => {
 }
 
 .notification-panel__badge {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: inline-flex;
   align-items: center;
   min-height: 2.3rem;
@@ -321,7 +329,7 @@ onUnmounted(() => {
 
 @media (max-width: 640px) {
   .notification-panel__header {
-    flex-direction: column;
+    padding-right: 6.5rem;
   }
 
   .notification-page__overview {
