@@ -238,7 +238,7 @@ function normalizeProject(project: unknown): Project {
   return {
     id: toStringValue(record.id ?? record.projectId),
     title: toStringValue(record.title ?? record.projectTitle ?? record.name),
-    status: toNumberValue(record.status ?? record.projectStatus, 20),
+    projectStatus: toNumberValue(record.projectStatus, 20),
   };
 }
 

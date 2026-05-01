@@ -7,7 +7,7 @@ interface SessionCachePayload<T> {
 }
 
 export function getProjectsCacheKey(userId: string): string {
-  return `projects_${userId}`;
+  return `projects_v2_${userId}`;
 }
 
 export function getWorkTypesCacheKey(projectId: string): string {

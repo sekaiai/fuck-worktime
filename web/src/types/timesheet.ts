@@ -31,7 +31,7 @@ export interface WeekBoardResponse {
 export interface Project {
   id: string;
   title: string;
-  status: number;
+  projectStatus: number;
 }
 
 export interface WorkTypeNode {
