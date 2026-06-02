@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import HomeAutoFillPanel from '../components/home/HomeAutoFillPanel.vue';
@@ -34,6 +34,16 @@ const heroStatus = computed(() => {
   return 'Auto Fill Idle';
 });
 
+const heroStatusBadge = computed(() => {
+  if (autoFillStatus.value === 'enabled') {
+    return { text: '自动填报运行中', class: 'status--running' };
+  }
+  if (autoFillStatus.value === 'expired') {
+    return { text: '自动填报已失效', class: 'status--expired' };
+  }
+  return { text: '自动填报未启用', class: 'status--idle' };
+});
+
 onMounted(() => {
   void homeStore.initialize();
 });
@@ -57,6 +67,17 @@ onMounted(() => {
         <div class="home-shell__hero-line">
           <span>Pending</span>
           <strong>{{ fillableDays.length }} day<span v-if="fillableDays.length !== 1">s</span></strong>
+        </div>
+      </div>
+
+      <div class="home-shell__hero-mobile">
+        <div class="hero-mobile__badge" :class="heroStatusBadge.class">
+          <span class="hero-mobile__status-dot"></span>
+          <span>{{ heroStatusBadge.text }}</span>
+        </div>
+        <div class="hero-mobile__pending" v-if="fillableDays.length > 0">
+          <span class="hero-mobile__pending-count">{{ fillableDays.length }}</span>
+          <span class="hero-mobile__pending-text">个工作日待补填</span>
         </div>
       </div>
     </section>
@@ -243,9 +264,76 @@ onMounted(() => {
     letter-spacing: 0.04em;
   }
 
-  .home-shell__subtitle,
+  .home-shell__subtitle {
+    display: none;
+  }
+
   .home-shell__hero-panel {
     display: none;
+  }
+
+  .home-shell__hero-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    padding: 0.85rem;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.56);
+    border: 1px solid rgba(19, 38, 40, 0.08);
+  }
+
+  .hero-mobile__badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-display);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .hero-mobile__status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ink-soft);
+  }
+
+  .hero-mobile__badge.status--running .hero-mobile__status-dot {
+    background: var(--accent);
+    animation: pulse 2s infinite;
+  }
+
+  .hero-mobile__badge.status--expired .hero-mobile__status-dot {
+    background: var(--danger);
+  }
+
+  .hero-mobile__pending {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+  }
+
+  .hero-mobile__pending-count {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--accent-amber);
+    line-height: 1;
+  }
+
+  .hero-mobile__pending-text {
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
   }
 }
 </style>

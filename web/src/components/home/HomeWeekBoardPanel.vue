@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia';
 import type { WeekDay, WorkDetail } from '../../types/timesheet';
 import { useHomeStore } from '../../stores/home';
 import { formatDisplayDate, getTodayKey } from '../../utils/date';
+import BoardSkeleton from '../common/BoardSkeleton.vue';
 
 const homeStore = useHomeStore();
 const {
@@ -99,8 +100,8 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
       </div>
     </header>
 
-    <div v-if="errorMessage" class="board-panel__state board-panel__state--error">{{ errorMessage }}</div>
-    <div v-else-if="isWeekLoading && !board" class="board-panel__state">正在获取本周状态...</div>
+    <BoardSkeleton v-if="isWeekLoading && !board" />
+    <div v-else-if="errorMessage" class="board-panel__state board-panel__state--error">{{ errorMessage }}</div>
     <div v-else-if="days.length === 0" class="board-panel__state">本周暂无填报数据。</div>
     <template v-else>
       <div class="board-panel__summary">
@@ -113,7 +114,20 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
       </div>
 
       <div class="board-panel__toolbar">
-        <p class="board-panel__helper">点击已填报日期可查看当天明细。</p>
+        <div class="board-panel__stats-mobile">
+          <div class="stats-mobile__item">
+            <span class="stats-mobile__value">{{ totalHours }}</span>
+            <span class="stats-mobile__label">总工时</span>
+          </div>
+          <div class="stats-mobile__item">
+            <span class="stats-mobile__value">{{ workDays }}</span>
+            <span class="stats-mobile__label">工作日</span>
+          </div>
+          <div class="stats-mobile__item">
+            <span class="stats-mobile__value">{{ averageHours }}</span>
+            <span class="stats-mobile__label">日均</span>
+          </div>
+        </div>
         <button
           v-if="fillableDays.length > 0"
           class="board-panel__fill"
@@ -448,6 +462,10 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
   .board-panel__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .board-panel__stats-mobile {
+    display: none;
+  }
 }
 
 @media (max-width: 640px) {
@@ -478,7 +496,6 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
   }
 
   .board-panel__subtitle,
-  .board-panel__helper,
   .board-panel__detail-status {
     font-size: 0.86rem;
   }
@@ -489,6 +506,43 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
   }
 
   .board-panel__summary-strip {
+    display: none;
+  }
+
+  .board-panel__stats-mobile {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.56);
+    border: 1px solid rgba(19, 38, 40, 0.08);
+  }
+
+  .stats-mobile__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .stats-mobile__value {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .stats-mobile__label {
+    font-family: var(--font-display);
+    font-size: 0.64rem;
+    color: var(--ink-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .board-panel__summary-item {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.45rem;
     padding: 0;
