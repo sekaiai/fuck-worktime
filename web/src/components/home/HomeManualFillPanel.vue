@@ -6,6 +6,7 @@ import InlineToast from '../common/InlineToast.vue';
 import ResultDialog from '../common/ResultDialog.vue';
 import { useHomeStore } from '../../stores/home';
 import { formatDisplayDate } from '../../utils/date';
+import type { TimesheetEntry } from '../../types/timesheet';
 
 const homeStore = useHomeStore();
 const {
@@ -40,7 +41,7 @@ const stepSummary = computed(() => {
   if (manualCurrentStep.value === 2) {
     return '输入工作主题后，系统会按天生成可提交描述。';
   }
-  const totalEntryHours = manualEntries.value.reduce((sum, entry) => sum + entry.hours, 0);
+  const totalEntryHours = manualEntries.value.reduce((sum: number, entry: TimesheetEntry) => sum + entry.hours, 0);
   return `本次共 ${manualEntries.value.length} 条记录，预计提交 ${totalEntryHours} 小时。`;
 });
 </script>
