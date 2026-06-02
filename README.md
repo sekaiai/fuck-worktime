@@ -41,3 +41,6 @@ pnpm dev:web
 ├─ api
 └─ web
 ```
+
+前端部署:
+https://console.tencentcloud.com/edgeone/pages/project/pages-zhgc59epo10e/index?name=auto-work

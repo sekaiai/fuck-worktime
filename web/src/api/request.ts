@@ -16,7 +16,7 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE = import.meta.env.PROD ? 'https://example.com/api' : 'http://localhost:10002/api';
+const API_BASE = import.meta.env.PROD ? 'https://fka.logacg.com/api' : 'http://localhost:10002/api';
 // const API_BASE = 'https://w2.logacg.com/api'
 let authToken = '';
 let authGate: Promise<unknown> | null = null;
