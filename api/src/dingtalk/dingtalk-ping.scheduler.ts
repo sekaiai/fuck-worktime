@@ -14,7 +14,11 @@ export class DingtalkPingScheduler {
     private readonly timesClient: TimesClient,
   ) {}
 
-  @Cron('*/5 * * * * *')
+  /**
+   * 每 5 分钟对 logged_in 用户做一次心跳，确认 token 仍然有效。
+   * 之前是每 5 秒，过于频繁且容易触发对端限流。
+   */
+  @Cron('0 */5 * * * *')
   async pingLoggedInUsers(): Promise<void> {
     if (this.isRunning) {
       return;
@@ -30,12 +34,24 @@ export class DingtalkPingScheduler {
       const results = await Promise.allSettled(
         users
           .filter((user) => user.token.trim())
-          .map((user) => this.timesClient.ping(`Bearer ${user.token}`)),
+          .map(async (user) => {
+            try {
+              await this.timesClient.ping(`Bearer ${user.token}`);
+              return { userId: user.userId, ok: true as const };
+            } catch (error) {
+              // ping 失败说明 token 已失效，标记为 expired 以便后续走刷新流程
+              await this.dingtalkStore.updateUserStatus(user.userId, 'expired').catch(() => {});
+              this.logger.warn(
+                `Ping failed for user ${user.userId}, marked expired: ${error instanceof Error ? error.message : error}`,
+              );
+              return { userId: user.userId, ok: false as const };
+            }
+          }),
       );
 
       const rejectedCount = results.filter((result) => result.status === 'rejected').length;
       if (rejectedCount > 0) {
-        this.logger.warn(`Ping finished with ${rejectedCount} rejected requests.`);
+        this.logger.warn(`Ping finished with ${rejectedCount} unexpected rejections.`);
       }
     } finally {
       this.isRunning = false;

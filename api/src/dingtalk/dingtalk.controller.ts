@@ -27,7 +27,15 @@ export class DingtalkController {
       return { code: 400, msg: 'taskId is required', data: null };
     }
     const result = this.dingtalkService.getStatus(taskId);
-    return { code: 200, msg: 'success', data: result };
+    // 状态轮询接口不向客户端下发 token，登录成功后由 /user 接口提供
+    return {
+      code: 200,
+      msg: 'success',
+      data: {
+        status: result.status,
+        userId: result.userId,
+      },
+    };
   }
 
   @Get('user')

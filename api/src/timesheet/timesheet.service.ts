@@ -40,7 +40,7 @@ export class TimesheetService {
   async submitTimesheet(data: SubmitTimesheetDto, token: string): Promise<unknown> {
     try {
       const response = await this.client.post(
-        `${this.timesApiBaseUrl}/working/timing/repor`,
+        `${this.timesApiBaseUrl}/working/timing/report`,
         data,
         { headers: this.getAuthHeaders(token) },
       );

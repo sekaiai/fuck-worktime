@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Headers, Post, Query } from '@nestjs/common';
 
 import { ProjectDto } from './dto/project.dto';
 import { ReportBatchDto } from './dto/report-batch.dto';
@@ -22,11 +22,18 @@ export class TimesheetController {
     private readonly autoFillRuntimeScheduler: AutoFillRuntimeScheduler,
   ) {}
 
+  private requireToken(token: string | undefined): string {
+    if (!token || !token.trim()) {
+      throw new BadRequestException('Missing x-gzdata-token header');
+    }
+    return token;
+  }
+
   @Get('projects')
   async getProjects(
     @Headers('x-gzdata-token') token: string,
   ): Promise<ProjectDto[]> {
-    return this.timesheetService.getProjects(token);
+    return this.timesheetService.getProjects(this.requireToken(token));
   }
 
   @Get('work-types')
@@ -34,7 +41,7 @@ export class TimesheetController {
     @Query('projectId') projectId: string,
     @Headers('x-gzdata-token') token: string,
   ): Promise<WorkTypeDto[]> {
-    return this.timesheetService.getWorkTypes(projectId, token);
+    return this.timesheetService.getWorkTypes(projectId, this.requireToken(token));
   }
 
   @Post('submit')
@@ -42,7 +49,7 @@ export class TimesheetController {
     @Body() data: SubmitTimesheetDto,
     @Headers('x-gzdata-token') token: string,
   ): Promise<unknown> {
-    return this.timesheetService.submitTimesheet(data, token);
+    return this.timesheetService.submitTimesheet(data, this.requireToken(token));
   }
 
   @Post('generate')
@@ -57,7 +64,7 @@ export class TimesheetController {
     @Query('date') date: string,
     @Headers('x-gzdata-token') token: string,
   ): Promise<unknown> {
-    return this.timesheetService.getWeekBoard(date, token);
+    return this.timesheetService.getWeekBoard(date, this.requireToken(token));
   }
 
   @Post('report-batch')
@@ -65,7 +72,7 @@ export class TimesheetController {
     @Body() data: ReportBatchDto,
     @Headers('x-gzdata-token') token: string,
   ): Promise<unknown> {
-    return this.timesheetService.reportBatch(data, token);
+    return this.timesheetService.reportBatch(data, this.requireToken(token));
   }
 
   @Post('report')
@@ -73,7 +80,7 @@ export class TimesheetController {
     @Body() data: ReportDto,
     @Headers('x-gzdata-token') token: string,
   ): Promise<unknown> {
-    return this.timesheetService.report(data, token);
+    return this.timesheetService.report(data, this.requireToken(token));
   }
 
   @Post('auto-fill')

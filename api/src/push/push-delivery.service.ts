@@ -56,11 +56,16 @@ export class PushDeliveryService {
   listSubscriptions(userId?: string) {
     const subscriptions = Array.from(this.subscriptions.values());
 
-    if (!userId) {
-      return subscriptions;
-    }
+    const filtered = !userId
+      ? subscriptions
+      : subscriptions.filter((subscription) => subscription.userId === userId);
 
-    return subscriptions.filter((subscription) => subscription.userId === userId);
+    // 订阅的 keys.p256dh / keys.auth 是推送服务的私钥材料，不下发到客户端。
+    return filtered.map((subscription) => ({
+      userId: subscription.userId,
+      endpoint: subscription.endpoint,
+      expirationTime: subscription.expirationTime ?? null,
+    }));
   }
 
   getDiagnosticInfo() {
@@ -92,7 +97,28 @@ export class PushDeliveryService {
     };
   }
 
+  /**
+   * 测试推送限频：同一调用来源至少间隔 60 秒，避免被滥用做通知轰炸。
+   * 限频仅在内存中维护，重启后重置，足够挡住简单滥用。
+   */
+  private lastTestSentAt = 0;
+  private readonly testThrottleMs = 60_000;
+
   async sendTestNotification(payload?: NotificationPayload) {
+    const now = Date.now();
+    if (now - this.lastTestSentAt < this.testThrottleMs) {
+      const retryAfterSec = Math.ceil((this.testThrottleMs - (now - this.lastTestSentAt)) / 1000);
+      return {
+        success: false,
+        message: `测试推送被限频，请在 ${retryAfterSec} 秒后重试。`,
+        attempted: 0,
+        delivered: 0,
+        failed: 0,
+        removed: 0,
+        errors: ['throttled'],
+      };
+    }
+    this.lastTestSentAt = now;
     return this.sendNotificationToAll(payload);
   }
 

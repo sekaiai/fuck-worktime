@@ -62,6 +62,7 @@ export class DingtalkService {
     let browser: Browser | null = null;
     let context: BrowserContext | null = null;
     let page: Page | null = null;
+    let sessionRegistered = false;
 
     try {
       // ============================================
@@ -175,6 +176,7 @@ export class DingtalkService {
         createdAt: Date.now(),
       };
       this.sessions.set(taskId, session);
+      sessionRegistered = true;
 
       // ============================================
       // 步骤 8: 如果已登录，点击按钮并启动登录监听
@@ -212,6 +214,11 @@ export class DingtalkService {
         if (browser) await browser.close().catch(() => {});
       } catch {}
 
+      // 若 session 已注册到 Map，必须同步清理，避免 Map 内存泄漏
+      if (sessionRegistered) {
+        this.sessions.delete(taskId);
+      }
+
       throw error;
     }
   }
@@ -238,7 +245,7 @@ export class DingtalkService {
         this.logger.warn('[ding-auth] 等待超时（15秒），未捕获到响应');
         cleanup();
         resolve(null);
-      }, 150000);
+      }, 15000);
 
       const responseHandler = async (response: import('playwright').Response) => {
         const url = response.url();
@@ -258,7 +265,8 @@ export class DingtalkService {
           this.logger.log(`[ding-auth] 响应体：code=${body.code}, userId=${body.userId}`);
 
           if (body.code !== 200 || !body.userId || !body.token) {
-            this.logger.warn(`[ding-auth] 响应数据异常：${JSON.stringify(body)}`);
+            // 仅记录 code 与 userId，避免将 token 写入日志
+            this.logger.warn(`[ding-auth] 响应数据异常：code=${body.code}, userId=${body.userId ?? '(empty)'}`);
             return;
           }
 
@@ -272,7 +280,6 @@ export class DingtalkService {
           this.logger.log(`[ding-auth] 获取到 ${Object.keys(cookieMap).length} 个钉钉 Cookie`);
 
           // 保存到本地 JSON（以 userId 为键）
-          const authorization = `Bearer ${body.token}`;
           const authHeader = `Bearer ${body.token}`;
           await this.timesClient.ping(authHeader);
           const userProfile = await this.fetchUserProfile(body.token);
@@ -293,7 +300,10 @@ export class DingtalkService {
           cleanup();
           resolve({ userId: body.userId, token: body.token });
         } catch (error) {
-          this.logger.error(`[ding-auth] 处理响应失败：${error}`);
+          // catch 必须终结 Promise，否则会一直挂起到 setTimeout 超时
+          this.logger.error(`[ding-auth] 处理响应失败：${error instanceof Error ? error.message : error}`);
+          cleanup();
+          resolve(null);
         }
       };
 
@@ -401,38 +411,6 @@ export class DingtalkService {
     }
 
     return this.resolveUserInfo(matchedRecord);
-  }
-
-  private async buildUserInfo(
-    record: { userId: string; token: string; updatedAt: string; nickname?: string; phone?: string; department?: string },
-  ): Promise<UserInfoData> {
-    try {
-      const userProfile = await this.fetchUserProfile(record.token);
-
-      return {
-        userId: record.userId,
-        token: record.token,
-        nickname: userProfile.nickname,
-        phone: userProfile.phone,
-        department: userProfile.department,
-        updatedAt: record.updatedAt,
-        status: 'logged_in',
-      };
-    } catch (error) {
-      this.logger.warn(
-        `getUserByUserId: 远程获取用户信息失败，userId=${record.userId}，${error instanceof Error ? error.message : error}`,
-      );
-
-      return {
-        userId: record.userId,
-        token: record.token,
-        nickname: record.nickname ?? '',
-        phone: record.phone ?? '',
-        department: record.department ?? '',
-        updatedAt: record.updatedAt,
-        status: 'expired',
-      };
-    }
   }
 
   private async fetchUserProfile(token: string): Promise<{ nickname: string; phone: string; department: string }> {
@@ -687,7 +665,7 @@ export class DingtalkService {
     this.logger.log(`[cleanup] 清理会话：taskId=${taskId}, status=${session.status}`);
 
     try {
-      // 暂时不关闭浏览器资源，保持窗口打开，方便调试
+      // 关闭并释放浏览器三件套资源
       await session.page.close().catch(() => {});
       await session.context.close().catch(() => {});
       await session.browser.close().catch(() => {});
