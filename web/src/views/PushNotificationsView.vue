@@ -3,10 +3,13 @@ import { computed, onMounted, onUnmounted, shallowRef } from 'vue';
 
 import { usePushSubscriptionCenter } from '../composables/usePushSubscriptionCenter';
 import { usePwaDetect } from '../composables/usePwaDetect';
-import { getLocalStorage } from '../utils/cache';
+import { useAuthStore } from '../stores/auth';
 
-const userId = getLocalStorage('userId');
-const notifications = usePushSubscriptionCenter(userId);
+const authStore = useAuthStore();
+// 通过 authStore 取 userId，避免登出后停留在该页时仍用旧 localStorage 的 userId 提交订阅。
+// Pinia setup store 在实例上访问时会自动解包 ref，因此 authStore.userId 已是 string | null。
+const userId = computed(() => authStore.userId);
+const notifications = usePushSubscriptionCenter(userId.value);
 const { isPwa } = usePwaDetect();
 
 const deferredPrompt = shallowRef<Event & {
@@ -51,6 +54,8 @@ async function installPwa(): Promise<void> {
 
   await deferredPrompt.value.prompt();
   await deferredPrompt.value.userChoice;
+  // 安装流程结束后必须清空，否则按钮可重复点击且 prompt() 第二次会直接 reject
+  deferredPrompt.value = null;
 }
 
 onMounted(() => {

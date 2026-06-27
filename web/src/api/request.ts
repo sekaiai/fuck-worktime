@@ -21,6 +21,12 @@ const API_BASE = import.meta.env.PROD ? 'https://fka.logacg.com/api' : 'http://l
 let authToken = '';
 let authGate: Promise<unknown> | null = null;
 
+/**
+ * 默认请求超时 15 秒，避免 gzdata 慢响应或网络挂起导致 authGate 后所有请求无限等待。
+ * 调用方可通过 init.signal 自定义，但 fetch 的 signal 一旦由外部传入则不再自动追加超时。
+ */
+const DEFAULT_TIMEOUT_MS = 15_000;
+
 export function getApiBase(): string {
   return API_BASE;
 }
@@ -60,7 +66,27 @@ async function parseResponse<T>(response: Response): Promise<T> {
     return {} as T;
   }
 
-  return JSON.parse(text) as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError('响应解析失败，请稍后重试。', response.status);
+  }
+}
+
+/**
+ * 创建带超时的 fetch 信号；若 init 已提供 signal 则原样返回，避免覆盖调用方控制。
+ */
+function createTimeoutSignal(init?: RequestInit): { signal: AbortSignal | undefined; cleanup: () => void } {
+  if (init?.signal) {
+    return { signal: init.signal, cleanup: () => {} };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timer),
+  };
 }
 
 export async function apiRequest<T>(
@@ -77,10 +103,22 @@ export async function apiRequest<T>(
     headers.set('x-gzdata-token', authToken);
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers,
-  });
+  const { signal, cleanup } = createTimeoutSignal(init);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers,
+      signal,
+    });
+  } catch (error) {
+    cleanup();
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiError('请求超时，请稍后重试。', undefined, 'TIMEOUT');
+    }
+    throw new ApiError(error instanceof Error ? error.message : '网络请求失败。');
+  }
+  cleanup();
 
   const payload = await parseResponse<ApiEnvelope<T> | { message?: string }>(response);
   if (response.status === 401) {

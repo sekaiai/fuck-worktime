@@ -13,6 +13,12 @@ import { ApiError, apiRequest, clearAuthToken, getApiBase, getAuthToken, setAuth
 
 const GZDATA_BASE = 'https://times.gzdata.com.cn:8099/prod-api';
 
+/**
+ * gzdata 慢响应或网络挂起时，没有超时会无限阻塞 authGate 之后的请求。
+ * 默认 15 秒，与 request.ts 保持一致。
+ */
+const GZDATA_TIMEOUT_MS = 15_000;
+
 type UnknownRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -93,11 +99,32 @@ async function gzdataRawRequest(path: string, init?: RequestInit): Promise<unkno
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(`${GZDATA_BASE}${path}`, {
-    ...init,
-    mode: 'cors',
-    headers,
-  });
+  // 若调用方未传 signal，则附加默认超时
+  let signal = init?.signal;
+  let cleanup: () => void = () => {};
+  if (!signal) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), GZDATA_TIMEOUT_MS);
+    signal = controller.signal;
+    cleanup = () => clearTimeout(timer);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${GZDATA_BASE}${path}`, {
+      ...init,
+      mode: 'cors',
+      headers,
+      signal,
+    });
+  } catch (error) {
+    cleanup();
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiError('请求超时，请稍后重试。', undefined, 'TIMEOUT');
+    }
+    throw new ApiError(error instanceof Error ? error.message : '网络请求失败。');
+  }
+  cleanup();
 
   const payload = await parseJson<unknown>(response);
 

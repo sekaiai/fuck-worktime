@@ -135,10 +135,24 @@ function clearTimer(): void {
   }
 }
 
+/**
+ * redirect 必须是站内路径，避免开放重定向（例如 `//evil.com` 或 `https://evil.com`）。
+ */
+function resolveSafeRedirect(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw) {
+    return '/';
+  }
+  // 必须以单个 / 开头，不能以 // 或 /\\ 开头（会被浏览器解析为协议相对/绝对 URL）
+  if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) {
+    return '/';
+  }
+  return raw;
+}
+
 async function finishLogin(targetUserId: string): Promise<void> {
   const result = await authStore.hydrateUser(targetUserId);
   if (result.ok) {
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
+    const redirect = resolveSafeRedirect(route.query.redirect);
     await router.replace(redirect);
     return;
   }
@@ -150,10 +164,26 @@ async function finishLogin(targetUserId: string): Promise<void> {
       : '获取用户信息失败，请重新登录。';
 }
 
+/**
+ * 轮询上限：约 2 分钟（60 次 × 2 秒），超过则转为 timeout 状态，
+ * 避免后端持续返回 waiting 时无限轮询。
+ */
+const MAX_POLL_ATTEMPTS = 60;
+const POLL_INTERVAL_MS = 2000;
+
 async function startPolling(): Promise<void> {
   clearTimer();
+  let attempts = 0;
   pollTimer = window.setInterval(async () => {
     if (!taskId.value) {
+      return;
+    }
+
+    attempts += 1;
+    if (attempts > MAX_POLL_ATTEMPTS) {
+      clearTimer();
+      status.value = 'timeout';
+      message.value = '登录等待超时，请刷新二维码后重试。';
       return;
     }
 
@@ -177,7 +207,7 @@ async function startPolling(): Promise<void> {
       message.value = error instanceof Error ? error.message : '查询登录状态失败。';
       clearTimer();
     }
-  }, 2000);
+  }, POLL_INTERVAL_MS);
 }
 
 async function loadQrcode(): Promise<void> {
@@ -232,7 +262,7 @@ async function submitPhoneLogin(): Promise<void> {
   }
 
   status.value = 'success';
-  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
+  const redirect = resolveSafeRedirect(route.query.redirect);
   await router.replace(redirect);
 }
 
