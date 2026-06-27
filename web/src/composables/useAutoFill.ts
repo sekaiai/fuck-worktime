@@ -142,7 +142,8 @@ export function useAutoFill(options: {
   }
 
   async function toggleOpen(): Promise<void> {
-    isOpen.value = !isOpen.value;
+    const previousOpen = isOpen.value;
+    isOpen.value = !previousOpen;
     if (!isOpen.value) {
       return;
     }
@@ -153,6 +154,8 @@ export function useAutoFill(options: {
         syncAutoWorkTypeGroup();
       }
     } catch (error) {
+      // 失败时回滚 isOpen，避免 UI 显示空工时类型列表
+      isOpen.value = previousOpen;
       showToast(getErrorMessage(error, '加载项目或工时类型失败。'));
     }
   }

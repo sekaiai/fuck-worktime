@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import type { WeekDay, WorkDetail } from '../../types/timesheet';
@@ -23,11 +23,30 @@ const {
   selectedDay,
   days,
 } = storeToRefs(homeStore);
-const todayKey = getTodayKey();
 
-const isMobileView = computed(
-  () => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches,
-);
+// todayKey 必须是 computed：跨午夜后若仍是 setup 时的旧值，
+// isPendingDay 会把"今天"错判为"未来日"或反之，与 useWeekBoard.fillableDays 不一致。
+const todayKey = computed(() => getTodayKey());
+
+// window.matchMedia(...).matches 不是响应式数据源，computed 永远只返回初次值。
+// 改为监听 matchMedia 的 change 事件，让 isMobileView 真正随视口变化。
+const isMobileView = ref(false);
+let mediaQuery: MediaQueryList | null = null;
+const handleMediaChange = (event: MediaQueryListEvent): void => {
+  isMobileView.value = event.matches;
+};
+
+onMounted(() => {
+  if (typeof window === 'undefined') return;
+  mediaQuery = window.matchMedia('(max-width: 640px)');
+  isMobileView.value = mediaQuery.matches;
+  mediaQuery.addEventListener('change', handleMediaChange);
+});
+
+onBeforeUnmount(() => {
+  mediaQuery?.removeEventListener('change', handleMediaChange);
+  mediaQuery = null;
+});
 
 const summaryItems = computed(() => [
   { label: '总工时', value: `${totalHours.value} h` },
@@ -36,7 +55,7 @@ const summaryItems = computed(() => [
 ]);
 
 function isPendingDay(day: WeekDay): boolean {
-  return day.status === '未提交' && day.date <= todayKey;
+  return day.status === '未提交' && day.date <= todayKey.value;
 }
 
 function getStateClass(day: WeekDay): string {

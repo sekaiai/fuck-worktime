@@ -13,6 +13,12 @@ export function useWeekBoard() {
   const currentDate = shallowRef(getWeekStart());
   const selectedDayDate = shallowRef('');
 
+  /**
+   * 单调递增的请求序号。loadWeek 每次发起请求前自增，响应回来后比对：
+   * 若不是最新一次请求，则丢弃响应，避免快速切换"上一周/下一周"时先发后到覆盖最新周。
+   */
+  let requestSeq = 0;
+
   const days = computed(() => board.value?.days ?? []);
   const fillableDays = computed(() =>
     days.value.filter((day) => !day.isWeekend && day.status === '未提交' && day.date <= getTodayKey()),
@@ -43,16 +49,25 @@ export function useWeekBoard() {
   }
 
   async function loadWeek(date = currentDate.value): Promise<boolean> {
+    const mySeq = ++requestSeq;
     currentDate.value = getWeekStart(date);
     isWeekLoading.value = true;
     errorMessage.value = '';
     errorCode.value = '';
 
     try {
-      board.value = await getWeekBoard(currentDate.value);
+      const result = await getWeekBoard(currentDate.value);
+      if (mySeq !== requestSeq) {
+        // 已被更新的请求取代，丢弃响应
+        return false;
+      }
+      board.value = result;
       syncSelectedBoardDay();
       return true;
     } catch (error) {
+      if (mySeq !== requestSeq) {
+        return false;
+      }
       if (error instanceof ApiError) {
         errorMessage.value = error.message;
         errorCode.value = error.code ?? '';
@@ -61,16 +76,18 @@ export function useWeekBoard() {
       }
       return false;
     } finally {
-      isWeekLoading.value = false;
+      if (mySeq === requestSeq) {
+        isWeekLoading.value = false;
+      }
     }
   }
 
   async function switchWeek(direction: 'previous' | 'current' | 'next'): Promise<void> {
-    const actions = {
+    const actions: Record<typeof direction, () => Promise<boolean>> = {
       previous: () => loadWeek(shiftDateKeyByDays(currentDate.value, -7)),
       current: () => (isCurrentWeek.value ? Promise.resolve(true) : loadWeek(weekStartOfToday.value)),
       next: () => loadWeek(shiftDateKeyByDays(currentDate.value, 7)),
-    } as const;
+    };
     await actions[direction]();
   }
 

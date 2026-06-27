@@ -1,4 +1,4 @@
-import { shallowRef } from 'vue';
+import { onBeforeUnmount, shallowRef } from 'vue';
 
 export function useToast() {
   const message = shallowRef('');
@@ -13,6 +13,14 @@ export function useToast() {
       message.value = '';
     }, 2600);
   }
+
+  // 组件卸载后必须清理 timer，否则可能在卸载后仍触发 ref 赋值
+  onBeforeUnmount(() => {
+    if (timer !== null) {
+      window.clearTimeout(timer);
+      timer = null;
+    }
+  });
 
   return {
     message,
