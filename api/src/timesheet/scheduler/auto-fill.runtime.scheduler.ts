@@ -222,16 +222,44 @@ export class AutoFillRuntimeScheduler {
     return axios.isAxiosError(error) && error.response?.status === 401;
   }
 
+  /**
+   * 显式按 Asia/Shanghai 时区生成 YYYY-MM-DD，避免依赖服务器本地时区。
+   * 部署到非东八区时，"今天"、"reportTime 比较"与"day.date <= today"必须仍以中国时区为准。
+   */
   private getTodayKey(): string {
-    return new Date().toLocaleDateString('en-CA');
+    return this.formatShanghaiDate(new Date());
+  }
+
+  private formatShanghaiDate(date: Date): string {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    return formatter.format(date);
+  }
+
+  private getShanghaiHourMinute(): string {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Shanghai',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date());
+    const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
+    const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
+    // Intl 在午夜可能返回 "24" 而非 "00"
+    const normalizedHour = hour === '24' ? '00' : hour;
+    return `${normalizedHour}:${minute}`;
   }
 
   private shouldRunNow(config: AutoFillConfig): boolean {
     const now = new Date();
-    const today = now.toLocaleDateString('en-CA');
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const today = this.formatShanghaiDate(now);
+    const currentTime = this.getShanghaiHourMinute();
     const reportTime = config.reportTime || this.defaultReportTime;
-    const lastExecutedDay = config.lastExecutedAt ? config.lastExecutedAt.slice(0, 10) : null;
+    const lastExecutedDay = config.lastExecutedAt ? this.formatShanghaiDate(new Date(config.lastExecutedAt)) : null;
 
     if (lastExecutedDay === today) {
       return false;

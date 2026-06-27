@@ -22,6 +22,12 @@ const LEGACY_DATA_FILE = 'dingtalk-users.json';
 @Injectable()
 export class DingtalkStore {
   private readonly logger = new Logger(DingtalkStore.name);
+  /**
+   * 串行化所有写操作的 Promise 链。
+   * 自动填报调度器、ping 调度器、登录写入、用户配置保存都会触发 read-modify-write，
+   * 无锁会导致丢失更新（例如 lastExecutedAt 覆盖刚保存的 autoFill 配置）。
+   */
+  private writeChain: Promise<unknown> = Promise.resolve();
 
   private get apiRootPath(): string {
     const cwd = process.cwd();
@@ -45,7 +51,7 @@ export class DingtalkStore {
       await fs.access(this.filePath);
     } catch {
       const legacyData = await this.readLegacyData();
-      await fs.writeFile(this.filePath, `${JSON.stringify(legacyData, null, 2)}\n`, 'utf-8');
+      await this.atomicWrite(JSON.stringify(legacyData, null, 2));
     }
   }
 
@@ -62,27 +68,33 @@ export class DingtalkStore {
       return Object.fromEntries(
         Object.entries(parsed).map(([userId, record]) => [userId, this.normalizeRecord(userId, record)]),
       );
-    } catch {
-      this.logger.error(`Failed to parse ${DATA_FILE}`);
-      return {};
+    } catch (error) {
+      // 解析失败必须抛出，禁止以空对象继续 writeAll，否则会静默清空全部用户数据。
+      // 同时备份损坏文件以便事后恢复。
+      await this.backupCorruptFile(content);
+      throw new Error(
+        `Failed to parse ${DATA_FILE}: ${error instanceof Error ? error.message : error}. A backup has been saved.`,
+      );
     }
   }
 
   async upsertUser(record: DingtalkUserRecord): Promise<void> {
-    const data = await this.readAll();
-    data[record.userId] = {
-      ...data[record.userId],
-      ...record,
-      autoFill: record.autoFill ?? data[record.userId]?.autoFill ?? null,
-      status: record.status ?? data[record.userId]?.status ?? this.deriveStatus(record.token),
-      updatedAt: new Date().toISOString(),
-    };
-    await this.writeAll(data);
-    this.logger.log(`[DingtalkStore] User ${record.userId} persisted to ${DATA_FILE}`);
+    return this.serializeWrite(async () => {
+      const data = await this.safeReadAll();
+      data[record.userId] = {
+        ...data[record.userId],
+        ...record,
+        autoFill: record.autoFill ?? data[record.userId]?.autoFill ?? null,
+        status: record.status ?? data[record.userId]?.status ?? this.deriveStatus(record.token),
+        updatedAt: new Date().toISOString(),
+      };
+      await this.atomicWrite(JSON.stringify(data, null, 2));
+      this.logger.log(`[DingtalkStore] User ${record.userId} persisted to ${DATA_FILE}`);
+    });
   }
 
   async getUser(userId: string): Promise<DingtalkUserRecord | null> {
-    const data = await this.readAll();
+    const data = await this.safeReadAll();
     return data[userId] ?? null;
   }
 
@@ -92,55 +104,112 @@ export class DingtalkStore {
   }
 
   async getAllAutoFill(): Promise<AutoFillConfig[]> {
-    const data = await this.readAll();
+    const data = await this.safeReadAll();
     return Object.values(data)
       .map((record) => record.autoFill ?? null)
       .filter((config): config is AutoFillConfig => config !== null);
   }
 
   async getUsersByStatus(status: DingtalkLoginStatus): Promise<DingtalkUserRecord[]> {
-    const data = await this.readAll();
+    const data = await this.safeReadAll();
     return Object.values(data).filter((record) => record.status === status);
   }
 
   async updateUserStatus(userId: string, status: DingtalkLoginStatus): Promise<DingtalkUserRecord | null> {
-    const data = await this.readAll();
-    const current = data[userId];
-    if (!current) {
-      return null;
-    }
+    return this.serializeWrite(async () => {
+      const data = await this.safeReadAll();
+      const current = data[userId];
+      if (!current) {
+        return null;
+      }
 
-    const nextRecord: DingtalkUserRecord = {
-      ...current,
-      status,
-      updatedAt: new Date().toISOString(),
-    };
+      const nextRecord: DingtalkUserRecord = {
+        ...current,
+        status,
+        updatedAt: new Date().toISOString(),
+      };
 
-    data[userId] = nextRecord;
-    await this.writeAll(data);
-    return nextRecord;
+      data[userId] = nextRecord;
+      await this.atomicWrite(JSON.stringify(data, null, 2));
+      return nextRecord;
+    });
   }
 
   async setAutoFill(config: AutoFillConfig): Promise<void> {
-    const data = await this.readAll();
-    const current = data[config.userId];
-    data[config.userId] = {
-      userId: config.userId,
-      token: current?.token ?? '',
-      dingtalkCookies: current?.dingtalkCookies ?? {},
-      nickname: current?.nickname ?? '',
-      phone: current?.phone ?? '',
-      department: current?.department ?? '',
-      updatedAt: current?.updatedAt ?? new Date().toISOString(),
-      autoFill: config,
-      status: current?.status ?? this.deriveStatus(current?.token),
-    };
-    await this.writeAll(data);
+    return this.serializeWrite(async () => {
+      const data = await this.safeReadAll();
+      const current = data[config.userId];
+      data[config.userId] = {
+        userId: config.userId,
+        token: current?.token ?? '',
+        dingtalkCookies: current?.dingtalkCookies ?? {},
+        nickname: current?.nickname ?? '',
+        phone: current?.phone ?? '',
+        department: current?.department ?? '',
+        updatedAt: current?.updatedAt ?? new Date().toISOString(),
+        autoFill: config,
+        status: current?.status ?? this.deriveStatus(current?.token),
+      };
+      await this.atomicWrite(JSON.stringify(data, null, 2));
+    });
   }
 
   async writeAll(data: Record<string, DingtalkUserRecord>): Promise<void> {
-    await this.ensureFileExists();
-    await fs.writeFile(this.filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf-8');
+    return this.serializeWrite(async () => {
+      await this.ensureFileExists();
+      await this.atomicWrite(JSON.stringify(data, null, 2));
+    });
+  }
+
+  /**
+   * 串行化所有写操作：read-modify-write 之间不会交错，避免丢失更新。
+   */
+  private serializeWrite<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.writeChain.then(task, task);
+    // 不让单次失败打断后续写操作
+    this.writeChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /**
+   * 读操作容忍文件暂时不可读/损坏，返回空对象以避免阻塞读路径。
+   * 写路径仍会通过 readAll 抛错，避免以空数据覆写。
+   */
+  private async safeReadAll(): Promise<Record<string, DingtalkUserRecord>> {
+    try {
+      return await this.readAll();
+    } catch (error) {
+      this.logger.warn(
+        `[DingtalkStore] safeReadAll fallback to empty: ${error instanceof Error ? error.message : error}`,
+      );
+      return {};
+    }
+  }
+
+  /**
+   * 原子写：写入临时文件后 rename 替换目标文件。
+   * rename 在同一文件系统内是原子的，可避免写入中途崩溃留下半截 JSON。
+   */
+  private async atomicWrite(serialized: string): Promise<void> {
+    const target = this.filePath;
+    const tmp = `${target}.tmp-${process.pid}-${Date.now()}`;
+    await fs.writeFile(tmp, `${serialized}\n`, 'utf-8');
+    await fs.rename(tmp, target);
+  }
+
+  private async backupCorruptFile(content: string): Promise<void> {
+    const backupPath = `${this.filePath}.corrupt-${Date.now()}`;
+    try {
+      await fs.writeFile(backupPath, content, 'utf-8');
+      this.logger.error(`[DingtalkStore] Corrupt data file backed up to ${backupPath}`);
+    } catch (error) {
+      this.logger.error(
+        `[DingtalkStore] Failed to back up corrupt file: ${error instanceof Error ? error.message : error}`,
+      );
+    }
   }
 
   private async readLegacyData(): Promise<Record<string, DingtalkUserRecord>> {
