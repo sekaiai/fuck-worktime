@@ -63,7 +63,7 @@ export class TimesClient {
     }
 
     if (error instanceof Error && error.message) {
-      return new TimesClientError(error.message);
+      return new TimesClientError(fallbackMessage);
     }
 
     return new TimesClientError(fallbackMessage);
@@ -75,34 +75,18 @@ export class TimesClient {
 
     if (typeof responseData === 'string' && responseData.trim()) {
       return new TimesClientError(
-        status ? `${fallbackMessage}（HTTP ${status}）：${responseData}` : responseData,
+        status ? `${fallbackMessage}（HTTP ${status}）` : fallbackMessage,
         status,
       );
     }
 
     if (responseData && typeof responseData === 'object') {
-      const maybeMessage = (responseData as { msg?: unknown; message?: unknown }).msg;
-      const fallbackField = (responseData as { msg?: unknown; message?: unknown }).message;
-      const serverMessage =
-        typeof maybeMessage === 'string'
-          ? maybeMessage
-          : typeof fallbackField === 'string'
-            ? fallbackField
-            : null;
-
-      if (serverMessage) {
-        return new TimesClientError(
-          status
-            ? `${fallbackMessage}（HTTP ${status}）：${serverMessage}`
-            : `${fallbackMessage}：${serverMessage}`,
-          status,
-        );
-      }
+      return new TimesClientError(status ? `${fallbackMessage}（HTTP ${status}）` : fallbackMessage, status);
     }
 
     if (error.message) {
       return new TimesClientError(
-        status ? `${fallbackMessage}（HTTP ${status}）：${error.message}` : error.message,
+        status ? `${fallbackMessage}（HTTP ${status}）` : fallbackMessage,
         status,
       );
     }

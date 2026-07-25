@@ -8,6 +8,7 @@ import { AiService } from '../ai/ai.service';
 import { TimesheetService } from '../timesheet.service';
 import { AutoFillStore } from './auto-fill.store';
 import type { AutoFillConfig } from './auto-fill.types';
+import { getChineseErrorMessage } from '../../common/response-message';
 
 interface WeekBoardDay {
   date: string;
@@ -24,6 +25,8 @@ interface AutoFillReportPayload {
   content: string;
   hours: number;
 }
+
+type AutoFillExecutionResult = 'success' | 'failed' | 'skipped' | 'expired' | 'ai-unavailable';
 
 @Injectable()
 export class AutoFillRuntimeScheduler {
@@ -52,7 +55,7 @@ export class AutoFillRuntimeScheduler {
       try {
         await this.processUser(config);
       } catch (error) {
-        this.logger.error(`Auto-fill failed for user ${config.userId}`, error);
+        this.logger.error(`自动填报失败：userId=${config.userId}`, error);
       }
     }
   }
@@ -60,7 +63,7 @@ export class AutoFillRuntimeScheduler {
   async triggerNow(userId: string): Promise<{ code: number; msg: string }> {
     const config = await this.autoFillStore.get(userId);
     if (!config) {
-      return { code: 404, msg: 'Auto-fill config not found.' };
+      return { code: 404, msg: '未找到自动填报配置。' };
     }
 
     const normalizedConfig: AutoFillConfig = {
@@ -69,35 +72,34 @@ export class AutoFillRuntimeScheduler {
     };
 
     if (!normalizedConfig.enabled) {
-      return { code: 400, msg: 'Auto-fill is disabled.' };
+      return { code: 400, msg: '自动填报已关闭。' };
     }
 
     try {
-      await this.processUser(normalizedConfig);
+      const result = await this.processUser(normalizedConfig);
+      switch (result) {
+        case 'success':
+          return { code: 200, msg: '自动填报已成功完成。' };
+        case 'skipped':
+          return { code: 200, msg: '当前没有可填报的工作日。' };
+        case 'expired':
+          return { code: 200, msg: '自动填报已过期并停止执行。' };
+        case 'ai-unavailable':
+          return { code: 503, msg: 'AI 内容生成暂不可用，请稍后重试。' };
+        case 'failed':
+          return { code: 500, msg: '自动填报失败，请检查当前配置和登录状态。' };
+      }
     } catch (error) {
-      this.logger.error(`Manual auto-fill failed for user ${userId}`, error);
+      this.logger.error(`手动执行自动填报失败：userId=${userId}`, error);
       return {
         code: 500,
-        msg: error instanceof Error ? error.message : 'Manual auto-fill failed.',
+        msg: getChineseErrorMessage(error, '手动执行自动填报失败。'),
       };
     }
 
-    const latest = await this.autoFillStore.get(userId);
-    switch (latest?.lastExecutionStatus) {
-      case 'success':
-        return { code: 200, msg: 'Auto-fill completed successfully.' };
-      case 'skipped':
-        return { code: 200, msg: 'No fillable workday is available right now.' };
-      case 'expired':
-        return { code: 200, msg: 'Auto-fill is expired and has stopped.' };
-      case 'failed':
-        return { code: 500, msg: 'Auto-fill failed. Please check the current config and login state.' };
-      default:
-        return { code: 200, msg: 'Auto-fill request finished.' };
-    }
   }
 
-  private async processUser(config: AutoFillConfig): Promise<void> {
+  private async processUser(config: AutoFillConfig): Promise<AutoFillExecutionResult> {
     if (this.isExpired(config.deadline)) {
       await this.autoFillStore.set({
         ...config,
@@ -105,21 +107,21 @@ export class AutoFillRuntimeScheduler {
         lastExecutedAt: new Date().toISOString(),
         lastExecutionStatus: 'expired',
       });
-      await this.notifyUser(config.userId, 'Auto-fill is expired and has stopped.');
-      return;
+      await this.notifyUser(config.userId, '自动填报已过期并停止执行。');
+      return 'expired';
     }
 
     const token = await this.getTokenForUser(config.userId);
     if (!token) {
-      await this.markFailed(config, 'Failed to acquire token. Please log in again.');
-      return;
+      await this.markFailed(config, '获取登录凭证失败，请重新登录。');
+      return 'failed';
     }
 
     const today = this.getTodayKey();
     const weekBoard = await this.getWeekBoard(today, token);
     if (!weekBoard) {
-      await this.markFailed(config, 'Failed to fetch week board.');
-      return;
+      await this.markFailed(config, '获取周工时看板失败。');
+      return 'failed';
     }
 
     const fillableDays = weekBoard
@@ -127,8 +129,8 @@ export class AutoFillRuntimeScheduler {
       .sort((left, right) => left.date.localeCompare(right.date));
 
     if (fillableDays.length === 0) {
-      await this.markSkipped(config, 'No fillable workday is available this week.');
-      return;
+      await this.markSkipped(config, '本周没有可填报的工作日。');
+      return 'skipped';
     }
 
     const contents = await this.aiService.generateWorkContents(
@@ -136,15 +138,33 @@ export class AutoFillRuntimeScheduler {
       fillableDays.length,
     );
 
-    const payloads = fillableDays.map<AutoFillReportPayload>((day, index) => ({
-      reportDate: day.date,
-      projectId: config.projectId,
-      projectTitle: config.projectTitle,
-      projectStatus: config.projectStatus,
-      itemId: config.itemId,
-      content: contents[index] || 'Daily work handling',
-      hours: config.hours,
-    }));
+    if (contents.length < fillableDays.length) {
+      this.logger.warn(
+        `AI 未生成可用内容：userId=${config.userId}，跳过提交并等待下次执行重试`,
+      );
+      return 'ai-unavailable';
+    }
+
+    const payloads: AutoFillReportPayload[] = [];
+    for (const [index, day] of fillableDays.entries()) {
+      const content = contents[index];
+      if (!content) {
+        this.logger.warn(
+          `AI 生成内容不完整：userId=${config.userId}，跳过提交并等待下次执行重试`,
+        );
+        return 'ai-unavailable';
+      }
+
+      payloads.push({
+        reportDate: day.date,
+        projectId: config.projectId,
+        projectTitle: config.projectTitle,
+        projectStatus: config.projectStatus,
+        itemId: config.itemId,
+        content,
+        hours: config.hours,
+      });
+    }
 
     try {
       const submittedCount = await this.submitReportsSequentially(config.userId, payloads, token);
@@ -153,10 +173,12 @@ export class AutoFillRuntimeScheduler {
         lastExecutedAt: new Date().toISOString(),
         lastExecutionStatus: 'success',
       });
-      await this.notifyUser(config.userId, `Auto-fill succeeded with ${submittedCount} submitted entries.`);
+      await this.notifyUser(config.userId, `自动填报成功，已提交 ${submittedCount} 条工时记录。`);
+      return 'success';
     } catch (error) {
-      await this.markFailed(config, 'Auto-fill failed. Please handle the remaining entries manually.');
-      this.logger.error(`Auto-fill failed for user ${config.userId}`, error);
+      await this.markFailed(config, '自动填报失败，请手动处理剩余工时记录。');
+      this.logger.error(`自动填报失败：userId=${config.userId}`, error);
+      return 'failed';
     }
   }
 
@@ -289,12 +311,12 @@ export class AutoFillRuntimeScheduler {
   private async notifyUser(userId: string, message: string): Promise<void> {
     try {
       await this.pushService.sendNotificationToUser(userId, {
-        title: 'Timesheet Notification',
+        title: '工时填报通知',
         body: message,
         url: '/',
       });
     } catch (error) {
-      this.logger.error(`Failed to send notification for user ${userId}`, error);
+      this.logger.error(`向用户发送通知失败：userId=${userId}`, error);
     }
   }
 }

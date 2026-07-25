@@ -3,23 +3,21 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import type { AiChatMessage, AiChatResponse } from './ai.types';
 
-const FALLBACK_CONTENT = '日常工作处理';
-
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private readonly apiUrl = 'https://api.siliconflow.cn/v1/chat/completions';
+  private readonly apiUrl = 'https://api.deepseek.com/chat/completions';
 
   constructor(private readonly configService: ConfigService) {}
 
   async generateWorkContents(work: string, days: number): Promise<string[]> {
-    const apiKey = this.configService.get<string>('SILICONFLOW_API_KEY');
+    const apiKey = this.configService.get<string>('DEEPSEEK_API_KEY');
     if (!apiKey) {
-      this.logger.warn('SILICONFLOW_API_KEY not configured, returning fallback');
-      return Array.from({ length: days }, () => FALLBACK_CONTENT);
+      this.logger.warn('未配置 DEEPSEEK_API_KEY，跳过 AI 内容生成');
+      return [];
     }
 
-    const model = this.configService.get<string>('SILICONFLOW_MODEL') || 'Qwen/Qwen2.5-7B-Instruct';
+    const model = this.configService.get<string>('DEEPSEEK_MODEL') ?? 'deepseek-v4-flash';
 
     const messages: AiChatMessage[] = [
       {
@@ -55,8 +53,8 @@ export class AiService {
       const rawContent = response.data.choices[0]?.message?.content || '';
       return this.cleanContent(rawContent, days);
     } catch (error) {
-      this.logger.error('AI generation failed, returning fallback', error);
-      return Array.from({ length: days }, () => FALLBACK_CONTENT);
+      this.logger.error('AI 内容生成失败，跳过本次提交', error);
+      return [];
     }
   }
 
@@ -85,12 +83,8 @@ export class AiService {
 
     lines = lines.filter((line) => line.length > 0 && line.length < 500);
 
-    if (lines.length === 0) {
-      return Array.from({ length: expectedCount }, () => FALLBACK_CONTENT);
-    }
-
-    while (lines.length < expectedCount) {
-      lines.push(FALLBACK_CONTENT);
+    if (lines.length < expectedCount) {
+      return [];
     }
 
     return lines.slice(0, expectedCount);

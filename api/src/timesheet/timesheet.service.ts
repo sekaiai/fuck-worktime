@@ -46,7 +46,7 @@ export class TimesheetService {
       );
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to submit timesheet', error);
+      this.logger.error('提交工时失败', error);
       throw error;
     }
   }
@@ -63,7 +63,7 @@ export class TimesheetService {
       const response = await this.client.get<ProjectDto[]>(url, { headers });
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to fetch projects');
+      this.logger.error('获取项目列表失败');
       throw error;
     }
   }
@@ -76,7 +76,7 @@ export class TimesheetService {
       const response = await this.client.get<WorkTypeDto[]>(url, { headers });
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to fetch work types', error);
+      this.logger.error('获取工时类型失败', error);
       throw error;
     }
   }
@@ -90,7 +90,7 @@ export class TimesheetService {
       return response.data;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to fetch week board: ${message}`);
+      this.logger.error(`获取周工时看板失败：${message}`);
       throw error;
     }
   }
@@ -103,7 +103,7 @@ export class TimesheetService {
       const response = await this.client.post(url, data, { headers });
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to batch report timesheet', error);
+      this.logger.error('批量提交工时失败', error);
       throw error;
     }
   }
@@ -116,7 +116,7 @@ export class TimesheetService {
       const response = await this.client.post(url, data, { headers });
       return response.data;
     } catch (error) {
-      this.logger.error('Failed to report timesheet', error);
+      this.logger.error('提交单条工时失败', error);
       throw error;
     }
   }

@@ -65,14 +65,14 @@ export class AutoFillStore {
             status: existing?.status ?? (existing?.token ? 'logged_in' : 'expired'),
           };
         } catch (error) {
-          this.logger.error(`Failed to migrate legacy auto-fill file ${entry.name}`, error);
+          this.logger.error(`迁移旧版自动填报文件 ${entry.name} 失败`, error);
         }
       }
 
       await this.dingtalkStore.writeAll(records);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        this.logger.error('Failed to migrate legacy auto-fill configs', error);
+        this.logger.error('迁移旧版自动填报配置失败', error);
       }
     }
   }

@@ -73,7 +73,7 @@ export class DingtalkStore {
       // 同时备份损坏文件以便事后恢复。
       await this.backupCorruptFile(content);
       throw new Error(
-        `Failed to parse ${DATA_FILE}: ${error instanceof Error ? error.message : error}. A backup has been saved.`,
+        `解析 ${DATA_FILE} 失败：${error instanceof Error ? error.message : error}。已保存备份文件。`,
       );
     }
   }
@@ -89,7 +89,7 @@ export class DingtalkStore {
         updatedAt: new Date().toISOString(),
       };
       await this.atomicWrite(JSON.stringify(data, null, 2));
-      this.logger.log(`[DingtalkStore] User ${record.userId} persisted to ${DATA_FILE}`);
+      this.logger.log(`[DingtalkStore] 用户 ${record.userId} 已保存到 ${DATA_FILE}`);
     });
   }
 
@@ -183,7 +183,7 @@ export class DingtalkStore {
       return await this.readAll();
     } catch (error) {
       this.logger.warn(
-        `[DingtalkStore] safeReadAll fallback to empty: ${error instanceof Error ? error.message : error}`,
+        `[DingtalkStore] 读取数据失败，已降级为空数据：${error instanceof Error ? error.message : error}`,
       );
       return {};
     }
@@ -204,10 +204,10 @@ export class DingtalkStore {
     const backupPath = `${this.filePath}.corrupt-${Date.now()}`;
     try {
       await fs.writeFile(backupPath, content, 'utf-8');
-      this.logger.error(`[DingtalkStore] Corrupt data file backed up to ${backupPath}`);
+      this.logger.error(`[DingtalkStore] 损坏的数据文件已备份到 ${backupPath}`);
     } catch (error) {
       this.logger.error(
-        `[DingtalkStore] Failed to back up corrupt file: ${error instanceof Error ? error.message : error}`,
+        `[DingtalkStore] 备份损坏文件失败：${error instanceof Error ? error.message : error}`,
       );
     }
   }
@@ -231,7 +231,7 @@ export class DingtalkStore {
         Object.entries(parsed).map(([userId, record]) => [userId, this.normalizeRecord(userId, record)]),
       );
     } catch {
-      this.logger.error(`Failed to parse ${LEGACY_DATA_FILE}`);
+      this.logger.error(`解析旧数据文件 ${LEGACY_DATA_FILE} 失败`);
       return {};
     }
   }

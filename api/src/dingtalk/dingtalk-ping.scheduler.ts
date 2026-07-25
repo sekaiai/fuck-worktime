@@ -42,7 +42,7 @@ export class DingtalkPingScheduler {
               // ping 失败说明 token 已失效，标记为 expired 以便后续走刷新流程
               await this.dingtalkStore.updateUserStatus(user.userId, 'expired').catch(() => {});
               this.logger.warn(
-                `Ping failed for user ${user.userId}, marked expired: ${error instanceof Error ? error.message : error}`,
+                `用户心跳请求失败，已标记为过期：userId=${user.userId}，错误=${error instanceof Error ? error.message : error}`,
               );
               return { userId: user.userId, ok: false as const };
             }
@@ -51,7 +51,7 @@ export class DingtalkPingScheduler {
 
       const rejectedCount = results.filter((result) => result.status === 'rejected').length;
       if (rejectedCount > 0) {
-        this.logger.warn(`Ping finished with ${rejectedCount} unexpected rejections.`);
+        this.logger.warn(`用户心跳检查完成，但有 ${rejectedCount} 个请求异常拒绝。`);
       }
     } finally {
       this.isRunning = false;

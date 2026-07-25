@@ -30,6 +30,13 @@ pnpm dev:web
 - `VAPID_PUBLIC_KEY`
 - `VAPID_PRIVATE_KEY`
 
+## AI 配置
+
+后端需要配置以下环境变量：
+
+- `DEEPSEEK_API_KEY`
+- `DEEPSEEK_MODEL`
+
 前端可配置：
 
 - `VITE_API_BASE_URL`

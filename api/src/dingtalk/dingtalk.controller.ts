@@ -2,6 +2,7 @@ import { Controller, Get, Query } from '@nestjs/common';
 
 import { GetUserByPhoneQueryDto, GetUserQueryDto } from './dto/user-info.dto';
 import { DingtalkService } from './dingtalk.service';
+import { getChineseErrorMessage } from '../common/response-message';
 
 @Controller('dingtalk')
 export class DingtalkController {
@@ -11,11 +12,11 @@ export class DingtalkController {
   async getQrcode(@Query('userId') userId?: string) {
     try {
       const result = await this.dingtalkService.getQrcode(userId);
-      return { code: 200, msg: 'success', data: result };
+      return { code: 200, msg: '操作成功', data: result };
     } catch (error) {
       return {
         code: 500,
-        msg: error instanceof Error ? error.message : '获取二维码失败',
+        msg: getChineseErrorMessage(error, '获取二维码失败'),
         data: null,
       };
     }
@@ -24,13 +25,13 @@ export class DingtalkController {
   @Get('status')
   getStatus(@Query('taskId') taskId: string) {
     if (!taskId) {
-      return { code: 400, msg: 'taskId is required', data: null };
+      return { code: 400, msg: '任务标识不能为空', data: null };
     }
     const result = this.dingtalkService.getStatus(taskId);
     // 状态轮询接口不向客户端下发 token，登录成功后由 /user 接口提供
     return {
       code: 200,
-      msg: 'success',
+      msg: '操作成功',
       data: {
         status: result.status,
         userId: result.userId,
@@ -45,11 +46,11 @@ export class DingtalkController {
       if (!result) {
         return { code: 404, msg: '用户不存在', data: null };
       }
-      return { code: 200, msg: 'success', data: result };
+      return { code: 200, msg: '操作成功', data: result };
     } catch (error) {
       return {
         code: 500,
-        msg: error instanceof Error ? error.message : '获取用户信息失败',
+        msg: getChineseErrorMessage(error, '获取用户信息失败'),
         data: null,
       };
     }
@@ -62,11 +63,11 @@ export class DingtalkController {
       if (!result) {
         return { code: 404, msg: '未找到对应手机号的登录数据', data: null };
       }
-      return { code: 200, msg: 'success', data: result };
+      return { code: 200, msg: '操作成功', data: result };
     } catch (error) {
       return {
         code: 500,
-        msg: error instanceof Error ? error.message : '根据手机号获取用户信息失败',
+        msg: getChineseErrorMessage(error, '根据手机号获取用户信息失败'),
         data: null,
       };
     }

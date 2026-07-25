@@ -26,6 +26,11 @@ interface LoginSession {
   createdAt: number;
 }
 
+interface QrcodeResponseWaiter {
+  promise: Promise<void>;
+  dispose: () => void;
+}
+
 @Injectable()
 export class DingtalkService {
   private readonly logger = new Logger(DingtalkService.name);
@@ -36,6 +41,8 @@ export class DingtalkService {
     '.app-page-curr div.module-confirm-button.base-comp-button.base-comp-button-type-primary:has-text("立即登录")',
     '.app-page-curr div.module-confirm-button:has-text("立即登录")'
   ];
+  private readonly LOGGED_IN_TITLE_SELECTOR = '.app-page.app-page-curr .module-confirm-title';
+  private readonly LOGIN_PAGE_STATE_TIMEOUT_MS = 10000;
   private readonly DINGTALK_AUTH_URL =
     'https://login.dingtalk.com/oauth2/challenge.htm?redirect_uri=https://times.gzdata.com.cn:8099/ding-talk-login&response_type=code&client_id=dinghuioeftyp2slxrcf&scope=openid&prompt=consent';
 
@@ -52,7 +59,7 @@ export class DingtalkService {
    * 1. 启动浏览器并隐藏自动化特征
    * 2. 创建页面，注册 ding-auth 响应监听（必须在任何导航之前）
    * 3. 导航到钉钉授权页
-   * 4. 检测是否已登录（显示"立即登录"按钮）
+   * 4. 等待登录确认页或二维码请求，判定当前登录状态
    * 5. 如未登录，等待二维码渲染并截取
    * 6. 如已登录，点击按钮跳转，等待 ding-auth 响应
    * 7. 保存 userId、token 和钉钉 cookie 到本地 JSON
@@ -105,6 +112,8 @@ export class DingtalkService {
 
       // 创建 Promise 用于捕获 ding-auth 响应
       const dingAuthPromise = this.createDingAuthPromise(page, context);
+      // 必须在导航前注册，否则二维码请求可能在页面加载期间已完成。
+      const qrcodeResponseWaiter = this.createQrcodeResponseWaiter(page);
 
       // ============================================
       // 步骤 4: 导航到钉钉授权页
@@ -116,95 +125,105 @@ export class DingtalkService {
       });
 
       // ============================================
-      // 步骤 5: 检测是否已登录
+      // 步骤 5: 并行等待登录确认页或二维码请求
       // ============================================
-      this.logger.log('[步骤5] 检测是否已登录');
-      let isLoggedIn = false;
-      let loginState: 'qrcode' | 'auto_login' = 'qrcode';
+      this.logger.log('[步骤5] 等待登录确认页或二维码请求');
+      const loginConfirmationPromise = page
+        .locator(this.LOGGED_IN_TITLE_SELECTOR)
+        .waitFor({ state: 'visible', timeout: 0 })
+        .then(() => 'auto_login' as const);
+      let loginPageStateTimeout: NodeJS.Timeout | undefined;
 
-      for (const selector of this.LOGIN_BUTTON_SELECTORS) {
-        const button = page.locator(selector);
-        if (await button.count() > 0) {
-          isLoggedIn = true;
-          loginState = 'auto_login';
-          this.logger.log('[步骤5] 检测到"立即登录"按钮，用户已登录');
-          break;
-        }
-      }
+      try {
+        const loginState = await Promise.race([
+          loginConfirmationPromise,
+          qrcodeResponseWaiter.promise.then(() => 'qrcode' as const),
+          new Promise<never>((_resolve, reject) => {
+            loginPageStateTimeout = setTimeout(() => {
+              reject(new Error('未在 10 秒内检测到登录确认页或二维码请求'));
+            }, this.LOGIN_PAGE_STATE_TIMEOUT_MS);
+          }),
+        ]);
+        const isLoggedIn = loginState === 'auto_login';
 
-      // ============================================
-      // 步骤 6: 截取二维码（如果未登录）
-      // ============================================
-      let qrcodeBase64 = '';
-
-      if (!isLoggedIn) {
-        this.logger.log('[步骤6] 未登录，等待二维码渲染');
-        // 等待钉钉二维码生成接口请求完成
-        await page.waitForResponse(res =>
-          res.url().includes('login.dingtalk.com/oauth2/generate_qrcode')
-        );
-
-        // 等待 300ms，确保 Canvas 渲染完成
-        await page.waitForTimeout(1000);
-
-        const canvasLocator = page.locator('canvas');
-        const hasCanvas = await canvasLocator.count() > 0;
-
-        if (hasCanvas) {
-          const screenshot = await canvasLocator.first().screenshot({ type: 'png' });
-          qrcodeBase64 = screenshot.toString('base64');
-          this.logger.log('[步骤6] 二维码截取成功（Canvas）');
+        if (isLoggedIn) {
+          this.logger.log('[步骤5] 检测到登录确认标题，用户已登录');
         } else {
-          const screenshot = await page.screenshot({ type: 'png' });
-          qrcodeBase64 = screenshot.toString('base64');
-          this.logger.log('[步骤6] 二维码截取成功（整页截图兜底）');
+          this.logger.log('[步骤5] 检测到二维码生成请求，等待二维码渲染');
         }
-      }
 
-      // ============================================
-      // 步骤 7: 创建登录会话
-      // ============================================
-      this.logger.log('[步骤7] 创建登录会话');
-      const session: LoginSession = {
-        taskId,
-        browser,
-        context,
-        page,
-        status: 'waiting',
-        userId: null,
-        token: null,
-        createdAt: Date.now(),
-      };
-      this.sessions.set(taskId, session);
-      sessionRegistered = true;
+        // ============================================
+        // 步骤 6: 截取二维码（如果未登录）
+        // ============================================
+        let qrcodeBase64 = '';
 
-      // ============================================
-      // 步骤 8: 如果已登录，点击按钮并启动登录监听
-      // ============================================
-      if (isLoggedIn) {
-        if (!page) {
-          throw new Error('Dingtalk page is not initialized');
-        }
-        this.logger.log('[步骤8] 已登录，点击登录按钮');
-        // 点击登录按钮，触发跳转（ding-auth 请求会在跳转后发出）
-        for (const selector of this.LOGIN_BUTTON_SELECTORS) {
-          const button = page.locator(selector);
-          if (await button.count() > 0) {
-            await button.first().click();
-            this.logger.log('[步骤8] 已点击登录按钮，等待 ding-auth 响应...');
-            break;
+        if (!isLoggedIn) {
+          await page.waitForTimeout(1000);
+
+          const canvasLocator = page.locator('canvas');
+          const hasCanvas = await canvasLocator.count() > 0;
+
+          if (hasCanvas) {
+            const screenshot = await canvasLocator.first().screenshot({ type: 'png' });
+            qrcodeBase64 = screenshot.toString('base64');
+            this.logger.log('[步骤6] 二维码截取成功（Canvas）');
+          } else {
+            const screenshot = await page.screenshot({ type: 'png' });
+            qrcodeBase64 = screenshot.toString('base64');
+            this.logger.log('[步骤6] 二维码截取成功（整页截图兜底）');
           }
         }
-        this.monitorLogin(taskId, dingAuthPromise);
-      }
 
-      // 如果未登录，启动登录监听（监听器已在步骤 3 注册）
-      if (!isLoggedIn) {
-        this.logger.log('[步骤8] 未登录，启动扫码登录监听');
-        this.monitorLogin(taskId, dingAuthPromise);
-      }
+        // ============================================
+        // 步骤 7: 创建登录会话
+        // ============================================
+        this.logger.log('[步骤7] 创建登录会话');
+        const session: LoginSession = {
+          taskId,
+          browser,
+          context,
+          page,
+          status: 'waiting',
+          userId: null,
+          token: null,
+          createdAt: Date.now(),
+        };
+        this.sessions.set(taskId, session);
+        sessionRegistered = true;
 
-      return { taskId, qrcodeBase64, loginState };
+        // ============================================
+        // 步骤 8: 如果已登录，点击按钮并启动登录监听
+        // ============================================
+        if (isLoggedIn) {
+          this.logger.log('[步骤8] 已登录，点击登录按钮');
+          let loginButtonClicked = false;
+          for (const selector of this.LOGIN_BUTTON_SELECTORS) {
+            const button = page.locator(selector).first();
+            try {
+              await button.click({ timeout: this.LOGIN_PAGE_STATE_TIMEOUT_MS });
+              this.logger.log('[步骤8] 已点击登录按钮，等待 ding-auth 响应...');
+              loginButtonClicked = true;
+              break;
+            } catch {
+              // 尝试下一个兼容选择器。
+            }
+          }
+          if (!loginButtonClicked) {
+            throw new Error('检测到登录确认页，但未找到可点击的登录按钮');
+          }
+          this.monitorLogin(taskId, dingAuthPromise);
+        } else {
+          this.logger.log('[步骤8] 未登录，启动扫码登录监听');
+          this.monitorLogin(taskId, dingAuthPromise);
+        }
+
+        return { taskId, qrcodeBase64, loginState };
+      } finally {
+        if (loginPageStateTimeout) {
+          clearTimeout(loginPageStateTimeout);
+        }
+        qrcodeResponseWaiter.dispose();
+      }
     } catch (error) {
       this.logger.error(`获取二维码失败：${error}`);
 
@@ -221,6 +240,27 @@ export class DingtalkService {
 
       throw error;
     }
+  }
+
+  /**
+   * 在导航前监听二维码生成响应，避免页面加载期间的请求被遗漏。
+   */
+  private createQrcodeResponseWaiter(page: Page): QrcodeResponseWaiter {
+    let responseHandler: (response: import('playwright').Response) => void;
+    const dispose = () => page.off('response', responseHandler);
+    const promise = new Promise<void>((resolve) => {
+      responseHandler = (response) => {
+        if (!response.url().includes('login.dingtalk.com/oauth2/generate_qrcode')) {
+          return;
+        }
+
+        dispose();
+        resolve();
+      };
+      page.on('response', responseHandler);
+    });
+
+    return { promise, dispose };
   }
 
   /**
@@ -242,10 +282,10 @@ export class DingtalkService {
   ): Promise<{ userId: string; token: string } | null> {
     return new Promise<{ userId: string; token: string } | null>((resolve) => {
       const timeout = setTimeout(() => {
-        this.logger.warn('[ding-auth] 等待超时（15秒），未捕获到响应');
+        this.logger.warn('[ding-auth] 等待超时（60秒），未捕获到响应');
         cleanup();
         resolve(null);
-      }, 15000);
+      }, 60000);
 
       const responseHandler = async (response: import('playwright').Response) => {
         const url = response.url();
@@ -457,7 +497,7 @@ export class DingtalkService {
       return this.toUserInfo(nextRecord);
     } catch (error) {
       this.logger.warn(
-        `resolveUserInfo: getInfo failed, userId=${record.userId}, error=${error instanceof Error ? error.message : error}`,
+        `解析用户信息失败：获取用户资料失败，userId=${record.userId}，错误=${error instanceof Error ? error.message : error}`,
       );
       return null;
     }
@@ -582,7 +622,7 @@ export class DingtalkService {
       return authResult?.token ?? null;
     } catch (error) {
       this.logger.warn(
-        `refreshUserToken failed for ${userId}: ${error instanceof Error ? error.message : error}`,
+        `刷新用户令牌失败：userId=${userId}，错误=${error instanceof Error ? error.message : error}`,
       );
       return null;
     } finally {
@@ -636,7 +676,7 @@ export class DingtalkService {
     const record = await this.dingtalkStore.getUser(userId);
     const cookieEntries = Object.entries(record?.dingtalkCookies ?? {});
     if (cookieEntries.length === 0) {
-      this.logger.log(`[cookies] No stored dingtalk cookies for userId=${userId}`);
+      this.logger.log(`[cookies] 未找到用户的钉钉 Cookie：userId=${userId}`);
       return;
     }
 
@@ -651,7 +691,7 @@ export class DingtalkService {
         sameSite: 'Lax' as const,
       })),
     );
-    this.logger.log(`[cookies] Applied ${cookieEntries.length} stored dingtalk cookies for userId=${userId}`);
+    this.logger.log(`[cookies] 已应用 ${cookieEntries.length} 个钉钉 Cookie：userId=${userId}`);
   }
 
   /**

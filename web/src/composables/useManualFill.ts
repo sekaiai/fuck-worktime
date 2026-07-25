@@ -198,6 +198,7 @@ export function useManualFill(options: {
       return;
     }
 
+    resetEntries();
     isGenerating.value = true;
     try {
       const contents = await generateContent(work.value.trim(), daysToGenerate.value);
@@ -206,16 +207,32 @@ export function useManualFill(options: {
           ? sortedFillableDays.value.filter((d) => d.date === preferredReportDate.value).slice(0, 1)
           : [];
       const targetDays = preferredDays.length > 0 ? preferredDays : sortedFillableDays.value.slice(0, daysToGenerate.value);
-      entries.value = targetDays.map((day, index) => ({
-        reportDate: day.date,
-        projectId: project.id,
-        projectTitle: project.title,
-        projectStatus: project.projectStatus,
-        itemId: workType.id,
-        itemName: workType.name,
-        content: contents[index] ?? '日常工作处理',
-        hours: hours.value,
-      }));
+      if (contents.length < targetDays.length) {
+        showToast('AI 暂时未生成足够内容，请稍后重试。');
+        return;
+      }
+
+      const nextEntries: TimesheetEntry[] = [];
+      for (const [index, day] of targetDays.entries()) {
+        const content = contents[index];
+        if (!content) {
+          showToast('AI 暂时未生成足够内容，请稍后重试。');
+          return;
+        }
+
+        nextEntries.push({
+          reportDate: day.date,
+          projectId: project.id,
+          projectTitle: project.title,
+          projectStatus: project.projectStatus,
+          itemId: workType.id,
+          itemName: workType.name,
+          content,
+          hours: hours.value,
+        });
+      }
+
+      entries.value = nextEntries;
       currentStep.value = 3;
     } catch (error) {
       showToast(getErrorMessage(error, '生成工时失败。'));

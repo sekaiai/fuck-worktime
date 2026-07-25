@@ -24,7 +24,7 @@ export class TimesheetController {
 
   private requireToken(token: string | undefined): string {
     if (!token || !token.trim()) {
-      throw new BadRequestException('Missing x-gzdata-token header');
+      throw new BadRequestException('缺少 x-gzdata-token 请求头');
     }
     return token;
   }
@@ -107,7 +107,7 @@ export class TimesheetController {
       lastExecutionStatus: existing?.lastExecutionStatus ?? null,
     };
     await this.autoFillStore.set(config);
-    return { code: 200, msg: 'Save success', data: config };
+    return { code: 200, msg: '保存成功', data: config };
   }
 
   @Get('auto-fill')
@@ -115,7 +115,7 @@ export class TimesheetController {
     @Query() query: GetAutoFillQueryDto,
   ): Promise<{ code: number; msg: string; data: AutoFillConfig | null }> {
     const config = await this.autoFillStore.get(query.userId);
-    return { code: 200, msg: 'success', data: config ? this.withDefaults(config) : null };
+    return { code: 200, msg: '操作成功', data: config ? this.withDefaults(config) : null };
   }
 
   @Delete('auto-fill')
@@ -124,12 +124,12 @@ export class TimesheetController {
   ): Promise<{ code: number; msg: string; data: AutoFillConfig | null }> {
     const config = await this.autoFillStore.get(query.userId);
     if (!config) {
-      return { code: 404, msg: 'Config not found', data: null };
+      return { code: 404, msg: '未找到自动填报配置', data: null };
     }
 
     const updated = this.withDefaults({ ...config, enabled: false });
     await this.autoFillStore.set(updated);
-    return { code: 200, msg: 'Auto-fill disabled', data: updated };
+    return { code: 200, msg: '自动填报已关闭', data: updated };
   }
 
   @Post('auto-fill/run-now')

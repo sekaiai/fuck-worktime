@@ -25,7 +25,7 @@ export class PushDeliveryService {
     if (subject && publicKey && privateKey) {
       webpush.setVapidDetails(subject, publicKey, privateKey);
     } else {
-      this.logger.warn('VAPID keys are not configured. Push sending is disabled.');
+      this.logger.warn('未配置 VAPID 密钥，推送发送功能已禁用。');
     }
   }
 
@@ -115,7 +115,7 @@ export class PushDeliveryService {
         delivered: 0,
         failed: 0,
         removed: 0,
-        errors: ['throttled'],
+        errors: ['请求过于频繁'],
       };
     }
     this.lastTestSentAt = now;
@@ -138,7 +138,7 @@ export class PushDeliveryService {
     payload: NotificationPayload | undefined,
     subscriptions: StoredSubscription[],
   ) {
-    this.logger.debug(`Preparing push delivery for ${subscriptions.length} subscriptions.`);
+    this.logger.debug(`准备向 ${subscriptions.length} 个订阅发送推送。`);
 
     const pushPayload = JSON.stringify({
       title: payload?.title ?? '云上工时',
@@ -167,10 +167,10 @@ export class PushDeliveryService {
       const reason = result.reason as Partial<webpush.WebPushError> | undefined;
       const reasonText =
         reason && typeof reason === 'object'
-          ? `status=${String(reason.statusCode ?? 'unknown')}, message=${String(reason.message ?? 'unknown')}`
-          : String(result.reason);
+          ? `状态码 ${String(reason.statusCode ?? '未知')}，错误信息：${String(reason.message ?? '未知')}`
+          : '未知推送错误';
 
-      errors.push(`subscription[${index}]: ${reasonText}`);
+      errors.push(`第 ${index + 1} 个订阅推送失败：${reasonText}`);
 
       if (reason?.statusCode === 404 || reason?.statusCode === 410) {
         const endpoint = subscriptions[index]?.endpoint;
@@ -179,7 +179,7 @@ export class PushDeliveryService {
         }
       }
 
-      this.logger.warn(`Push delivery failed for subscription ${index}: ${reasonText}`);
+      this.logger.warn(`第 ${index + 1} 个订阅推送失败：${reasonText}`);
     });
 
     const attempted = subscriptions.length;
