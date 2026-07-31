@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import HomeAutoFillPanel from '../components/home/HomeAutoFillPanel.vue';
 import HomeManualFillPanel from '../components/home/HomeManualFillPanel.vue';
 import HomeWeekBoardPanel from '../components/home/HomeWeekBoardPanel.vue';
+import WorkbenchCalendar from '../components/workbench/WorkbenchCalendar.vue';
+import WorkbenchPendingSummary from '../components/workbench/WorkbenchPendingSummary.vue';
+import WorkbenchWeekOverview from '../components/workbench/WorkbenchWeekOverview.vue';
 import { useAuthStore } from '../stores/auth';
 import { useHomeStore } from '../stores/home';
 
@@ -13,26 +16,7 @@ const authStore = useAuthStore();
 const { fillableDays, errorMessage, autoFillStatus, isManualFillVisible } = storeToRefs(homeStore);
 const { userInfo } = storeToRefs(authStore);
 
-const headline = computed(() => userInfo.value?.nickname || 'Authenticated User');
 const heroMeta = computed(() => userInfo.value?.phone || '未提供手机号');
-const headlineCopy = computed(() => {
-  if (errorMessage.value) {
-    return errorMessage.value;
-  }
-  if (fillableDays.value.length > 0) {
-    return `当前仍有 ${fillableDays.value.length} 个工作日待补填，可直接进入补填流程处理。`;
-  }
-  return '本周记录已齐，可以继续核对明细、维护自动填报策略与通知状态。';
-});
-const heroStatus = computed(() => {
-  if (autoFillStatus.value === 'enabled') {
-    return 'Auto Fill Running';
-  }
-  if (autoFillStatus.value === 'expired') {
-    return 'Auto Fill Expired';
-  }
-  return 'Auto Fill Idle';
-});
 
 const heroStatusBadge = computed(() => {
   if (autoFillStatus.value === 'enabled') {
@@ -51,289 +35,162 @@ onMounted(() => {
 
 <template>
   <main class="home-shell">
-    <section class="home-shell__hero">
-      <div class="home-shell__hero-copy">
-        <p class="home-shell__eyebrow">Authenticated User</p>
-        <h1 class="home-shell__title">{{ headline }}</h1>
-        <p class="home-shell__meta">{{ heroMeta }}</p>
-        <p class="home-shell__subtitle">{{ headlineCopy }}</p>
-      </div>
-
-      <div class="home-shell__hero-panel">
-        <div class="home-shell__hero-line">
-          <span>Session</span>
-          <strong>{{ heroStatus }}</strong>
-        </div>
-        <div class="home-shell__hero-line">
-          <span>Pending</span>
-          <strong>{{ fillableDays.length }} day<span v-if="fillableDays.length !== 1">s</span></strong>
+    <header class="home-shell__topbar">
+      <div class="home-shell__brand">
+        <span class="home-shell__brand-mark"></span>
+        <div>
+          <p class="home-shell__brand-name">云上工时</p>
+          <p class="home-shell__brand-sub">{{ heroMeta }}</p>
         </div>
       </div>
-
-      <div class="home-shell__hero-mobile">
-        <div class="hero-mobile__badge" :class="heroStatusBadge.class">
-          <span class="hero-mobile__status-dot"></span>
-          <span>{{ heroStatusBadge.text }}</span>
-        </div>
-        <div class="hero-mobile__pending" v-if="fillableDays.length > 0">
-          <span class="hero-mobile__pending-count">{{ fillableDays.length }}</span>
-          <span class="hero-mobile__pending-text">个工作日待补填</span>
-        </div>
+      <div class="home-shell__topbar-meta">
+        <span class="home-shell__badge" :class="heroStatusBadge.class">
+          <span class="home-shell__status-dot"></span>{{ heroStatusBadge.text }}
+        </span>
+        <span v-if="fillableDays.length > 0" class="home-shell__pending">{{ fillableDays.length }} 天待处理</span>
       </div>
-    </section>
+    </header>
 
-    <section class="home-shell__layout" :class="{ 'has-manual': isManualFillVisible }">
-      <div class="home-shell__board">
+    <div class="home-shell__grid">
+      <aside class="home-shell__sidebar">
+        <WorkbenchCalendar />
+        <WorkbenchWeekOverview />
+        <WorkbenchPendingSummary />
+      </aside>
+
+      <div class="home-shell__main">
         <HomeWeekBoardPanel />
-      </div>
-
-      <div class="home-shell__auto">
         <HomeAutoFillPanel />
       </div>
+    </div>
 
-      <div v-if="isManualFillVisible" class="home-shell__manual">
-        <HomeManualFillPanel />
-      </div>
-    </section>
+    <HomeManualFillPanel v-if="isManualFillVisible" />
   </main>
 </template>
 
 <style scoped>
 .home-shell {
-  width: min(100%, 1320px);
+  width: min(100%, 1440px);
   margin: 0 auto;
   min-height: 100vh;
-  padding: clamp(1rem, 2vw, 2.2rem);
-  display: grid;
-  gap: 1.25rem;
-}
-
-.home-shell__hero,
-.home-shell__layout {
+  padding: clamp(0.9rem, 1.6vw, 1.6rem);
   display: grid;
   gap: 1rem;
 }
 
-.home-shell__hero {
-  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.72fr);
-  align-items: stretch;
-  border-radius: 34px;
-  padding: clamp(1.2rem, 2.4vw, 2.2rem);
-  background:
-    linear-gradient(135deg, rgba(20, 49, 52, 0.94), rgba(28, 39, 42, 0.88)),
-    radial-gradient(circle at right top, rgba(208, 147, 62, 0.24), transparent 34%);
-  color: rgba(255, 248, 238, 0.94);
-  box-shadow: 0 30px 70px rgba(20, 41, 44, 0.14);
-  overflow: hidden;
-}
-
-.home-shell__hero-copy {
-  display: grid;
-  align-content: start;
-  padding-right: clamp(0rem, 2vw, 1.4rem);
-}
-
-.home-shell__eyebrow {
-  margin: 0 0 0.6rem;
-  color: rgba(225, 175, 103, 0.88);
-  font-family: var(--font-display);
-  font-size: 0.84rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.home-shell__title {
-  font-size: clamp(2.4rem, 2vw, 4.8rem);
-  line-height: 0.94;
-}
-
-.home-shell__meta {
-  margin-top: 0.55rem;
-  color: rgba(255, 245, 232, 0.82);
-  font-family: var(--font-display);
-  font-size: 0.98rem;
-  letter-spacing: 0.08em;
-}
-
-.home-shell__subtitle {
-  max-width: 38rem;
-  margin-top: 1rem;
-  color: rgba(255, 245, 232, 0.72);
-  font-size: 1.04rem;
-  line-height: 1.75;
-}
-
-.home-shell__hero-panel {
-  align-self: stretch;
-  display: grid;
-  align-content: end;
-  gap: 0.85rem;
-  padding: 1rem;
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.02), rgba(225, 175, 103, 0.08));
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(10px);
-}
-
-.home-shell__hero-line {
+.home-shell__topbar {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  padding: 0.9rem 1.2rem;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--color-border);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0.75rem;
+  z-index: 10;
+}
+
+.home-shell__brand {
+  display: flex;
   align-items: center;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  gap: 0.7rem;
 }
 
-.home-shell__hero-line:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
+.home-shell__brand-mark {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
 }
 
-.home-shell__hero-line span {
-  color: rgba(255, 245, 232, 0.62);
+.home-shell__brand-name {
+  margin: 0;
   font-family: var(--font-display);
-  font-size: 0.76rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-weight: 600;
+  font-size: 1.02rem;
 }
 
-.home-shell__hero-line strong {
-  text-align: right;
-  font-family: var(--font-display);
-  font-size: 1rem;
-  letter-spacing: 0.06em;
+.home-shell__brand-sub {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: 0.78rem;
 }
 
-.home-shell__layout {
-  grid-template-columns: 1fr 485px;
+.home-shell__topbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.home-shell__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.38rem 0.75rem;
+  border-radius: 999px;
+  background: var(--color-bg-soft);
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+}
+
+.home-shell__status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-tertiary);
+}
+
+.home-shell__badge.status--running .home-shell__status-dot {
+  background: var(--color-success);
+}
+
+.home-shell__badge.status--expired .home-shell__status-dot {
+  background: var(--color-danger);
+}
+
+.home-shell__pending {
+  color: var(--color-warning);
+  font-size: 0.8rem;
+}
+
+.home-shell__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
   align-items: start;
 }
 
-.home-shell__auto,
-.home-shell__board,
-.home-shell__manual {
+.home-shell__main {
+  display: grid;
+  gap: 1rem;
   min-width: 0;
 }
 
-.home-shell__manual {
-  grid-column: 1 / -1;
+.home-shell__sidebar {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
 }
 
-@media (max-width: 1180px) {
-  .home-shell__layout {
-    grid-template-columns: 1fr;
-  }
+/* 移动端：主区在前，sidebar 在主区下方 */
+.home-shell__main {
+  order: -1;
 }
 
-@media (max-width: 860px) {
-  .home-shell {
-    width: 100%;
-    min-height: auto;
-    padding: 8px;
-    gap: 0.85rem;
+@media (min-width: 1024px) {
+  .home-shell__grid {
+    grid-template-columns: 300px minmax(0, 1fr);
   }
 
-  .home-shell__hero {
-    margin-left: 8px;
-    grid-template-columns: 1fr;
-    padding: 0;
-    border-radius: 0;
-    background: transparent;
-    color: var(--ink-strong);
-    box-shadow: none;
-    overflow: visible;
-    margin-bottom: 16px;
+  .home-shell__sidebar {
+    order: -1;
   }
 
-  .home-shell__hero-copy {
-    padding-right: 0;
-    gap: 0.2rem;
-  }
-
-  .home-shell__title {
-    font-size: 1.8rem;
-    line-height: 1;
-  }
-
-  .home-shell__meta {
-    margin-top: 0.2rem;
-    color: var(--ink-soft);
-    font-size: 0.86rem;
-    letter-spacing: 0.04em;
-  }
-
-  .home-shell__subtitle {
-    display: none;
-  }
-
-  .home-shell__hero-panel {
-    display: none;
-  }
-
-  .home-shell__hero-mobile {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    margin-top: 0.75rem;
-    padding: 0.85rem;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.56);
-    border: 1px solid rgba(19, 38, 40, 0.08);
-  }
-
-  .hero-mobile__badge {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-family: var(--font-display);
-    font-size: 0.82rem;
-    font-weight: 600;
-  }
-
-  .hero-mobile__status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--ink-soft);
-  }
-
-  .hero-mobile__badge.status--running .hero-mobile__status-dot {
-    background: var(--accent);
-    animation: pulse 2s infinite;
-  }
-
-  .hero-mobile__badge.status--expired .hero-mobile__status-dot {
-    background: var(--danger);
-  }
-
-  .hero-mobile__pending {
-    display: flex;
-    align-items: baseline;
-    gap: 0.4rem;
-  }
-
-  .hero-mobile__pending-count {
-    font-family: var(--font-display);
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: var(--accent-amber);
-    line-height: 1;
-  }
-
-  .hero-mobile__pending-text {
-    font-size: 0.88rem;
-    color: var(--ink-soft);
-  }
-
-  @keyframes pulse {
-    0%, 100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.5;
-    }
+  .home-shell__main {
+    order: 0;
   }
 }
 </style>
