@@ -6,6 +6,11 @@ function day(overrides = {}) {
   return { date: '2026-07-20', isWeekend: false, status: '未提交', displayStatus: '', ...overrides };
 }
 
+function futureKey(daysFromNow) {
+  const d = new Date(Date.now() + daysFromNow * 86_400_000);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+}
+
 test('休息日：isWeekend 优先', () => {
   const r = mapDayStatus(day({ isWeekend: true }));
   assert.equal(r.key, 'rest');
@@ -34,7 +39,7 @@ test('审核失败：displayStatus 含不通过/失败/驳回', () => {
 });
 
 test('未来日：status 未提交且 date > 今天，无标点', () => {
-  const r = mapDayStatus(day({ date: '2026-08-05', status: '未提交' }));
+  const r = mapDayStatus(day({ date: futureKey(5), status: '未提交' }));
   assert.equal(r.key, 'future');
   assert.equal(r.color, 'transparent');
 });

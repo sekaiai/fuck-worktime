@@ -37,11 +37,11 @@ export function mapDayStatus(day: DayStatusInput): DayStatusResult {
   if (text.includes('待审核')) {
     return { key: 'pending', label: '待审核', color: STATUS_COLORS.pending };
   }
-  if (/已通过|已审核|已完成/.test(text)) {
-    return { key: 'approved', label: '已审核', color: STATUS_COLORS.approved };
-  }
   if (/不通过|失败|驳回/.test(text)) {
     return { key: 'rejected', label: '审核失败', color: STATUS_COLORS.rejected };
+  }
+  if (/通过|已审核|已完成/.test(text)) {
+    return { key: 'approved', label: '已审核', color: STATUS_COLORS.approved };
   }
   if (day.status === '未提交' && day.date > getTodayKey()) {
     return { key: 'future', label: '未来日', color: 'transparent' };
