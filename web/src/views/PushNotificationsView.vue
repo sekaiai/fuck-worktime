@@ -165,28 +165,44 @@ onUnmounted(() => {
 .notification-page__hero,
 .notification-page__overview,
 .notification-panel {
-  border-radius: 30px;
-  background: linear-gradient(180deg, rgba(255, 250, 244, 0.84), rgba(240, 234, 226, 0.72));
+  border-radius: var(--radius-2xl);
   padding: clamp(1.2rem, 2.4vw, 1.8rem);
-  box-shadow: 0 28px 60px rgba(20, 41, 44, 0.1);
-  backdrop-filter: blur(16px);
+}
+
+.notification-page__overview,
+.notification-panel {
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-soft);
 }
 
 .notification-page__hero {
+  position: relative;
+  overflow: hidden;
   display: grid;
   gap: 1rem;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
   align-items: end;
+  background:
+    radial-gradient(circle at 82% 10%, rgba(112, 170, 255, 0.32), transparent 38%),
+    radial-gradient(circle at 8% 92%, rgba(32, 61, 134, 0.55), transparent 42%),
+    linear-gradient(135deg, #203d86, #2455d6);
+  color: #ffffff;
 }
 
 .notification-page__eyebrow,
 .notification-panel__eyebrow {
   margin: 0 0 0.5rem;
-  color: var(--accent-amber);
+  color: var(--color-info);
   font-family: var(--font-display);
   font-size: 0.8rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
+}
+
+/* hero 为深蓝底，info 蓝对比度不足，提亮为浅蓝保证可读性（与登录页一致） */
+.notification-page__hero .notification-page__eyebrow {
+  color: rgba(168, 203, 255, 0.92);
 }
 
 .notification-page__title {
@@ -196,8 +212,12 @@ onUnmounted(() => {
 
 .notification-page__copy,
 .notification-panel__copy {
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   line-height: 1.75;
+}
+
+.notification-page__hero .notification-page__copy {
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .notification-page__overview {
@@ -209,14 +229,14 @@ onUnmounted(() => {
 .notification-page__overview article {
   display: grid;
   gap: 0.3rem;
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.46);
-  border: 1px solid rgba(19, 38, 40, 0.08);
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
 }
 
 .notification-page__overview span {
-  color: var(--ink-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-display);
   font-size: 0.8rem;
   letter-spacing: 0.12em;
@@ -233,9 +253,8 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 1rem;
   align-items: center;
-  background:
-    linear-gradient(135deg, rgba(255, 244, 220, 0.92), rgba(247, 235, 209, 0.84));
-  border-color: rgba(196, 131, 45, 0.24);
+  background: rgba(239, 154, 24, 0.1);
+  border-color: rgba(239, 154, 24, 0.3);
 }
 
 .notification-panel__header {
@@ -260,7 +279,8 @@ onUnmounted(() => {
   min-height: 2.3rem;
   padding: 0 0.9rem;
   border-radius: 999px;
-  background: rgba(19, 38, 40, 0.08);
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--color-text-secondary);
   font-family: var(--font-display);
   font-size: 0.84rem;
   letter-spacing: 0.12em;
@@ -268,16 +288,16 @@ onUnmounted(() => {
 }
 
 .notification-panel__badge.is-active {
-  background: rgba(35, 76, 75, 0.14);
-  color: var(--accent);
+  background: rgba(31, 157, 99, 0.12);
+  color: var(--color-success);
 }
 
 .notification-panel__warning {
   margin-top: 1rem;
   padding: 0.95rem 1rem;
-  border-radius: 18px;
-  background: rgba(170, 71, 55, 0.08);
-  color: var(--danger);
+  border-radius: var(--radius-lg);
+  background: rgba(220, 76, 66, 0.08);
+  color: var(--color-danger);
 }
 
 .notification-panel__actions {
@@ -309,13 +329,18 @@ onUnmounted(() => {
 }
 
 .notification-panel__primary {
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-  color: rgba(255, 248, 238, 0.94);
+  background: var(--color-primary);
+  color: #ffffff;
+}
+
+.notification-panel__primary:hover:not(:disabled) {
+  background: var(--color-primary-strong);
+  box-shadow: 0 12px 24px rgba(52, 110, 245, 0.24);
 }
 
 .notification-panel__secondary {
-  background: rgba(19, 38, 40, 0.08);
-  color: var(--ink-strong);
+  background: var(--color-bg-soft);
+  color: var(--color-text-primary);
 }
 
 @media (max-width: 860px) {
