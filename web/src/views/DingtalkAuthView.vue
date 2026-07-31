@@ -356,23 +356,20 @@ onUnmounted(() => {
 
 <style scoped>
 .login-page {
-  padding: clamp(1rem, 3vw, 2rem);
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 420px);
   gap: 1.2rem;
   align-items: stretch;
-  box-sizing: border-box;
+  padding: clamp(1rem, 3vw, 2rem);
 }
 
 .login-page__hero,
 .login-card {
   position: relative;
   overflow: hidden;
-  border-radius: 30px;
+  border-radius: var(--radius-2xl);
   padding: clamp(1.2rem, 2.5vw, 2rem);
-  background: linear-gradient(180deg, rgba(255, 251, 245, 0.82), rgba(240, 233, 224, 0.7));
-  box-shadow: 0 28px 60px rgba(20, 41, 44, 0.12);
-  backdrop-filter: blur(16px);
 }
 
 .login-page__hero {
@@ -380,19 +377,25 @@ onUnmounted(() => {
   align-content: space-between;
   min-height: min(44rem, calc(100vh - 4rem));
   background:
-    linear-gradient(135deg, rgba(22, 57, 60, 0.94), rgba(28, 39, 40, 0.84)),
-    radial-gradient(circle at top right, rgba(208, 147, 62, 0.22), transparent 32%);
-  color: rgba(255, 248, 238, 0.92);
+    radial-gradient(circle at 82% 10%, rgba(112, 170, 255, 0.32), transparent 38%),
+    radial-gradient(circle at 8% 92%, rgba(32, 61, 134, 0.55), transparent 42%),
+    linear-gradient(135deg, #203d86, #2455d6);
+  color: #ffffff;
 }
 
 .login-page__eyebrow,
 .login-card__eyebrow {
   margin: 0 0 0.65rem;
-  color: var(--accent-amber);
+  color: var(--color-info);
   font-family: var(--font-display);
   font-size: 0.84rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
+}
+
+/* hero 为深蓝底，info 蓝对比度不足（约 2.5:1），提亮为浅蓝保证可读性 */
+.login-page__hero .login-page__eyebrow {
+  color: rgba(168, 203, 255, 0.92);
 }
 
 .login-page__title {
@@ -404,7 +407,7 @@ onUnmounted(() => {
 .login-page__copy {
   max-width: 32rem;
   margin-top: 1rem;
-  color: rgba(255, 245, 232, 0.74);
+  color: rgba(255, 255, 255, 0.78);
   font-size: 1.04rem;
   line-height: 1.75;
 }
@@ -413,6 +416,9 @@ onUnmounted(() => {
   display: grid;
   gap: 1rem;
   align-content: start;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-soft);
 }
 
 .login-card__header {
@@ -432,7 +438,8 @@ onUnmounted(() => {
   min-height: 2.3rem;
   padding: 0 0.9rem;
   border-radius: 999px;
-  background: rgba(19, 38, 40, 0.08);
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--color-text-secondary);
   font-family: var(--font-display);
   font-size: 0.86rem;
   letter-spacing: 0.1em;
@@ -440,14 +447,14 @@ onUnmounted(() => {
 }
 
 .login-card__badge.is-success {
-  background: rgba(35, 112, 82, 0.14);
-  color: #1e654c;
+  background: rgba(31, 157, 99, 0.12);
+  color: var(--color-success);
 }
 
 .login-card__badge.is-error,
 .login-card__badge.is-timeout {
-  background: rgba(170, 71, 55, 0.12);
-  color: var(--danger);
+  background: rgba(220, 76, 66, 0.12);
+  color: var(--color-danger);
 }
 
 .install-guide {
@@ -464,12 +471,12 @@ onUnmounted(() => {
   display: grid;
   gap: 0.45rem;
   padding: 1rem;
-  border-radius: 22px;
-  background-color: #efe8db;
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-soft);
 }
 
 .install-guide__step strong {
-  color: var(--accent-strong);
+  color: var(--color-primary-strong);
   font-family: var(--font-display);
   font-size: 1.1rem;
   letter-spacing: 0.08em;
@@ -477,7 +484,7 @@ onUnmounted(() => {
 
 .install-guide__step p {
   margin: 0;
-  color: var(--ink-soft);
+  color: var(--color-text-tertiary);
   line-height: 1.65;
 }
 
@@ -489,32 +496,48 @@ onUnmounted(() => {
 .login-card__field {
   display: grid;
   gap: 0.55rem;
-  color: var(--ink-soft);
+}
+
+.login-card__field span {
+  color: var(--color-text-tertiary);
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
 }
 
 .login-card__input {
   width: 100%;
   min-height: 3.2rem;
-  border-radius: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   padding: 0.85rem 1rem;
-  background: rgba(255, 255, 255, 0.78);
-  color: var(--ink);
-  font: inherit;
+  background: var(--color-bg-panel);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+}
+
+.login-card__input::placeholder {
+  color: var(--color-text-tertiary);
 }
 
 .login-card__input:focus {
-  outline: 2px solid rgba(201, 137, 56, 0.25);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.login-card__input:disabled {
+  background: var(--color-bg-soft);
+  color: var(--color-text-tertiary);
 }
 
 .login-card__frame {
   width: min(100%, 310px);
   aspect-ratio: 1;
   margin: 0 auto;
-  border-radius: 28px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(233, 227, 218, 0.76));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.58);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-2xl);
+  background: var(--color-bg-panel);
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -528,7 +551,7 @@ onUnmounted(() => {
 
 .login-card__state,
 .login-card__hint {
-  color: var(--ink-soft);
+  color: var(--color-text-tertiary);
   line-height: 1.7;
 }
 
@@ -542,15 +565,16 @@ onUnmounted(() => {
   border-radius: 999px;
   min-height: 3.25rem;
   padding: 0.85rem 1.2rem;
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-  color: rgba(255, 248, 238, 0.94);
+  background: var(--color-primary);
+  color: #ffffff;
   cursor: pointer;
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  transition: background 180ms ease, transform 180ms ease, box-shadow 180ms ease;
 }
 
 .login-card__button:hover:not(:disabled) {
+  background: var(--color-primary-strong);
   transform: translateY(-1px);
-  box-shadow: 0 16px 24px rgba(15, 44, 47, 0.18);
+  box-shadow: 0 12px 24px rgba(52, 110, 245, 0.24);
 }
 
 .login-card__button:disabled {
@@ -564,10 +588,8 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .login-page__hero,
-  .login-card {
-    min-height: auto;
-    box-shadow: none;
+  .login-page__hero {
+    min-height: 20rem;
   }
 }
 
