@@ -220,10 +220,11 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
 .board-panel {
   display: grid;
   gap: 1rem;
-  border-radius: 30px;
+  border-radius: var(--radius-2xl);
   padding: 1.35rem;
-  background: linear-gradient(180deg, rgba(255, 250, 244, 0.9), rgba(240, 233, 224, 0.76));
-  box-shadow: 0 28px 60px rgba(20, 41, 44, 0.1);
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-soft);
 }
 
 .board-panel__header,
@@ -237,7 +238,7 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
 
 .board-panel__eyebrow {
   margin: 0 0 0.45rem;
-  color: var(--accent-amber);
+  color: var(--color-info);
   font-family: var(--font-display);
   font-size: 0.76rem;
   letter-spacing: 0.18em;
@@ -251,7 +252,7 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
 
 .board-panel__detail-status {
   margin-top: 0.4rem;
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   font-family: var(--font-display);
   font-size: 0.88rem;
   letter-spacing: 0.08em;
@@ -260,7 +261,7 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
 
 .board-panel__subtitle,
 .board-panel__helper {
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
 }
 
 .board-panel__actions {
@@ -277,16 +278,23 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
   min-height: 2.9rem;
   padding: 0.72rem 1rem;
   cursor: pointer;
+  transition: opacity 180ms ease;
+}
+
+.board-panel__ghost:disabled,
+.board-panel__fill:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .board-panel__ghost {
-  background: rgba(19, 38, 40, 0.08);
-  color: var(--ink-strong);
+  background: var(--color-bg-soft);
+  color: var(--color-text-primary);
 }
 
 .board-panel__fill {
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-  color: rgba(255, 248, 238, 0.94);
+  background: var(--color-primary);
+  color: #ffffff;
 }
 
 .board-panel__summary {
@@ -298,10 +306,10 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
   gap: 1rem;
-  border-radius: 22px;
+  border-radius: var(--radius-xl);
   padding: 0.95rem 1rem;
-  background: rgba(255, 255, 255, 0.48);
-  border: 1px solid rgba(19, 38, 40, 0.08);
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
 }
 
 .board-panel__summary-item {
@@ -310,12 +318,12 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
 
 .board-panel__summary-item + .board-panel__summary-item {
   padding-left: 1rem;
-  border-left: 1px solid rgba(19, 38, 40, 0.08);
+  border-left: 1px solid var(--color-border);
 }
 
 .board-panel__summary-item span {
   display: inline-block;
-  color: var(--ink-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-display);
   font-size: 0.78rem;
   letter-spacing: 0.14em;
@@ -339,9 +347,9 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
   display: grid;
   gap: 0.35rem;
   padding: 0.95rem 0.9rem;
-  border-radius: 24px;
+  border-radius: var(--radius-lg);
   border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.42);
+  background: var(--color-bg-panel);
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
   align-content: start;
 }
@@ -355,28 +363,28 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
 }
 
 .board-panel__day.is-active {
-  border-color: rgba(35, 76, 75, 0.32);
-  box-shadow: 0 0 0 1px rgba(35, 76, 75, 0.12);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
 }
 
 .board-panel__day.is-weekend {
-  background: rgba(226, 221, 212, 0.72);
-  color: #6d6a66;
+  background: var(--color-bg-soft);
+  color: var(--color-text-tertiary);
 }
 
 .board-panel__day.is-pending {
-  background: rgba(255, 233, 195, 0.82);
-  color: #815711;
+  background: rgba(239, 154, 24, 0.12);
+  color: #b45309;
 }
 
 .board-panel__day.is-future {
-  background: rgba(246, 243, 239, 0.88);
-  color: #8b867d;
+  background: var(--color-bg-soft);
+  color: var(--color-text-tertiary);
 }
 
 .board-panel__day.is-done {
-  background: rgba(222, 240, 228, 0.84);
-  color: #255948;
+  background: rgba(31, 157, 99, 0.12);
+  color: #166534;
 }
 
 .board-panel__day-name,
@@ -398,7 +406,7 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
 .board-panel__day-status {
   margin-top: auto;
   padding-top: 0.42rem;
-  border-top: 1px solid rgba(19, 38, 40, 0.04);
+  border-top: 1px solid var(--color-border);
   font-family: var(--font-display);
   font-size: 0.73rem;
   letter-spacing: 0.1em;
@@ -410,16 +418,16 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
   display: grid;
   gap: 0.85rem;
   padding: 1.15rem;
-  border-radius: 24px;
-  background: rgba(246, 242, 234, 0.92);
-  border: 1px solid rgba(19, 38, 40, 0.08);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
 }
 
 .board-panel__detail--inline {
   margin-top: 0.85rem;
   padding: 0.85rem;
-  border-radius: 18px;
-  background: rgba(255, 250, 244, 0.9);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-soft);
 }
 
 .board-panel__detail-list {
@@ -428,17 +436,17 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
 }
 
 .board-panel__detail-item {
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   padding: 0.95rem 1rem;
-  background: rgba(255, 255, 255, 0.48);
-  border: 1px solid rgba(19, 38, 40, 0.08);
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
 }
 
 .board-panel__detail-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
-  color: var(--ink-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-display);
   font-size: 0.82rem;
   letter-spacing: 0.08em;
@@ -446,19 +454,19 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
 
 .board-panel__detail-content {
   margin-top: 0.55rem;
-  color: var(--ink-strong);
+  color: var(--color-text-primary);
   line-height: 1.65;
 }
 
 .board-panel__state {
-  border-radius: 22px;
+  border-radius: var(--radius-xl);
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--color-bg-soft);
 }
 
 .board-panel__state--error {
-  background: rgba(170, 71, 55, 0.08);
-  color: var(--danger);
+  background: rgba(220, 76, 66, 0.08);
+  color: var(--color-danger);
 }
 
 @media (max-width: 1280px) {
@@ -533,9 +541,9 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
     justify-content: space-between;
     gap: 0.75rem;
     padding: 0.85rem;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.56);
-    border: 1px solid rgba(19, 38, 40, 0.08);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-panel);
+    border: 1px solid var(--color-border);
   }
 
   .stats-mobile__item {
@@ -549,14 +557,14 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
     font-family: var(--font-display);
     font-size: 1.4rem;
     font-weight: 700;
-    color: var(--accent);
+    color: var(--color-primary);
     line-height: 1;
   }
 
   .stats-mobile__label {
     font-family: var(--font-display);
     font-size: 0.64rem;
-    color: var(--ink-muted);
+    color: var(--color-text-tertiary);
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
@@ -579,7 +587,7 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
     padding-top: 0;
     padding-left: 0.45rem;
     border-top: 0;
-    border-left: 1px solid rgba(19, 38, 40, 0.12);
+    border-left: 1px solid var(--color-border);
   }
 
   .board-panel__summary-item strong {
@@ -593,10 +601,10 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
   }
 
   .board-panel__day {
-        gap: 0.2rem;
-        padding: 0.65rem;
-        border: 0;
-      border-radius: 16px;
+    gap: 0.2rem;
+    padding: 0.65rem;
+    border: 0;
+    border-radius: var(--radius-md);
     background: transparent;
     box-shadow: none;
   }
@@ -609,7 +617,6 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
   .board-panel__day.is-clickable:hover {
     transform: none;
   }
-
 
   .board-panel__day-status {
     padding-top: 0.3rem;
@@ -635,7 +642,7 @@ function shouldShowInlineDetail(day: WeekDay): boolean {
   }
 
   .board-panel__detail-item + .board-panel__detail-item {
-    border-top: 1px dashed rgba(19, 38, 40, 0.1);
+    border-top: 1px dashed var(--color-border);
   }
 
   .board-panel__detail-content {
