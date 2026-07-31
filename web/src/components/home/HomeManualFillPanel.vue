@@ -79,7 +79,7 @@ const stepSummary = computed(() => {
       </div>
 
       <div v-show="manualCurrentStep === 1" class="manual-panel__form">
-        <label>
+        <label class="field">
           <span>项目</span>
           <select :value="manualProjectId" @change="homeStore.setManualProject(($event.target as HTMLSelectElement).value)">
             <option value="">请选择项目</option>
@@ -87,7 +87,7 @@ const stepSummary = computed(() => {
           </select>
         </label>
 
-        <label>
+        <label class="field">
           <span>一级工时类型</span>
           <select
             :value="manualWorkTypeGroupId"
@@ -99,7 +99,7 @@ const stepSummary = computed(() => {
           </select>
         </label>
 
-        <label>
+        <label class="field">
           <span>二级工时类型</span>
           <select
             :value="manualWorkTypeId"
@@ -111,7 +111,7 @@ const stepSummary = computed(() => {
           </select>
         </label>
 
-        <label>
+        <label class="field">
           <span>工时</span>
           <input
             :value="manualHours"
@@ -122,7 +122,7 @@ const stepSummary = computed(() => {
           />
         </label>
 
-        <label>
+        <label class="field">
           <span>生成天数</span>
           <input
             :value="manualDaysToGenerate"
@@ -134,7 +134,7 @@ const stepSummary = computed(() => {
         </label>
       </div>
 
-      <label v-show="manualCurrentStep === 2" class="manual-panel__block-field">
+      <label v-show="manualCurrentStep === 2" class="manual-panel__block-field field">
         <span>工作内容主题</span>
         <textarea
           :value="manualWork"
@@ -175,7 +175,7 @@ const stepSummary = computed(() => {
           :key="`${entry.reportDate}-${index}`"
           class="manual-panel__entry-card"
         >
-          <label>
+          <label class="field">
             <span>日期</span>
             <select
               :value="entry.reportDate"
@@ -186,11 +186,11 @@ const stepSummary = computed(() => {
               </option>
             </select>
           </label>
-          <label>
+          <label class="field">
             <span>项目</span>
             <input :value="entry.projectTitle" disabled />
           </label>
-          <label>
+          <label class="field">
             <span>工时类型</span>
             <input :value="entry.itemName || manualSelectedWorkType?.name || ''" disabled />
           </label>
@@ -199,7 +199,7 @@ const stepSummary = computed(() => {
             <p class="manual-panel__entry-summary">{{ entry.hours }}h / {{ entry.content }}</p>
           </template>
           <template v-else>
-            <label>
+            <label class="field">
               <span>工时</span>
               <input
                 :value="entry.hours"
@@ -209,7 +209,7 @@ const stepSummary = computed(() => {
                 @input="homeStore.updateManualEntryHours(index, Number(($event.target as HTMLInputElement).value))"
               />
             </label>
-            <label class="manual-panel__entry-content">
+            <label class="manual-panel__entry-content field">
               <span>内容</span>
               <textarea
                 :value="entry.content"
@@ -260,10 +260,11 @@ const stepSummary = computed(() => {
   position: relative;
   display: grid;
   gap: 1rem;
-  border-radius: 30px;
+  border-radius: var(--radius-2xl);
   padding: 1.25rem;
-  background: linear-gradient(180deg, rgba(255, 250, 244, 0.88), rgba(240, 233, 224, 0.74));
-  box-shadow: 0 28px 60px rgba(20, 41, 44, 0.1);
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-soft);
 }
 
 .manual-panel__header {
@@ -275,7 +276,7 @@ const stepSummary = computed(() => {
 
 .manual-panel__eyebrow {
   margin: 0 0 0.45rem;
-  color: var(--accent-amber);
+  color: var(--color-info);
   font-family: var(--font-display);
   font-size: 0.78rem;
   letter-spacing: 0.18em;
@@ -294,31 +295,39 @@ const stepSummary = computed(() => {
   min-height: 3rem;
   padding: 0.8rem 1rem;
   cursor: pointer;
+  transition: opacity 180ms ease;
+}
+
+.manual-panel__close:disabled,
+.manual-panel__primary:disabled,
+.manual-panel__secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .manual-panel__close,
 .manual-panel__secondary {
-  background: rgba(19, 38, 40, 0.08);
-  color: var(--ink-strong);
+  background: var(--color-bg-soft);
+  color: var(--color-text-primary);
 }
 
 .manual-panel__primary {
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-  color: rgba(255, 248, 238, 0.94);
+  background: var(--color-primary);
+  color: #ffffff;
 }
 
 .manual-panel__intro {
   display: grid;
   gap: 0.8rem;
-  border-radius: 22px;
+  border-radius: var(--radius-xl);
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.46);
-  border: 1px solid rgba(19, 38, 40, 0.08);
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
 }
 
 .manual-panel__copy,
 .manual-panel__helper {
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   line-height: 1.7;
 }
 
@@ -330,7 +339,7 @@ const stepSummary = computed(() => {
 }
 
 .manual-panel__dates span {
-  color: var(--ink-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-display);
   font-size: 0.76rem;
   letter-spacing: 0.14em;
@@ -343,7 +352,7 @@ const stepSummary = computed(() => {
   min-height: 2rem;
   padding: 0 0.8rem;
   border-radius: 999px;
-  background: rgba(19, 38, 40, 0.08);
+  background: var(--color-bg-soft);
   font-family: var(--font-display);
   font-size: 0.82rem;
 }
@@ -356,50 +365,23 @@ const stepSummary = computed(() => {
 
 .manual-panel__stepper button {
   border: 0;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   min-height: 3.3rem;
   padding: 0.8rem;
-  background: rgba(19, 38, 40, 0.08);
-  color: var(--ink-strong);
+  background: var(--color-bg-soft);
+  color: var(--color-text-primary);
+  cursor: pointer;
 }
 
 .manual-panel__stepper button.active {
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-  color: rgba(255, 248, 238, 0.94);
+  background: var(--color-primary);
+  color: #ffffff;
 }
 
 .manual-panel__form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.8rem;
-}
-
-.manual-panel label {
-  display: grid;
-  gap: 0.35rem;
-}
-
-.manual-panel span {
-  font-family: var(--font-display);
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
-}
-
-.manual-panel select,
-.manual-panel input,
-.manual-panel textarea {
-  width: 100%;
-  border: 1px solid rgba(19, 38, 40, 0.14);
-  border-radius: 18px;
-  padding: 0.86rem 0.95rem;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.manual-panel input:disabled {
-  color: var(--ink-soft);
-  background: rgba(229, 225, 217, 0.9);
 }
 
 .manual-panel__block-field,
@@ -416,7 +398,7 @@ const stepSummary = computed(() => {
 }
 
 .manual-panel__warning {
-  color: var(--danger);
+  color: var(--color-danger);
 }
 
 .manual-panel__compact-switch {
@@ -427,8 +409,11 @@ const stepSummary = computed(() => {
 }
 
 .manual-panel__compact-switch span {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
   letter-spacing: 0.02em;
   text-transform: none;
+  color: var(--color-text-secondary);
 }
 
 .manual-panel__entry-card {
@@ -436,17 +421,17 @@ const stepSummary = computed(() => {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.8rem;
   padding: 1rem;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.48);
-  border: 1px solid rgba(19, 38, 40, 0.08);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
 }
 
 .manual-panel__entry-summary {
   grid-column: 1 / -1;
   margin: 0;
   padding: 0.8rem 0.9rem;
-  border-radius: 16px;
-  background: rgba(19, 38, 40, 0.06);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-soft);
   line-height: 1.65;
 }
 
@@ -455,10 +440,10 @@ const stepSummary = computed(() => {
 }
 
 .manual-panel__state {
-  border-radius: 22px;
+  border-radius: var(--radius-xl);
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.5);
-  color: var(--ink-soft);
+  background: var(--color-bg-soft);
+  color: var(--color-text-secondary);
 }
 
 @media (max-width: 960px) {
