@@ -22,9 +22,9 @@ defineProps<{
   margin-top: 0.9rem;
   padding: 0.78rem 0.95rem;
   border-radius: 18px;
-  background: rgba(16, 44, 47, 0.94);
-  color: rgba(255, 248, 238, 0.94);
-  box-shadow: 0 14px 28px rgba(15, 44, 47, 0.18);
+  background: rgba(15, 23, 42, 0.92);
+  color: #fff;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.18);
 }
 
 .toast__mark {
@@ -33,8 +33,8 @@ defineProps<{
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 999px;
-  background: rgba(225, 175, 103, 0.18);
-  color: rgba(255, 221, 172, 0.94);
+  background: rgba(52, 110, 245, 0.28);
+  color: #dbe7ff;
   font-family: var(--font-display);
 }
 </style>

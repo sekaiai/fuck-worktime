@@ -29,7 +29,7 @@ const emit = defineEmits<{
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(10, 23, 25, 0.52);
+  background: rgba(15, 23, 42, 0.5);
   backdrop-filter: blur(12px);
 }
 
@@ -37,18 +37,17 @@ const emit = defineEmits<{
   width: min(100%, 460px);
   border-radius: 28px;
   padding: 1.4rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(180deg, rgba(255, 251, 244, 0.9), rgba(239, 233, 225, 0.82));
-  box-shadow: 0 28px 60px rgba(10, 23, 25, 0.28);
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-float);
 }
 
 .modal-card__eyebrow {
   margin: 0 0 0.45rem;
-  color: var(--accent-amber);
+  color: var(--color-info);
   font-family: var(--font-display);
   font-size: 0.76rem;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
@@ -58,7 +57,7 @@ const emit = defineEmits<{
 
 .modal-card__copy {
   margin-top: 0.8rem;
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   line-height: 1.75;
 }
 
@@ -68,8 +67,12 @@ const emit = defineEmits<{
   border: 0;
   border-radius: 999px;
   min-height: 3rem;
-  padding: 0.82rem 1rem;
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-  color: rgba(255, 248, 238, 0.94);
+  background: var(--color-primary);
+  color: #fff;
+  cursor: pointer;
+}
+
+.modal-card__button:hover {
+  background: var(--color-primary-strong);
 }
 </style>
