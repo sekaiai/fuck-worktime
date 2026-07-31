@@ -135,7 +135,7 @@ onMounted(() => {
       <div v-if="autoIsOpen" class="auto-fill-panel__editor">
         <section class="auto-fill-panel__workspace">
           <div class="auto-fill-panel__form">
-            <label>
+            <label class="field">
               <span>项目</span>
               <select :value="autoProjectId" @change="homeStore.setAutoProject(($event.target as HTMLSelectElement).value)">
                 <option value="">请选择项目</option>
@@ -143,7 +143,7 @@ onMounted(() => {
               </select>
             </label>
 
-            <label>
+            <label class="field">
               <span>一级工时类型</span>
               <select
                 :value="autoWorkTypeGroupId"
@@ -155,7 +155,7 @@ onMounted(() => {
               </select>
             </label>
 
-            <label>
+            <label class="field">
               <span>二级工时类型</span>
               <select
                 :value="autoItemId"
@@ -167,7 +167,7 @@ onMounted(() => {
               </select>
             </label>
 
-            <label>
+            <label class="field">
               <span>工时</span>
               <input
                 :value="autoHours"
@@ -179,7 +179,7 @@ onMounted(() => {
               />
             </label>
 
-            <label>
+            <label class="field">
               <span>填报时间</span>
               <input
                 :value="autoReportTime"
@@ -188,8 +188,8 @@ onMounted(() => {
               />
             </label>
 
-            <div class="auto-fill-panel__field">
-              <label for="auto-fill-deadline">
+            <div class="field auto-fill-panel__field">
+              <label class="field" for="auto-fill-deadline">
                 <span>截止日期</span>
               </label>
               <div class="auto-fill-panel__date-field">
@@ -213,7 +213,7 @@ onMounted(() => {
               <p class="auto-fill-panel__field-hint">不填写则长期有效</p>
             </div>
 
-            <label class="auto-fill-panel__full">
+            <label class="field auto-fill-panel__full">
               <span>工作内容模板</span>
               <textarea
                 :value="autoWork"
@@ -268,29 +268,15 @@ onMounted(() => {
 
 <style scoped>
 .auto-fill-panel {
-  --panel-top: rgba(247, 243, 236, 0.92);
-  --panel-bottom: rgba(232, 226, 216, 0.84);
-  --panel-accent: rgba(35, 76, 75, 0.14);
   position: relative;
   overflow: hidden;
   display: grid;
   gap: 1rem;
-  border-radius: 34px;
+  border-radius: var(--radius-2xl);
   padding: 1.4rem;
-  background:
-    linear-gradient(180deg, var(--panel-top), var(--panel-bottom)),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.3), transparent 58%);
-  box-shadow:
-    0 26px 54px rgba(20, 41, 44, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-}
-
-.auto-fill-panel.is-enabled {
-  --panel-accent: rgba(35, 76, 75, 0.18);
-}
-
-.auto-fill-panel.is-expired {
-  --panel-accent: rgba(170, 71, 55, 0.14);
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-soft);
 }
 
 .auto-fill-panel__glow {
@@ -306,7 +292,7 @@ onMounted(() => {
   right: -2rem;
   width: 12rem;
   height: 12rem;
-  background: radial-gradient(circle, rgba(204, 145, 56, 0.34), transparent 68%);
+  background: radial-gradient(circle, rgba(52, 110, 245, 0.12), transparent 68%);
 }
 
 .auto-fill-panel__glow--teal {
@@ -314,7 +300,7 @@ onMounted(() => {
   bottom: -4rem;
   width: 13rem;
   height: 13rem;
-  background: radial-gradient(circle, rgba(35, 76, 75, 0.18), transparent 72%);
+  background: radial-gradient(circle, rgba(52, 110, 245, 0.09), transparent 72%);
 }
 
 .auto-fill-panel__header,
@@ -337,7 +323,7 @@ onMounted(() => {
 
 .auto-fill-panel__eyebrow {
   margin: 0;
-  color: var(--accent-amber);
+  color: var(--color-info);
   font-family: var(--font-display);
   font-size: 0.78rem;
   letter-spacing: 0.18em;
@@ -351,7 +337,7 @@ onMounted(() => {
 
 .auto-fill-panel__copy {
   max-width: 34rem;
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   font-size: 1rem;
   line-height: 1.75;
 }
@@ -363,8 +349,8 @@ onMounted(() => {
   min-height: 2rem;
   padding: 0.38rem 0.8rem;
   border-radius: 999px;
-  background: rgba(19, 38, 40, 0.08);
-  color: var(--ink-strong);
+  background: var(--color-bg-soft);
+  color: var(--color-text-secondary);
   font-family: var(--font-display);
   font-size: 0.72rem;
   letter-spacing: 0.12em;
@@ -380,13 +366,13 @@ onMounted(() => {
 }
 
 .auto-fill-panel__badge.is-enabled {
-  background: rgba(35, 76, 75, 0.16);
-  color: var(--accent);
+  background: rgba(31, 157, 99, 0.12);
+  color: var(--color-success);
 }
 
 .auto-fill-panel__badge.is-expired {
-  background: rgba(170, 71, 55, 0.12);
-  color: var(--danger);
+  background: rgba(220, 76, 66, 0.1);
+  color: var(--color-danger);
 }
 
 .auto-fill-panel__overview {
@@ -401,16 +387,13 @@ onMounted(() => {
   align-items: center;
   gap: 0.8rem;
   padding: 0.95rem 1.05rem;
-  border-radius: 22px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.56), rgba(246, 241, 233, 0.3)),
-    linear-gradient(90deg, rgba(35, 76, 75, 0.06), transparent 42%);
-  border: 1px solid rgba(19, 38, 40, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border);
 }
 
 .auto-fill-panel__metric span {
-  color: var(--ink-muted);
+  color: var(--color-text-tertiary);
   font-family: var(--font-display);
   font-size: 0.75rem;
   letter-spacing: 0.14em;
@@ -427,18 +410,16 @@ onMounted(() => {
   display: grid;
   gap: 0.35rem;
   padding: 1.05rem 1.1rem;
-  border-radius: 22px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.22)),
-    linear-gradient(135deg, rgba(35, 76, 75, 0.08), transparent 70%);
-  border: 1px dashed rgba(19, 38, 40, 0.14);
-  color: var(--ink-soft);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-panel);
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 .auto-fill-panel__empty strong {
   font-family: var(--font-display);
   font-size: 1rem;
-  color: var(--ink-strong);
+  color: var(--color-text-primary);
 }
 
 .auto-fill-panel__toolbar {
@@ -466,12 +447,19 @@ onMounted(() => {
     color 160ms ease;
 }
 
+.auto-fill-panel__toggle:disabled,
+.auto-fill-panel__link:disabled,
+.auto-fill-panel__primary:disabled,
+.auto-fill-panel__secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .auto-fill-panel__toggle,
 .auto-fill-panel__link,
 .auto-fill-panel__secondary {
-  background: rgba(19, 38, 40, 0.08);
-  color: var(--ink-strong);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  background: var(--color-bg-soft);
+  color: var(--color-text-primary);
 }
 
 .auto-fill-panel__toggle:hover,
@@ -482,19 +470,19 @@ onMounted(() => {
 }
 
 .auto-fill-panel__link.is-active {
-  background: rgba(35, 76, 75, 0.14);
-  color: var(--accent);
+  background: rgba(31, 157, 99, 0.12);
+  color: var(--color-success);
 }
 
 .auto-fill-panel__primary {
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-  color: rgba(255, 248, 238, 0.96);
-  box-shadow: 0 16px 28px rgba(17, 43, 46, 0.16);
+  background: var(--color-primary);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(52, 110, 245, 0.22);
 }
 
 .auto-fill-panel__secondary.danger {
-  background: rgba(170, 71, 55, 0.1);
-  color: var(--danger);
+  background: rgba(220, 76, 66, 0.1);
+  color: var(--color-danger);
 }
 
 .auto-fill-panel__editor {
@@ -506,35 +494,15 @@ onMounted(() => {
   display: grid;
   gap: 1rem;
   padding: 1rem;
-  border-radius: 26px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(244, 239, 232, 0.2)),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent);
-  border: 1px solid rgba(19, 38, 40, 0.08);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
 }
 
 .auto-fill-panel__form {
   display: grid;
   grid-template-columns: repeat(1, minmax(0, 1fr));
   gap: 0.85rem;
-}
-
-.auto-fill-panel__form label,
-.auto-fill-panel__field {
-  display: grid;
-  gap: 0.4rem;
-}
-
-.auto-fill-panel__field > label {
-  display: grid;
-  gap: 0.4rem;
-}
-
-.auto-fill-panel__field-hint {
-  margin: -0.05rem 0 0;
-  color: var(--ink-soft);
-  font-size: 0.84rem;
-  line-height: 1.45;
 }
 
 .auto-fill-panel__full {
@@ -548,31 +516,11 @@ onMounted(() => {
   align-items: center;
 }
 
-.auto-fill-panel__form span {
-  color: var(--ink-muted);
-  font-family: var(--font-display);
-  font-size: 0.76rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.auto-fill-panel__form select,
-.auto-fill-panel__form input,
-.auto-fill-panel__form textarea {
-  width: 100%;
-  border: 1px solid rgba(19, 38, 40, 0.14);
-  border-radius: 18px;
-  padding: 0.88rem 0.95rem;
-  background: rgba(255, 255, 255, 0.76);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
-}
-
-.auto-fill-panel__form select:focus,
-.auto-fill-panel__form input:focus,
-.auto-fill-panel__form textarea:focus {
-  outline: none;
-  border-color: rgba(35, 76, 75, 0.34);
-  box-shadow: 0 0 0 3px rgba(35, 76, 75, 0.08);
+.auto-fill-panel__field-hint {
+  margin: -0.05rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.45;
 }
 
 .auto-fill-panel__date-clear {
@@ -580,8 +528,8 @@ onMounted(() => {
   min-height: 2.9rem;
   padding: 0.72rem 0.9rem;
   border-radius: 16px;
-  background: rgba(19, 38, 40, 0.08);
-  color: var(--ink-strong);
+  background: var(--color-bg-soft);
+  color: var(--color-text-primary);
   font-family: var(--font-display);
   cursor: pointer;
 }
@@ -592,7 +540,7 @@ onMounted(() => {
   gap: 0.75rem;
   margin-top: 0.4rem;
   padding-top: 0.9rem;
-  border-top: 1px solid rgba(19, 38, 40, 0.08);
+  border-top: 1px solid var(--color-border);
 }
 
 .auto-fill-expand-enter-active,
