@@ -48,7 +48,6 @@ export default defineConfig({
   css: {
     preprocessorOptions: {
       scss: {
-        additionalData: `@use "@nutui/nutui/dist/styles/variables.scss" as *;\n`,
         api: 'modern-compiler',
       },
     },
