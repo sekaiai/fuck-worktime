@@ -15,7 +15,7 @@ withDefaults(
     type="button"
     class="ui-btn"
     :class="[`ui-btn--${variant}`, `ui-btn--${size}`, { 'ui-btn--block': block }]"
-    :disabled="loading || $attrs.disabled"
+    :disabled="loading || $attrs.disabled === true"
   >
     <span v-if="loading" class="ui-btn__spinner"></span>
     <slot />
