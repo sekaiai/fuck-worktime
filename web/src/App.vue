@@ -28,8 +28,8 @@ watch(
 
 <template>
   <div class="app-shell">
-    <div class="app-shell__mesh app-shell__mesh--amber"></div>
-    <div class="app-shell__mesh app-shell__mesh--teal"></div>
+    <div class="app-shell__mesh app-shell__mesh--blue"></div>
+    <div class="app-shell__mesh app-shell__mesh--sky"></div>
     <div class="app-shell__grid"></div>
 
     <RouterView v-slot="{ Component }">
@@ -69,26 +69,26 @@ watch(
   opacity: 0.28;
 }
 
-.app-shell__mesh--amber {
+.app-shell__mesh--blue {
   top: -12rem;
   left: -6rem;
   width: 38rem;
   height: 38rem;
-  background: radial-gradient(circle, rgba(214, 150, 63, 0.22), transparent 68%);
+  background: radial-gradient(circle, rgba(52, 110, 245, 0.16), transparent 68%);
 }
 
-.app-shell__mesh--teal {
+.app-shell__mesh--sky {
   right: -8rem;
   bottom: -10rem;
   width: 34rem;
   height: 34rem;
-  background: radial-gradient(circle, rgba(231, 214, 187, 0.42), transparent 72%);
+  background: radial-gradient(circle, rgba(29, 122, 252, 0.1), transparent 72%);
 }
 
 .app-shell__grid {
   background-image:
-    linear-gradient(rgba(125, 115, 95, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(125, 115, 95, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(100, 116, 139, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100, 116, 139, 0.06) 1px, transparent 1px);
   background-size: 2rem 2rem;
   mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent 88%);
 }
@@ -100,7 +100,7 @@ watch(
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(244, 238, 230, 0.74);
+  background: rgba(244, 247, 251, 0.74);
   backdrop-filter: blur(8px);
 }
 
@@ -110,8 +110,9 @@ watch(
   min-width: min(100%, 280px);
   padding: 1.2rem 1.25rem;
   border-radius: 24px;
-  background: rgba(255, 252, 247, 0.96);
-  box-shadow: 0 24px 50px rgba(20, 41, 44, 0.08);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-panel);
+  box-shadow: var(--shadow-soft);
 }
 
 .app-shell__auth-card strong {
