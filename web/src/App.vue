@@ -110,7 +110,6 @@ watch(
   min-width: min(100%, 280px);
   padding: 1.2rem 1.25rem;
   border-radius: 24px;
-  border: 1px solid var(--color-border);
   background: var(--color-bg-panel);
   box-shadow: var(--shadow-soft);
 }
