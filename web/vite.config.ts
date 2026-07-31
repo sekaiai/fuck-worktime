@@ -16,8 +16,8 @@ export default defineConfig({
       manifest: {
         name: '云上工时',
         short_name: '云上工时',
-        theme_color: '#efe8db',
-        background_color: '#f4efe7',
+        theme_color: '#346ef5',
+        background_color: '#f4f7fb',
         display: 'standalone',
         start_url: '/',
         icons: [
