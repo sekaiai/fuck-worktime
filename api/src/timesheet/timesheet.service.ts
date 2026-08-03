@@ -5,6 +5,7 @@ import { Agent } from 'https';
 import { SubmitTimesheetDto } from './dto/submit-timesheet.dto';
 import { ReportBatchDto } from './dto/report-batch.dto';
 import { ReportDto } from './dto/report.dto';
+import { UpdateReportDto } from './dto/update-report.dto';
 import { ProjectDto } from './dto/project.dto';
 import { WorkTypeDto } from './dto/work-type.dto';
 import { AiService } from './ai/ai.service';
@@ -119,5 +120,17 @@ export class TimesheetService {
       this.logger.error('提交单条工时失败', error);
       throw error;
     }
+  }
+
+  async updateReport(token: string, id: string, dto: UpdateReportDto): Promise<unknown> {
+    const url = `${this.timesApiBaseUrl}/working/timing/report/${encodeURIComponent(id)}`;
+    const response = await this.client.put(url, { ...dto, id }, { headers: this.getAuthHeaders(token) });
+    return response.data;
+  }
+
+  async deleteReport(token: string, id: string): Promise<unknown> {
+    const url = `${this.timesApiBaseUrl}/working/timing/report/${encodeURIComponent(id)}`;
+    const response = await this.client.delete(url, { headers: this.getAuthHeaders(token) });
+    return response.data;
   }
 }

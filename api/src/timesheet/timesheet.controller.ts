@@ -1,9 +1,10 @@
-import { BadRequestException, Body, Controller, Delete, Get, Headers, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Post, Put, Query } from '@nestjs/common';
 
 import { ProjectDto } from './dto/project.dto';
 import { ReportBatchDto } from './dto/report-batch.dto';
 import { ReportDto } from './dto/report.dto';
 import { SubmitTimesheetDto } from './dto/submit-timesheet.dto';
+import { UpdateReportDto } from './dto/update-report.dto';
 import { WorkTypeDto } from './dto/work-type.dto';
 import { GenerateContentDto } from './dto/generate-content.dto';
 import { GetAutoFillQueryDto, SaveAutoFillDto } from './dto/auto-fill.dto';
@@ -81,6 +82,23 @@ export class TimesheetController {
     @Headers('x-gzdata-token') token: string,
   ): Promise<unknown> {
     return this.timesheetService.report(data, this.requireToken(token));
+  }
+
+  @Put('report/:id')
+  async updateReport(
+    @Headers('x-gzdata-token') token: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateReportDto,
+  ): Promise<unknown> {
+    return this.timesheetService.updateReport(this.requireToken(token), id, dto);
+  }
+
+  @Delete('report/:id')
+  async deleteReport(
+    @Headers('x-gzdata-token') token: string,
+    @Param('id') id: string,
+  ): Promise<unknown> {
+    return this.timesheetService.deleteReport(this.requireToken(token), id);
   }
 
   @Post('auto-fill')

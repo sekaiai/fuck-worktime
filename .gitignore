@@ -9,3 +9,5 @@ coverage/
 api/.env
 web/.env
 
+/.superpowers
+/.trae

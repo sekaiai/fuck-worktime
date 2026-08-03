@@ -5,6 +5,7 @@ import { useWeekBoard } from '../composables/useWeekBoard';
 import { useProjectCatalog } from '../composables/useProjectCatalog';
 import { useManualFill } from '../composables/useManualFill';
 import { useAutoFill } from '../composables/useAutoFill';
+import { useWeekFill } from '../composables/useWeekFill';
 import { useToast } from '../composables/useToast';
 import { getAutoFillConfig } from '../api/timesheet-client';
 
@@ -41,6 +42,18 @@ export const useHomeStore = defineStore('home', () => {
     showToast: autoToast.show,
   });
 
+  const weekFill = useWeekFill({
+    days: () => weekBoard.days.value,
+    projects: () => projectCatalog.projects.value,
+    getWorkTypesForProject: projectCatalog.getWorkTypesForProject,
+    loadWorkTypesByProject: projectCatalog.loadWorkTypesByProject,
+    getAutoFillConfig: () => autoFill.config.value,
+    refreshWeekBoard: async () => {
+      await weekBoard.loadWeek();
+    },
+    showToast: manualToast.show,
+  });
+
   // Computed for notification visibility
   const notifyVisible = computed(() => autoFill.status.value === 'enabled');
 
@@ -51,12 +64,14 @@ export const useHomeStore = defineStore('home', () => {
       return;
     }
 
-    // Load week board and auto fill config in parallel
     await Promise.all([
       weekBoard.loadWeek(),
       autoFill.initialize(authStore.userId),
       projectCatalog.loadProjectsByUser(authStore.userId),
     ]);
+
+    // 必须在三者都完成后再初始化：依赖 days、projects 与 autoFill.config
+    await weekFill.initializeWeek();
   }
 
   async function refreshWeekBoard(): Promise<void> {
@@ -64,6 +79,11 @@ export const useHomeStore = defineStore('home', () => {
     if (!ok && weekBoard.errorCode.value === 'TOKEN_EXPIRED') {
       authStore.handleTokenExpired();
     }
+  }
+
+  async function switchWeekAndReset(direction: 'previous' | 'current' | 'next'): Promise<void> {
+    await weekBoard.switchWeek(direction);
+    await weekFill.initializeWeek();
   }
 
   async function ensureProjectsLoaded(): Promise<void> {
@@ -102,6 +122,39 @@ export const useHomeStore = defineStore('home', () => {
     workTypeMap: projectCatalog.workTypeMap,
     loadProjectsByUser: projectCatalog.loadProjectsByUser,
     loadWorkTypesByProject: projectCatalog.loadWorkTypesByProject,
+    getWorkTypesForProject: projectCatalog.getWorkTypesForProject,
+
+    // Week fill
+    weekFillRows: weekFill.draftRows,
+    weekFillDefaults: weekFill.defaults,
+    weekTheme: weekFill.weekTheme,
+    isWeekFillGenerating: weekFill.isGenerating,
+    isWeekFillSubmitting: weekFill.isSubmitting,
+    expandedDates: weekFill.expandedDates,
+    dayForms: weekFill.dayForms,
+    editableDates: weekFill.editableDates,
+    rowsByDate: weekFill.rowsByDate,
+    rowErrors: weekFill.rowErrors,
+    pendingCount: weekFill.pendingCount,
+    pendingHours: weekFill.pendingHours,
+    canSubmitWeek: weekFill.canSubmit,
+    initializeWeekFill: weekFill.initializeWeek,
+    addWeekFillRow: weekFill.addRow,
+    duplicateWeekFillRow: weekFill.duplicateRow,
+    removeWeekFillRow: weekFill.removeRow,
+    setWeekFillRowProject: weekFill.setRowProject,
+    setWeekFillRowWorkType: weekFill.setRowWorkType,
+    setWeekFillRowHours: weekFill.setRowHours,
+    setWeekFillRowContent: weekFill.setRowContent,
+    generateWeekFillForDates: weekFill.generateForDates,
+    regenerateWeekFillRow: weekFill.regenerateRow,
+    setWeekFillDefaultProject: weekFill.setDefaultProject,
+    setWeekFillDefaultWorkType: weekFill.setDefaultWorkType,
+    setWeekFillDefaultHours: weekFill.setDefaultHours,
+    setWeekTheme: weekFill.setWeekTheme,
+    toggleWeekFillDate: weekFill.toggleDate,
+    submitWeekFill: weekFill.submitAll,
+    switchWeekAndReset,
 
     // Manual fill
     isManualFillVisible: manualFill.isVisible,

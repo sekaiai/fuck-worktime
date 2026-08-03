@@ -15,6 +15,10 @@ export interface WorkDetail {
   content: string;
   status: string;
   statusDesc: string;
+  /** 上游可能不返回；缺失时草稿行回落到默认值 */
+  projectId?: string;
+  /** 工时类型 id，同上 */
+  itemId?: string;
 }
 
 export interface WeekBoardResponse {

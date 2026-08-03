@@ -197,6 +197,8 @@ async function backendJsonRequest<T>(path: string, init?: RequestInit): Promise<
 
 function normalizeWorkDetail(detail: unknown): WorkDetail {
   const record = isRecord(detail) ? detail : {};
+  const projectId = toStringValue(record.projectId ?? record.proId ?? '');
+  const itemId = toStringValue(record.itemId ?? record.workTypeId ?? '');
 
   return {
     id: toStringValue(record.id ?? record.reportId ?? record.timingId),
@@ -205,6 +207,8 @@ function normalizeWorkDetail(detail: unknown): WorkDetail {
     content: toStringValue(record.content ?? record.workContent ?? ''),
     status: toStringValue(record.status ?? record.statusName ?? ''),
     statusDesc: toStringValue(record.statusDesc ?? record.statusLabel ?? record.status ?? ''),
+    ...(projectId ? { projectId } : {}),
+    ...(itemId ? { itemId } : {}),
   };
 }
 
@@ -363,6 +367,40 @@ export async function submitBatch(body: ReportBatchRequest): Promise<{ code: num
   return {
     code: 200,
     msg: '提交成功',
+  };
+}
+
+export async function updateEntry(
+  id: string,
+  entry: TimesheetEntry,
+): Promise<{ code: number; msg: string }> {
+  const response = await apiRequest(`/timesheet/report/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      reportDate: entry.reportDate,
+      projectId: entry.projectId,
+      projectTitle: entry.projectTitle,
+      projectStatus: entry.projectStatus,
+      itemId: entry.itemId,
+      content: entry.content,
+      hours: entry.hours,
+    }),
+  });
+
+  return {
+    code: response.code,
+    msg: response.msg || (response.code === 200 ? '修改成功' : '修改失败'),
+  };
+}
+
+export async function deleteEntry(id: string): Promise<{ code: number; msg: string }> {
+  const response = await apiRequest(`/timesheet/report/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+
+  return {
+    code: response.code,
+    msg: response.msg || (response.code === 200 ? '删除成功' : '删除失败'),
   };
 }
 
