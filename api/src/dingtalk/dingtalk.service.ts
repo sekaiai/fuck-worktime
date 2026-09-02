@@ -44,7 +44,7 @@ export class DingtalkService {
   private readonly LOGGED_IN_TITLE_SELECTOR = '.app-page.app-page-curr .module-confirm-title';
   private readonly LOGIN_PAGE_STATE_TIMEOUT_MS = 10000;
   private readonly DINGTALK_AUTH_URL =
-    'https://login.dingtalk.com/oauth2/challenge.htm?redirect_uri=https://times.gzdata.com.cn:8099/ding-talk-login&response_type=code&client_id=dinghuioeftyp2slxrcf&scope=openid&prompt=consent';
+    'https://login.dingtalk.com/oauth2/challenge.htm?redirect_uri=https://times.gzbdgc.com.cn:8099/ding-talk-login&response_type=code&client_id=dinghuioeftyp2slxrcf&scope=openid&prompt=consent';
 
   constructor(
     private readonly dingtalkStore: DingtalkStore,
@@ -77,7 +77,7 @@ export class DingtalkService {
       // ============================================
       this.logger.log('[步骤1] 启动浏览器');
       browser = await chromium.launch({
-        headless: true,
+        headless: false,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -582,7 +582,7 @@ export class DingtalkService {
 
     try {
       browser = await chromium.launch({
-        headless: true,
+        headless: false,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
