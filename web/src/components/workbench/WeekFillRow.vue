@@ -5,13 +5,28 @@ import { storeToRefs } from 'pinia';
 import { useHomeStore } from '../../stores/home';
 import type { WeekFillDraftRow } from '../../types/week-fill';
 
-const props = defineProps<{
+interface WeekFillRowProps {
   row: WeekFillDraftRow;
   errorMessage: string;
-}>();
+  readOnly?: boolean;
+}
+
+const props = withDefaults(defineProps<WeekFillRowProps>(), {
+  readOnly: false,
+});
 
 const homeStore = useHomeStore();
-const { projects, isWeekFillGenerating } = storeToRefs(homeStore);
+const {
+  projects,
+  isWeekFillGenerating,
+  isWeekFillSubmitting,
+  weekFillDeletingRowIds,
+  weekFillSubmittingRowIds,
+} = storeToRefs(homeStore);
+
+const isDeleting = computed(() => weekFillDeletingRowIds.value.includes(props.row.rowId));
+const isSubmitting = computed(() => weekFillSubmittingRowIds.value.includes(props.row.rowId));
+const isLocked = computed(() => isDeleting.value || isSubmitting.value || isWeekFillSubmitting.value);
 
 /** 二级工时类型拍平：一级节点若无子节点则自身可选 */
 const workTypeOptions = computed(() => {
@@ -43,7 +58,18 @@ function onContentInput(event: Event): void {
 
 <template>
   <div class="wf-row" :class="{ 'wf-row--error': errorMessage }">
-    <select class="wf-row__select" :value="row.projectId" @change="onProjectChange">
+    <div v-if="row.period || row.status || row.statusDesc" class="wf-row__meta">
+      <span v-if="row.period">期间：{{ row.period }}</span>
+      <span v-if="row.status">状态：{{ row.status }}</span>
+      <span v-if="row.statusDesc && row.statusDesc !== row.status">状态说明：{{ row.statusDesc }}</span>
+    </div>
+
+    <select
+      class="wf-row__select"
+      :value="row.projectId"
+      :disabled="props.readOnly || isLocked"
+      @change="onProjectChange"
+    >
       <option value="">选择项目</option>
       <option v-for="project in projects" :key="project.id" :value="project.id">
         {{ project.title }}
@@ -53,7 +79,7 @@ function onContentInput(event: Event): void {
     <select
       class="wf-row__select"
       :value="row.itemId"
-      :disabled="!row.projectId"
+      :disabled="props.readOnly || !row.projectId || isLocked"
       @change="onWorkTypeChange"
     >
       <option value="">选择工时类型</option>
@@ -68,6 +94,8 @@ function onContentInput(event: Event): void {
       min="0.5"
       step="0.5"
       :value="row.hours"
+      :readonly="props.readOnly"
+      :disabled="isLocked"
       @input="onHoursInput"
     />
 
@@ -77,21 +105,31 @@ function onContentInput(event: Event): void {
       maxlength="200"
       placeholder="工作内容"
       :value="row.content"
+      :readonly="props.readOnly"
+      :disabled="isLocked"
       @input="onContentInput"
     ></textarea>
 
-    <div class="wf-row__actions">
+    <div v-if="!props.readOnly" class="wf-row__actions">
       <button
         type="button"
         title="AI 重新生成本行"
-        :disabled="isWeekFillGenerating"
+        :disabled="isWeekFillGenerating || isLocked"
         @click="homeStore.regenerateWeekFillRow(row.rowId)"
       >✨</button>
-      <button type="button" title="复制本行" @click="homeStore.duplicateWeekFillRow(row.rowId)">
+      <button type="button" title="复制本行" :disabled="isLocked" @click="homeStore.duplicateWeekFillRow(row.rowId)">
         复制
       </button>
-      <button type="button" title="删除本行" @click="homeStore.removeWeekFillRow(row.rowId)">
-        删除
+      <button
+        type="button"
+        title="单独提交本行"
+        :disabled="isLocked"
+        @click="void homeStore.submitWeekFillRow(row.rowId)"
+      >
+        {{ isSubmitting ? '提交中…' : '单独提交' }}
+      </button>
+      <button type="button" title="删除本行" :disabled="isLocked" @click="void homeStore.removeWeekFillRow(row.rowId)">
+        {{ isDeleting ? '删除中…' : '删除' }}
       </button>
     </div>
 
@@ -109,6 +147,15 @@ function onContentInput(event: Event): void {
   border: 1px solid var(--color-border);
   border-radius: 12px;
   background: var(--color-bg-panel);
+}
+
+.wf-row__meta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
 }
 
 .wf-row--error {

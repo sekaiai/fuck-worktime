@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mapDayStatus } from '../timesheet-status.ts';
+import { isReadonlyTimesheetStatus, mapDayStatus } from '../timesheet-status.ts';
 
 function day(overrides = {}) {
   return { date: '2026-07-20', isWeekend: false, status: '未提交', displayStatus: '', ...overrides };
@@ -28,6 +28,12 @@ test('待审核：displayStatus 含待审核', () => {
   assert.equal(r.key, 'pending');
 });
 
+test('待审批：status 含待审批', () => {
+  const r = mapDayStatus(day({ status: '已达标待审批', displayStatus: '8小时·已达标待审批' }));
+  assert.equal(r.key, 'pending');
+  assert.equal(r.label, '8小时·已达标待审批');
+});
+
 test('已审核：displayStatus 含通过/已审核/已完成', () => {
   assert.equal(mapDayStatus(day({ displayStatus: '已通过' })).key, 'approved');
   assert.equal(mapDayStatus(day({ displayStatus: '已审核' })).key, 'approved');
@@ -47,4 +53,18 @@ test('未来日：status 未提交且 date > 今天，无标点', () => {
 test('未知 displayStatus 回退未填报，不抛错', () => {
   const r = mapDayStatus(day({ displayStatus: '未知状态XYZ' }));
   assert.equal(r.key, 'none');
+});
+
+test('明细状态：待审批和审核通过只读', () => {
+  assert.equal(isReadonlyTimesheetStatus('待审批', '待审批'), true);
+  assert.equal(isReadonlyTimesheetStatus('审核通过', '已通过'), true);
+  assert.equal(isReadonlyTimesheetStatus('', '', 'pending'), true);
+  assert.equal(isReadonlyTimesheetStatus('', '', 'approved'), true);
+});
+
+test('明细状态：审核失败和已撤回可编辑，优先于聚合状态', () => {
+  assert.equal(isReadonlyTimesheetStatus('审核失败', '驳回', 'pending'), false);
+  assert.equal(isReadonlyTimesheetStatus('未通过', '未通过', 'approved'), false);
+  assert.equal(isReadonlyTimesheetStatus('已撤回', '已撤回', 'approved'), false);
+  assert.equal(isReadonlyTimesheetStatus('未提交', '未提交'), false);
 });

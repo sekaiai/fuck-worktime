@@ -14,14 +14,14 @@ export class TimesClientError extends Error {
 @Injectable()
 export class TimesClient {
   private readonly client: AxiosInstance = axios.create({
-    baseURL: 'https://times.gzdata.com.cn:8099',
+    baseURL: 'https://times.gzbdgc.com.cn:8099',
     timeout: 15000,
     httpsAgent: new Agent({ rejectUnauthorized: false }),
     insecureHTTPParser: true,
     headers: {
       Accept: 'application/json, text/plain, */*',
       'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-      Referer: 'https://times.gzdata.com.cn:8099/hours/hours/timesheet',
+      Referer: 'https://times.gzbdgc.com.cn:8099/hours/hours/timesheet',
       'Sec-Fetch-Site': 'same-origin',
       'User-Agent':
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',

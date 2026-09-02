@@ -1,7 +1,7 @@
 import { computed, shallowRef } from 'vue';
 
 import { ApiError } from '../api/request';
-import { buildBatchPayload, generateContent, submitBatch } from '../api/timesheet-client';
+import { buildBatchPayload, generateContent, isReportSuccessCode, submitBatch } from '../api/timesheet-client';
 import type { Project, TimesheetEntry, WorkTypeNode } from '../types/timesheet';
 import { getTodayKey } from '../utils/date';
 import type { WorkTypeGroup } from '../utils/work-types';
@@ -278,10 +278,10 @@ export function useManualFill(options: {
       const result = await submitBatch(buildBatchPayload(entries.value));
       resultDialog.value = {
         open: true,
-        title: result.code === 200 ? '提交结果' : '提交失败',
+        title: isReportSuccessCode(result.code) ? '提交结果' : '提交失败',
         message: result.msg,
       };
-      if (result.code === 200) {
+      if (isReportSuccessCode(result.code)) {
         resetEntries();
         await refreshWeekBoard();
       }

@@ -3,6 +3,7 @@ export interface WeekDay {
   dayOfWeek: string;
   isWeekend: boolean;
   status: string;
+  displayText: string;
   displayStatus: string;
   totalHours: number;
   details: WorkDetail[];
@@ -17,16 +18,25 @@ export interface WorkDetail {
   statusDesc: string;
   /** 上游可能不返回；缺失时草稿行回落到默认值 */
   projectId?: string;
+  /** 明细接口可能直接返回项目展示字段 */
+  projectTitle?: string;
+  projectStatus?: number;
   /** 工时类型 id，同上 */
   itemId?: string;
+  /** 工时类型展示名称，同上 */
+  itemName?: string;
 }
 
 export interface WeekBoardResponse {
-  weekRange?:string;
+  weekRange?: string;
+  monday?: string;
+  sunday?: string;
   days: WeekDay[];
   userName?: string;
   deptName?: string;
   totalHours: number;
+  workDays?: number;
+  averageHours?: number;
   weekNumber?: number;
   reportPeriod?: string;
   currentWeek?: string;
@@ -62,4 +72,48 @@ export interface TimesheetEntry {
 
 export interface ReportBatchRequest {
   workingTimingList: TimesheetEntry[];
+}
+
+export interface ReportBatchResponse {
+  code: number;
+  msg: string;
+  data: unknown | null;
+}
+
+export interface ReportActionResponse {
+  code: number;
+  msg: string;
+  data: unknown | null;
+}
+
+export interface ReportFlowStartResponse extends ReportActionResponse {
+  taskId: string | null;
+}
+
+export interface ReportFlowButtonsResponse extends ReportActionResponse {
+  buttonKey: string | null;
+}
+
+export type WeekFillSubmitMode = 'flow' | 'reportBatch';
+
+export type WeekFillSubmitStepName = 'flow' | 'buttons' | 'handle' | 'reportBatch';
+
+export interface WeekFillSubmitStep {
+  name: WeekFillSubmitStepName;
+  code: number;
+  msg: string;
+  data: unknown | null;
+}
+
+export interface WeekFillSubmitItem {
+  rowId: string;
+  reportDate: string;
+  mode: WeekFillSubmitMode;
+  success: boolean;
+  steps: WeekFillSubmitStep[];
+  errorMessage?: string;
+}
+
+export interface WeekFillSubmitResult extends ReportBatchResponse {
+  items: WeekFillSubmitItem[];
 }

@@ -1,10 +1,12 @@
-import { Type } from 'class-transformer';
-import { IsArray, ValidateNested } from 'class-validator';
-import { ReportDto } from './report.dto';
+import { IsArray } from 'class-validator';
 
 export class ReportBatchDto {
   @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ReportDto)
-  workingTimingList!: ReportDto[];
+  workingTimingList!: Record<string, unknown>[];
+}
+
+export interface ReportBatchResponse {
+  code: number;
+  msg: string;
+  data: unknown | null;
 }

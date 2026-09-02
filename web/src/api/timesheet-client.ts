@@ -2,6 +2,10 @@ import type { AutoFillConfig } from '../types/auto-fill';
 import type {
   Project,
   ReportBatchRequest,
+  ReportBatchResponse,
+  ReportActionResponse,
+  ReportFlowButtonsResponse,
+  ReportFlowStartResponse,
   TimesheetEntry,
   WeekBoardResponse,
   WeekDay,
@@ -11,7 +15,7 @@ import type {
 import { formatWeekRange } from '../utils/date';
 import { ApiError, apiRequest, clearAuthToken, getApiBase, getAuthToken, setAuthToken } from './request';
 
-const GZDATA_BASE = 'https://times.gzdata.com.cn:8099/prod-api';
+const GZDATA_BASE = 'https://times.gzbdgc.com.cn:8099/prod-api';
 
 /**
  * gzdata 慢响应或网络挂起时，没有超时会无限阻塞 authGate 之后的请求。
@@ -76,6 +80,22 @@ function extractMessage(payload: unknown, fallback: string): string {
   return fallback;
 }
 
+function normalizeReportResponse(
+  payload: unknown,
+  successFallback: string,
+  failureFallback: string,
+): ReportActionResponse {
+  const record = isRecord(payload) ? payload : null;
+  const code = typeof record?.code === 'number' ? record.code : 200;
+  const data = record && 'data' in record ? record.data ?? null : null;
+
+  return {
+    code,
+    msg: extractMessage(payload, isReportSuccessCode(code) ? successFallback : failureFallback),
+    data,
+  };
+}
+
 async function parseJson<T>(response: Response): Promise<T | null> {
   const text = await response.text();
   if (!text) {
@@ -85,7 +105,15 @@ async function parseJson<T>(response: Response): Promise<T | null> {
   return JSON.parse(text) as T;
 }
 
-async function gzdataRawRequest(path: string, init?: RequestInit): Promise<unknown> {
+interface GzdataRequestOptions {
+  allowBusinessFailure?: boolean;
+}
+
+async function gzdataRawRequest(
+  path: string,
+  init?: RequestInit,
+  options: GzdataRequestOptions = {},
+): Promise<unknown> {
   const token = getAuthToken();
   if (!token) {
     throw new ApiError('登录已失效，请重新登录', 401, 'TOKEN_EXPIRED');
@@ -122,7 +150,7 @@ async function gzdataRawRequest(path: string, init?: RequestInit): Promise<unkno
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new ApiError('请求超时，请稍后重试。', undefined, 'TIMEOUT');
     }
-    throw new ApiError(error instanceof Error ? error.message : '网络请求失败。');
+    throw new ApiError('网络请求失败，请检查网络后重试。');
   }
   cleanup();
 
@@ -144,7 +172,11 @@ async function gzdataRawRequest(path: string, init?: RequestInit): Promise<unkno
       throw new ApiError(extractMessage(payload, '登录已失效，请重新登录'), 401, 'TOKEN_EXPIRED');
     }
 
-    if (payload.code !== 200 && payload.code !== 0) {
+    if (
+      payload.code !== 200 &&
+      payload.code !== 0 &&
+      !options.allowBusinessFailure
+    ) {
       throw new ApiError(extractMessage(payload, '请求失败'), response.status);
     }
   }
@@ -198,7 +230,10 @@ async function backendJsonRequest<T>(path: string, init?: RequestInit): Promise<
 function normalizeWorkDetail(detail: unknown): WorkDetail {
   const record = isRecord(detail) ? detail : {};
   const projectId = toStringValue(record.projectId ?? record.proId ?? '');
+  const projectTitle = toStringValue(record.projectTitle ?? record.projectName ?? record.title ?? '');
+  const projectStatus = toNumberValue(record.projectStatus, -1);
   const itemId = toStringValue(record.itemId ?? record.workTypeId ?? '');
+  const itemName = toStringValue(record.itemName ?? record.workTypeName ?? '');
 
   return {
     id: toStringValue(record.id ?? record.reportId ?? record.timingId),
@@ -208,7 +243,10 @@ function normalizeWorkDetail(detail: unknown): WorkDetail {
     status: toStringValue(record.status ?? record.statusName ?? ''),
     statusDesc: toStringValue(record.statusDesc ?? record.statusLabel ?? record.status ?? ''),
     ...(projectId ? { projectId } : {}),
+    ...(projectTitle ? { projectTitle } : {}),
+    ...(projectStatus >= 0 ? { projectStatus } : {}),
     ...(itemId ? { itemId } : {}),
+    ...(itemName ? { itemName } : {}),
   };
 }
 
@@ -227,16 +265,19 @@ function normalizeWeekDay(day: unknown): WeekDay {
     record.totalHours ?? record.hours,
     details.reduce((sum, item) => sum + item.hours, 0),
   );
+  const status = toStringValue(record.status ?? record.statusDesc ?? '未提交');
+  const displayText = toStringValue(
+    record.displayText ?? record.displayStatus ?? status,
+    status,
+  );
 
   return {
     date,
     dayOfWeek: toStringValue(record.dayOfWeek ?? record.weekDay ?? record.weekName, getWeekdayLabel(date)),
     isWeekend: Boolean(record.isWeekend),
-    status: toStringValue(record.status ?? record.statusDesc ?? '未提交'),
-    displayStatus: toStringValue(
-      record.displayStatus ?? record.statusDesc ?? record.statusLabel ?? record.status,
-      '',
-    ),
+    status,
+    displayText,
+    displayStatus: toStringValue(record.displayStatus ?? displayText, displayText),
     totalHours,
     details,
   };
@@ -250,13 +291,19 @@ function normalizeWeekBoard(value: unknown): WeekBoardResponse {
     record.totalHours ?? record.hours,
     days.reduce((sum, day) => sum + day.totalHours, 0),
   );
+  const workDays = toNumberValue(record.workDays, -1);
+  const averageHours = toNumberValue(record.averageHours, -1);
 
   return {
     days,
     weekRange: toStringValue(record.weekRange, formatWeekRange(days.map((day) => day.date))),
+    monday: toStringValue(record.monday, ''),
+    sunday: toStringValue(record.sunday, ''),
     totalHours,
     userName: toStringValue(record.userName ?? record.username, ''),
     deptName: toStringValue(record.deptName ?? record.departmentName, ''),
+    workDays: workDays >= 0 ? workDays : undefined,
+    averageHours: averageHours >= 0 ? averageHours : undefined,
     weekNumber: toNumberValue(record.weekNumber, 0) || undefined,
     reportPeriod: toStringValue(record.reportPeriod, ''),
     currentWeek: toStringValue(record.currentWeek, ''),
@@ -351,23 +398,102 @@ export async function generateContent(work: string, days: number): Promise<strin
   return [];
 }
 
-export async function submitBatch(body: ReportBatchRequest): Promise<{ code: number; msg: string }> {
-  const payload = await gzdataRawRequest('/working/timing/reportBatch', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+export async function submitBatch(body: ReportBatchRequest): Promise<ReportBatchResponse> {
+  const payload = await gzdataRawRequest(
+    '/working/timing/reportBatch',
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+    { allowBusinessFailure: true },
+  );
+  return normalizeReportResponse(payload, '提交成功', '提交失败');
+}
 
-  if (isRecord(payload) && typeof payload.code === 'number') {
-    return {
-      code: payload.code,
-      msg: extractMessage(payload, payload.code === 200 ? '提交成功' : '提交失败'),
-    };
+export function isReportSuccessCode(code: number): boolean {
+  return code === 200 || code === 0;
+}
+
+export async function revokeEntry(id: string): Promise<ReportActionResponse> {
+  const payload = await gzdataRawRequest(
+    `/working/timing/revoke?id=${encodeURIComponent(id)}`,
+    { method: 'POST' },
+  );
+  return normalizeReportResponse(payload, '撤回成功', '撤回失败');
+}
+
+const REPORT_FLOW_BUTTON_KEY = 'timing-audit-btn-report';
+
+function findReportFlowButtonKey(data: unknown): string | null {
+  if (!Array.isArray(data)) {
+    return null;
   }
 
+  const button = data.find(
+    (item) => isRecord(item) && item.key === REPORT_FLOW_BUTTON_KEY,
+  );
+  return isRecord(button) && typeof button.key === 'string' ? button.key : null;
+}
+
+export async function getReportFlowTask(id: string): Promise<ReportFlowStartResponse> {
+  const payload = await gzdataRawRequest(
+    `/working-timing/flow/${encodeURIComponent(id)}`,
+    { method: 'GET' },
+    { allowBusinessFailure: true },
+  );
+  const response = normalizeReportResponse(payload, '操作成功', '获取提交流程失败');
+  const taskId = typeof response.data === 'string' && response.data.trim()
+    ? response.data
+    : null;
+
+  return { ...response, taskId };
+}
+
+export async function getReportFlowButtons(taskId: string): Promise<ReportFlowButtonsResponse> {
+  const payload = await gzdataRawRequest(
+    `/working-timing/flow/buttons?taskId=${encodeURIComponent(taskId)}`,
+    { method: 'GET' },
+    { allowBusinessFailure: true },
+  );
+  const response = normalizeReportResponse(payload, '操作成功', '获取提交按钮失败');
+
   return {
-    code: 200,
-    msg: '提交成功',
+    ...response,
+    buttonKey: isReportSuccessCode(response.code) ? findReportFlowButtonKey(response.data) : null,
   };
+}
+
+export async function handleReportFlow(
+  taskId: string,
+  buttonKey: string,
+  entry: TimesheetEntry,
+): Promise<ReportActionResponse> {
+  const payload = await gzdataRawRequest(
+    '/working-timing/flow/handle',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        taskId,
+        submitInfo: {
+          buttonKey,
+          decision: 1,
+          opinion: '',
+          data: {
+            reportDate: entry.reportDate,
+            projectId: entry.projectId,
+            projectTitle: entry.projectTitle,
+            projectStatus: entry.projectStatus,
+            itemId: entry.itemId,
+            hours: entry.hours,
+            content: entry.content,
+          },
+        },
+      }),
+    },
+    { allowBusinessFailure: true },
+  );
+
+  return normalizeReportResponse(payload, '提交成功', '重新提交失败');
 }
 
 export async function updateEntry(
@@ -389,7 +515,7 @@ export async function updateEntry(
 
   return {
     code: response.code,
-    msg: response.msg || (response.code === 200 ? '修改成功' : '修改失败'),
+    msg: response.msg || (isReportSuccessCode(response.code) ? '修改成功' : '修改失败'),
   };
 }
 
@@ -400,7 +526,7 @@ export async function deleteEntry(id: string): Promise<{ code: number; msg: stri
 
   return {
     code: response.code,
-    msg: response.msg || (response.code === 200 ? '删除成功' : '删除失败'),
+    msg: response.msg || (isReportSuccessCode(response.code) ? '删除成功' : '删除失败'),
   };
 }
 

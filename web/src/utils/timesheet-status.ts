@@ -20,6 +20,25 @@ export interface DayStatusResult {
   color: string;
 }
 
+/**
+ * 只有审批中/审批完成的明细锁定输入；驳回、撤回等明确可编辑状态优先级更高。
+ * dayStatusKey 只作为明细没有状态文案时的兜底，避免聚合状态误锁定驳回明细。
+ */
+export function isReadonlyTimesheetStatus(
+  status: string,
+  statusDesc: string,
+  dayStatusKey?: DayStatusKey,
+): boolean {
+  const text = `${status} ${statusDesc}`;
+  if (/不通过|未通过|失败|驳回|撤回|未提交/.test(text)) {
+    return false;
+  }
+  if (/待审核|待审批|通过|已审核|已完成/.test(text)) {
+    return true;
+  }
+  return dayStatusKey === 'pending' || dayStatusKey === 'approved';
+}
+
 const STATUS_COLORS: Record<Exclude<DayStatusKey, 'future'>, string> = {
   rest: '#cbd5e1',
   none: '#64748b',
@@ -34,14 +53,15 @@ export function mapDayStatus(day: DayStatusInput): DayStatusResult {
   }
 
   const text = `${day.status} ${day.displayStatus}`;
-  if (text.includes('待审核')) {
-    return { key: 'pending', label: '待审核', color: STATUS_COLORS.pending };
+  const displayLabel = day.displayStatus;
+  if (/待审核|待审批/.test(text)) {
+    return { key: 'pending', label: displayLabel || day.status || '待审批', color: STATUS_COLORS.pending };
   }
-  if (/不通过|失败|驳回/.test(text)) {
-    return { key: 'rejected', label: '审核失败', color: STATUS_COLORS.rejected };
+  if (/不通过|未通过|失败|驳回/.test(text)) {
+    return { key: 'rejected', label: displayLabel || day.status || '审核失败', color: STATUS_COLORS.rejected };
   }
   if (/通过|已审核|已完成/.test(text)) {
-    return { key: 'approved', label: '已审核', color: STATUS_COLORS.approved };
+    return { key: 'approved', label: displayLabel || day.status || '已审核', color: STATUS_COLORS.approved };
   }
   if (day.status === '未提交' && day.date > getTodayKey()) {
     return { key: 'future', label: '未来日', color: 'transparent' };

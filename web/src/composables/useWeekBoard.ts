@@ -24,8 +24,14 @@ export function useWeekBoard() {
     days.value.filter((day) => !day.isWeekend && day.status === '未提交' && day.date <= getTodayKey()),
   );
   const totalHours = computed(() => board.value?.totalHours ?? 0);
-  const workDays = computed(() => days.value.filter((day) => !day.isWeekend).length);
+  const workDays = computed(
+    () => board.value?.workDays ?? days.value.filter((day) => !day.isWeekend).length,
+  );
   const averageHours = computed(() => {
+    if (board.value?.averageHours !== undefined) {
+      return board.value.averageHours;
+    }
+
     if (workDays.value === 0) {
       return 0;
     }
@@ -33,7 +39,9 @@ export function useWeekBoard() {
     return Number((totalHours.value / workDays.value).toFixed(1));
   });
   const weekTitle = computed(() => board.value?.currentWeek || '本周填报状态');
-  const weekRange = computed(() => formatWeekRange(days.value.map((day) => day.date)));
+  const weekRange = computed(
+    () => board.value?.weekRange || formatWeekRange(days.value.map((day) => day.date)),
+  );
   const weekStartOfToday = computed(() => getWeekStart());
   const isCurrentWeek = computed(() => currentDate.value === weekStartOfToday.value);
   const selectedDay = computed(() => days.value.find((day) => day.date === selectedDayDate.value) ?? null);

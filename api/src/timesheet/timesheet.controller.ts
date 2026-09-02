@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, Pos
 
 import { ProjectDto } from './dto/project.dto';
 import { ReportBatchDto } from './dto/report-batch.dto';
+import type { ReportBatchResponse } from './dto/report-batch.dto';
 import { ReportDto } from './dto/report.dto';
 import { SubmitTimesheetDto } from './dto/submit-timesheet.dto';
 import { UpdateReportDto } from './dto/update-report.dto';
@@ -72,7 +73,7 @@ export class TimesheetController {
   async reportBatch(
     @Body() data: ReportBatchDto,
     @Headers('x-gzdata-token') token: string,
-  ): Promise<unknown> {
+  ): Promise<ReportBatchResponse> {
     return this.timesheetService.reportBatch(data, this.requireToken(token));
   }
 

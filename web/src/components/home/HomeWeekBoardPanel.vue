@@ -55,7 +55,8 @@ const summaryItems = computed(() => [
 ]);
 
 function isPendingDay(day: WeekDay): boolean {
-  return day.status === '未提交' && day.date <= todayKey.value;
+  const text = `${day.status} ${day.displayText} ${day.displayStatus}`;
+  return /待审核|待审批/.test(text) || (day.status === '未提交' && day.date <= todayKey.value);
 }
 
 function getStateClass(day: WeekDay): string {
@@ -76,7 +77,7 @@ function getStatusText(day: WeekDay): string {
     return '休息日';
   }
 
-  return day.displayStatus || day.status || (day.totalHours > 0 ? '已填报' : '未提交');
+  return day.displayStatus || day.displayText || day.status || (day.totalHours > 0 ? '已填报' : '未提交');
 }
 
 function canInspect(day: WeekDay): boolean {

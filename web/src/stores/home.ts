@@ -76,6 +76,9 @@ export const useHomeStore = defineStore('home', () => {
 
   async function refreshWeekBoard(): Promise<void> {
     const ok = await weekBoard.loadWeek();
+    if (ok) {
+      await weekFill.initializeWeek();
+    }
     if (!ok && weekBoard.errorCode.value === 'TOKEN_EXPIRED') {
       authStore.handleTokenExpired();
     }
@@ -83,7 +86,7 @@ export const useHomeStore = defineStore('home', () => {
 
   async function switchWeekAndReset(direction: 'previous' | 'current' | 'next'): Promise<void> {
     await weekBoard.switchWeek(direction);
-    await weekFill.initializeWeek();
+    await weekFill.initializeWeek(false);
   }
 
   async function ensureProjectsLoaded(): Promise<void> {
@@ -130,6 +133,10 @@ export const useHomeStore = defineStore('home', () => {
     weekTheme: weekFill.weekTheme,
     isWeekFillGenerating: weekFill.isGenerating,
     isWeekFillSubmitting: weekFill.isSubmitting,
+    weekFillSubmitResult: weekFill.submitResult,
+    weekFillSubmittingRowIds: weekFill.submittingRowIds,
+    weekFillDeletingRowIds: weekFill.deletingRowIds,
+    weekFillRevokingDetailIds: weekFill.revokingDetailIds,
     expandedDates: weekFill.expandedDates,
     dayForms: weekFill.dayForms,
     editableDates: weekFill.editableDates,
@@ -152,6 +159,9 @@ export const useHomeStore = defineStore('home', () => {
     setWeekFillDefaultWorkType: weekFill.setDefaultWorkType,
     setWeekFillDefaultHours: weekFill.setDefaultHours,
     setWeekTheme: weekFill.setWeekTheme,
+    getWeekFillRemainingHours: weekFill.getRemainingHours,
+    revokeWeekFillDetail: weekFill.revokeDetail,
+    submitWeekFillRow: weekFill.submitRow,
     toggleWeekFillDate: weekFill.toggleDate,
     submitWeekFill: weekFill.submitAll,
     switchWeekAndReset,

@@ -5,12 +5,14 @@ import { storeToRefs } from 'pinia';
 import { useHomeStore } from '../../stores/home';
 
 const homeStore = useHomeStore();
-const { weekRange, isCurrentWeek, isWeekLoading, totalHours, dayForms } = storeToRefs(homeStore);
+const { board, weekTitle, weekRange, isCurrentWeek, isWeekLoading, totalHours, workDays, averageHours, dayForms } =
+  storeToRefs(homeStore);
 
 const summary = computed(() => {
   const pending = dayForms.value.filter((item) => item.status.key === 'none').length;
   const rejected = dayForms.value.filter((item) => item.status.key === 'rejected').length;
-  return { pending, rejected };
+  const approvalPending = dayForms.value.filter((item) => item.status.key === 'pending').length;
+  return { pending, rejected, approvalPending };
 });
 </script>
 
@@ -31,10 +33,18 @@ const summary = computed(() => {
     </div>
 
     <div class="wf-header__info">
+      <p class="wf-header__title">{{ weekTitle || '加载中…' }}</p>
       <p class="wf-header__range">{{ weekRange || '加载中…' }}</p>
+      <p v-if="board?.userName || board?.deptName" class="wf-header__meta">
+        <template v-if="board?.userName">{{ board.userName }}</template>
+        <template v-if="board?.userName && board?.deptName"> · </template>
+        <template v-if="board?.deptName">{{ board.deptName }}</template>
+      </p>
+      <p v-if="board?.reportPeriod" class="wf-header__meta">填报周期：{{ board.reportPeriod }}</p>
       <p class="wf-header__summary">
-        已录入 {{ totalHours }}h / 40h
+        已录入 {{ totalHours }}h · 工作日 {{ workDays }} 天 · 日均 {{ averageHours }}h
         <template v-if="summary.pending > 0"> · 待填 {{ summary.pending }} 天</template>
+        <template v-if="summary.approvalPending > 0"> · 待审批 {{ summary.approvalPending }} 天</template>
         <template v-if="summary.rejected > 0"> · {{ summary.rejected }} 天审核失败</template>
       </p>
     </div>
@@ -91,6 +101,19 @@ const summary = computed(() => {
   font-size: 1rem;
   font-weight: 600;
   color: var(--color-text-primary);
+}
+
+.wf-header__title {
+  margin: 0 0 0.2rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.wf-header__meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
 }
 
 .wf-header__summary {

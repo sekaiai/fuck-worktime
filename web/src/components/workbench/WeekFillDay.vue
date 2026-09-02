@@ -4,8 +4,9 @@ import { storeToRefs } from 'pinia';
 
 import WeekFillRow from './WeekFillRow.vue';
 import { useHomeStore } from '../../stores/home';
-import type { WeekDay } from '../../types/timesheet';
-import type { DayStatusResult } from '../../utils/timesheet-status';
+import type { WeekDay, WorkDetail } from '../../types/timesheet';
+import type { WeekFillDraftRow } from '../../types/week-fill';
+import { isReadonlyTimesheetStatus, type DayStatusResult } from '../../utils/timesheet-status';
 
 const props = defineProps<{
   day: WeekDay;
@@ -14,10 +15,39 @@ const props = defineProps<{
 }>();
 
 const homeStore = useHomeStore();
-const { rowsByDate, rowErrors, expandedDates } = storeToRefs(homeStore);
+const { rowsByDate, rowErrors, expandedDates, weekFillRevokingDetailIds } = storeToRefs(homeStore);
 
-const rows = computed(() => rowsByDate.value[props.day.date] ?? []);
+const allRows = computed(() => rowsByDate.value[props.day.date] ?? []);
+const rows = computed(() =>
+  allRows.value.filter((row) => {
+    if (!row.sourceId) {
+      return true;
+    }
+
+    const detail = props.day.details.find((item) => item.id === row.sourceId);
+    return !detail || !isReadonlyDetail(detail);
+  }),
+);
 const isExpanded = computed(() => expandedDates.value.includes(props.day.date));
+const displayedDetailRows = computed(() =>
+  props.day.details
+    .map((detail, index) => ({ detail, index }))
+    .filter(
+      ({ detail }) =>
+        isReadonlyDetail(detail) || !rows.value.some((row) => row.sourceId === detail.id),
+    )
+    .map(({ detail, index }) => ({
+      detail,
+      row: toDetailRow(detail, index),
+      readOnly: !rows.value.some((row) => row.sourceId === detail.id),
+    })),
+);
+const isCompactDay = computed(
+  () =>
+    (props.form === 'rest' || props.form === 'future') &&
+    props.day.details.length === 0 &&
+    rows.value.length === 0,
+);
 
 const errorOf = computed(() => (rowId: string): string => {
   return rowErrors.value.find((error) => error.rowId === rowId)?.message ?? '';
@@ -28,56 +58,104 @@ const rejectReason = computed(
   () => props.day.details.find((detail) => detail.statusDesc)?.statusDesc ?? '',
 );
 
-const dayHours = computed(() =>
-  props.form === 'editable'
-    ? rows.value.reduce((sum, row) => sum + (Number.isFinite(row.hours) ? row.hours : 0), 0)
-    : props.day.totalHours,
+const newDraftHours = computed(() =>
+  rows.value
+    .filter((row) => !row.sourceId)
+    .reduce((sum, row) => sum + (Number.isFinite(row.hours) ? row.hours : 0), 0),
 );
+
+const dayHours = computed(() => props.day.totalHours + newDraftHours.value);
+
+const remainingHours = computed(() => homeStore.getWeekFillRemainingHours(props.day.date));
+const canAddRow = computed(
+  () => props.form !== 'future' && props.form !== 'rest' && remainingHours.value > 0,
+);
+
+function isRevoking(detailId: string): boolean {
+  return weekFillRevokingDetailIds.value.includes(detailId);
+}
+
+function isReadonlyDetail(detail: WorkDetail): boolean {
+  return isReadonlyTimesheetStatus(detail.status, detail.statusDesc, props.status.key);
+}
+
+function toDetailRow(detail: WorkDetail, index: number): WeekFillDraftRow {
+  return {
+    rowId: `detail_${props.day.date}_${detail.id || index}`,
+    reportDate: props.day.date,
+    sourceId: detail.id || null,
+    projectId: detail.projectId ?? '',
+    projectTitle: detail.projectTitle ?? '',
+    projectStatus: detail.projectStatus ?? 30,
+    itemId: detail.itemId ?? '',
+    itemName: detail.itemName ?? '',
+    hours: detail.hours,
+    content: detail.content,
+    period: detail.period,
+    status: detail.status,
+    statusDesc: detail.statusDesc,
+  };
+}
+
+function canRevoke(detail: WorkDetail): boolean {
+  const detailStatus = `${detail.status} ${detail.statusDesc}`;
+  return props.status.key === 'pending' && Boolean(detail.id) && /待审核|待审批/.test(detailStatus);
+}
+
+function onRevoke(detail: WorkDetail): void {
+  const confirmed = typeof window === 'undefined' ||
+    window.confirm(`确认撤回 ${props.day.date} 的 ${detail.hours} 小时填报吗？`);
+  if (!confirmed) {
+    return;
+  }
+
+  void homeStore.revokeWeekFillDetail(detail.id);
+}
 </script>
 
 <template>
-  <!-- 周末：单行，无交互 -->
-  <div v-if="form === 'rest'" class="wf-day wf-day--muted">
+  <!-- 没有任何明细的周末/未来日仍保持紧凑展示 -->
+  <div v-if="isCompactDay" class="wf-day wf-day--muted">
     <span class="wf-day__title">{{ day.dayOfWeek }} {{ day.date.slice(5) }}</span>
-    <span class="wf-day__tag">休息</span>
+    <span class="wf-day__tag">{{ day.displayStatus || day.displayText || day.status || (form === 'rest' ? '休息日' : '未到') }}</span>
   </div>
 
-  <!-- 本周未来日：单行灰字（spec §6.4） -->
-  <div v-else-if="form === 'future'" class="wf-day wf-day--muted">
-    <span class="wf-day__title">{{ day.dayOfWeek }} {{ day.date.slice(5) }}</span>
-    <span class="wf-day__tag">未到</span>
-  </div>
-
-  <!-- 只读：待审核 / 已审核，可展开看内容但无输入控件 -->
-  <div v-else-if="form === 'readonly'" class="wf-day">
-    <button type="button" class="wf-day__head" @click="homeStore.toggleWeekFillDate(day.date)">
-      <span class="wf-day__caret">{{ isExpanded ? '▾' : '▸' }}</span>
-      <span class="wf-day__title">{{ day.dayOfWeek }} {{ day.date.slice(5) }}</span>
-      <span class="wf-day__hours">{{ dayHours }}h</span>
-      <span class="wf-day__status" :style="{ color: status.color }">{{ status.label }}</span>
-    </button>
-    <div v-if="isExpanded" class="wf-day__body">
-      <p v-for="detail in day.details" :key="detail.id" class="wf-day__detail">
-        <span class="wf-day__detail-hours">{{ detail.hours }}h</span>
-        {{ detail.content || '无填报内容' }}
-      </p>
-      <p v-if="day.details.length === 0" class="wf-day__detail">无填报内容</p>
-    </div>
-  </div>
-
-  <!-- 可编辑：未填报 / 审核失败 -->
+  <!-- 有明细的日期统一展示原始明细；只读与可编辑由明细状态决定 -->
   <div v-else class="wf-day">
     <button type="button" class="wf-day__head" @click="homeStore.toggleWeekFillDate(day.date)">
       <span class="wf-day__caret">{{ isExpanded ? '▾' : '▸' }}</span>
       <span class="wf-day__title">{{ day.dayOfWeek }} {{ day.date.slice(5) }}</span>
       <span class="wf-day__hours">{{ dayHours }}h</span>
-      <span class="wf-day__status" :style="{ color: status.color }">{{ status.label }}</span>
+      <span class="wf-day__status" :style="{ color: status.color }">
+        {{ day.displayStatus || day.displayText || day.status || status.label }}
+      </span>
     </button>
 
     <div v-if="isExpanded" class="wf-day__body">
       <p v-if="status.key === 'rejected' && rejectReason" class="wf-day__reject">
         驳回原因：{{ rejectReason }}
       </p>
+
+      <div
+        v-for="detailRow in displayedDetailRows"
+        :key="detailRow.row.rowId"
+        class="wf-day__detail-row"
+      >
+        <WeekFillRow
+          :row="detailRow.row"
+          :error-message="''"
+          :read-only="detailRow.readOnly"
+        />
+        <button
+          v-if="canRevoke(detailRow.detail)"
+          type="button"
+          class="wf-day__revoke"
+          :disabled="weekFillRevokingDetailIds.length > 0"
+          @click.stop="onRevoke(detailRow.detail)"
+        >
+          {{ isRevoking(detailRow.detail.id) ? '撤回中…' : '撤回' }}
+        </button>
+      </div>
 
       <WeekFillRow
         v-for="row in rows"
@@ -86,8 +164,17 @@ const dayHours = computed(() =>
         :error-message="errorOf(row.rowId)"
       />
 
-      <button type="button" class="wf-day__add" @click="homeStore.addWeekFillRow(day.date)">
-        + 添加一条
+      <p v-if="day.details.length === 0 && rows.length === 0" class="wf-day__detail">
+        无填报内容
+      </p>
+
+      <button
+        v-if="canAddRow && form !== 'future' && form !== 'rest'"
+        type="button"
+        class="wf-day__add"
+        @click="homeStore.addWeekFillRow(day.date)"
+      >
+        + 添加一条（剩余 {{ remainingHours }}h）
       </button>
     </div>
   </div>
@@ -157,6 +244,11 @@ const dayHours = computed(() =>
   padding-left: 1.35rem;
 }
 
+.wf-day__detail-row {
+  display: grid;
+  gap: 0.25rem;
+}
+
 .wf-day__reject {
   margin: 0;
   padding: 0.45rem 0.6rem;
@@ -173,10 +265,20 @@ const dayHours = computed(() =>
   line-height: 1.6;
 }
 
-.wf-day__detail-hours {
-  margin-right: 0.5rem;
-  font-weight: 600;
-  color: var(--color-text-primary);
+.wf-day__revoke {
+  border: 1px solid color-mix(in srgb, #dc4c42 45%, var(--color-border));
+  border-radius: 8px;
+  padding: 0.15rem 0.45rem;
+  background: transparent;
+  color: #dc4c42;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.wf-day__revoke:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .wf-day__add {
