@@ -18,7 +18,8 @@ const summary = computed(() => {
 
 <template>
   <header class="wf-header">
-    <div class="wf-header__nav">
+    <div class="">
+      <div class="wf-header__nav">
       <button
         type="button"
         :disabled="isWeekLoading"
@@ -30,17 +31,22 @@ const summary = computed(() => {
         :disabled="isWeekLoading || isCurrentWeek"
         @click="homeStore.switchWeekAndReset('current')"
       >本周</button>
+      <button
+        type="button"
+        :disabled="isWeekLoading"
+        @click="homeStore.switchWeekAndReset('next')"
+      >下一周 ›</button>
+    </div>
+      <p class="wf-header__range">{{ weekRange || '加载中…' }}</p>
+
     </div>
 
     <div class="wf-header__info">
-      <p class="wf-header__title">{{ weekTitle || '加载中…' }}</p>
-      <p class="wf-header__range">{{ weekRange || '加载中…' }}</p>
       <p v-if="board?.userName || board?.deptName" class="wf-header__meta">
         <template v-if="board?.userName">{{ board.userName }}</template>
         <template v-if="board?.userName && board?.deptName"> · </template>
         <template v-if="board?.deptName">{{ board.deptName }}</template>
       </p>
-      <p v-if="board?.reportPeriod" class="wf-header__meta">填报周期：{{ board.reportPeriod }}</p>
       <p class="wf-header__summary">
         已录入 {{ totalHours }}h · 工作日 {{ workDays }} 天 · 日均 {{ averageHours }}h
         <template v-if="summary.pending > 0"> · 待填 {{ summary.pending }} 天</template>

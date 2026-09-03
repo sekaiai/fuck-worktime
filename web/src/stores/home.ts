@@ -1,9 +1,7 @@
 import { defineStore, storeToRefs } from 'pinia';
-import { computed } from 'vue';
 import { useAuthStore } from './auth';
 import { useWeekBoard } from '../composables/useWeekBoard';
 import { useProjectCatalog } from '../composables/useProjectCatalog';
-import { useManualFill } from '../composables/useManualFill';
 import { useAutoFill } from '../composables/useAutoFill';
 import { useWeekFill } from '../composables/useWeekFill';
 import { useToast } from '../composables/useToast';
@@ -17,19 +15,6 @@ export const useHomeStore = defineStore('home', () => {
   const projectCatalog = useProjectCatalog();
   const manualToast = useToast();
   const autoToast = useToast();
-
-  // Manual fill composable
-  const manualFill = useManualFill({
-    fillableDays: () => weekBoard.fillableDays.value,
-    projects: () => projectCatalog.projects.value,
-    getWorkTypeGroups: projectCatalog.getWorkTypeGroups,
-    findWorkType: projectCatalog.findWorkType,
-    loadWorkTypesByProject: projectCatalog.loadWorkTypesByProject,
-    refreshWeekBoard: async () => {
-      await weekBoard.loadWeek();
-    },
-    showToast: manualToast.show,
-  });
 
   // Auto fill composable
   const autoFill = useAutoFill({
@@ -53,9 +38,6 @@ export const useHomeStore = defineStore('home', () => {
     },
     showToast: manualToast.show,
   });
-
-  // Computed for notification visibility
-  const notifyVisible = computed(() => autoFill.status.value === 'enabled');
 
   // Initialize function
   async function initialize(): Promise<void> {
@@ -160,6 +142,7 @@ export const useHomeStore = defineStore('home', () => {
     setWeekFillDefaultHours: weekFill.setDefaultHours,
     setWeekTheme: weekFill.setWeekTheme,
     getWeekFillRemainingHours: weekFill.getRemainingHours,
+    getWeekFillMaxHoursForRow: weekFill.getMaxHoursForRow,
     revokeWeekFillDetail: weekFill.revokeDetail,
     submitWeekFillRow: weekFill.submitRow,
     toggleWeekFillDate: weekFill.toggleDate,
@@ -167,43 +150,7 @@ export const useHomeStore = defineStore('home', () => {
     switchWeekAndReset,
 
     // Manual fill
-    isManualFillVisible: manualFill.isVisible,
-    manualProjectId: manualFill.projectId,
-    manualWorkTypeGroupId: manualFill.workTypeGroupId,
-    manualWorkTypeId: manualFill.workTypeId,
-    manualHours: manualFill.hours,
-    manualWork: manualFill.work,
-    manualDaysToGenerate: manualFill.daysToGenerate,
-    manualEntries: manualFill.entries,
-    isGenerating: manualFill.isGenerating,
-    isSubmitting: manualFill.isSubmitting,
     manualToastMessage: manualToast.message,
-    manualResultDialog: manualFill.resultDialog,
-    manualCurrentStep: manualFill.currentStep,
-    compactReviewMode: manualFill.compactReviewMode,
-    manualMaxFillDays: manualFill.maxFillDays,
-    sortedFillableDays: manualFill.sortedFillableDays,
-    manualWorkTypeGroups: manualFill.workTypeGroups,
-    manualSelectedWorkType: manualFill.selectedWorkType,
-    manualAvailableWorkTypes: manualFill.availableWorkTypes,
-    manualPreviewDates: manualFill.previewDates,
-    openManualFill: manualFill.open,
-    closeManualFill: manualFill.close,
-    quickFillOneDay: manualFill.quickFillOneDay,
-    setManualProject: manualFill.setProject,
-    setManualWorkTypeGroup: manualFill.setWorkTypeGroup,
-    setManualWorkType: manualFill.setWorkType,
-    setManualCurrentStep: manualFill.setCurrentStep,
-    setManualHours: manualFill.setHours,
-    setManualDaysToGenerate: manualFill.setDaysToGenerate,
-    setManualWork: manualFill.setWork,
-    setCompactReviewMode: manualFill.setCompactReviewMode,
-    generateManualEntries: manualFill.generateEntries,
-    updateManualEntryDate: manualFill.updateEntryDate,
-    updateManualEntryContent: manualFill.updateEntryContent,
-    updateManualEntryHours: manualFill.updateEntryHours,
-    submitManualEntries: manualFill.submitEntries,
-    closeManualResultDialog: manualFill.closeResultDialog,
 
     // Auto fill
     autoFillConfig: autoFill.config,

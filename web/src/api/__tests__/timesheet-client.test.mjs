@@ -16,6 +16,7 @@ const bundle = await build({
         getReportFlowButtons,
         getReportFlowTask,
         handleReportFlow,
+        deleteEntry,
         submitBatch,
       } from './web/src/api/timesheet-client.ts';
       export { useWeekFill } from './web/src/composables/useWeekFill.ts';
@@ -102,6 +103,30 @@ test('submitBatch 不吞掉上游业务失败的 code、message 和 data', async
   });
 });
 
+test('deleteEntry 按上游接口使用 POST 删除并携带凭据', async () => {
+  let request;
+  globalThis.fetch = async (input, init) => {
+    request = { input: String(input), init };
+    return new Response(JSON.stringify({ code: 200, msg: '删除成功', data: null }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+  client.setAuthToken('frontend-test-token');
+
+  const result = await client.deleteEntry('detail/1');
+
+  assert.equal(
+    request.input,
+    'https://times.gzbdgc.com.cn:8099/prod-api/working/timing/delete/detail%2F1',
+  );
+  assert.equal(request.init.method, 'POST');
+  assert.equal(request.init.body, null);
+  assert.equal(request.init.credentials, 'include');
+  assert.equal(new Headers(request.init.headers).get('Authorization'), 'Bearer frontend-test-token');
+  assert.deepEqual(result, { code: 200, msg: '删除成功', data: null });
+});
+
 test('审核失败重新提交按 flow、buttons、handle 顺序透传参数', async () => {
   const entry = {
     reportDate: '2026-09-01',
@@ -147,13 +172,17 @@ test('审核失败重新提交按 flow、buttons、handle 顺序透传参数', a
   for (const request of requests) {
     assert.equal(new Headers(request.init.headers).get('Authorization'), 'Bearer frontend-test-token');
   }
+  assert.equal(requests[2].init.credentials, 'include');
+  assert.equal(new Headers(requests[2].init.headers).get('Content-Type'), 'application/json;charset=UTF-8');
   assert.deepEqual(JSON.parse(requests[2].init.body), {
     taskId: 'task-1',
     submitInfo: {
       buttonKey: 'timing-audit-btn-report',
       decision: 1,
       opinion: '',
-      data: entry,
+      data: {
+        form: entry,
+      },
     },
   });
   assert.deepEqual(flow, { code: 200, msg: '操作成功', data: 'task-1', taskId: 'task-1' });
@@ -220,6 +249,7 @@ test('useWeekFill 部分成功时只移除成功的旧记录', async () => {
   ];
   let requestCount = 0;
   let refreshCount = 0;
+  const events = [];
 
   globalThis.fetch = async () =>
     new Response(JSON.stringify(responses[requestCount++]), {
@@ -236,8 +266,11 @@ test('useWeekFill 部分成功时只移除成功的旧记录', async () => {
     getAutoFillConfig: () => null,
     refreshWeekBoard: async () => {
       refreshCount += 1;
+      events.push('refresh');
     },
-    showToast: () => {},
+    showToast: () => {
+      events.push('message');
+    },
   });
   weekFill.draftRows.value = rows;
 
@@ -246,6 +279,7 @@ test('useWeekFill 部分成功时只移除成功的旧记录', async () => {
   assert.equal(requestCount, 6);
   assert.deepEqual(weekFill.draftRows.value.map((row) => row.rowId), ['row-failed']);
   assert.equal(refreshCount, 1);
+  assert.deepEqual(events, ['message', 'refresh']);
   assert.deepEqual(result.items.map((item) => [item.rowId, item.success]), [
     ['row-success', true],
     ['row-failed', false],
@@ -363,6 +397,63 @@ test('新建行可单独调用 reportBatch 提交', async () => {
   assert.equal(request.init.method, 'POST');
   assert.equal(result.items[0].mode, 'reportBatch');
   assert.equal(result.items[0].success, true);
+});
+
+test('单日工时超过八小时输入时自动回退到剩余工时', () => {
+  const weekFill = client.useWeekFill({
+    days: () => [{
+      date: '2026-09-02',
+      dayOfWeek: '周三',
+      isWeekend: false,
+      status: '未提交',
+      displayText: '未提交',
+      displayStatus: '未提交',
+      totalHours: 0,
+      details: [],
+    }],
+    projects: () => [],
+    getWorkTypesForProject: () => [],
+    loadWorkTypesByProject: async () => [],
+    getAutoFillConfig: () => null,
+    refreshWeekBoard: async () => {},
+    showToast: () => {},
+  });
+  weekFill.draftRows.value = [
+    {
+      rowId: 'row-seven',
+      reportDate: '2026-09-02',
+      sourceId: null,
+      projectId: 'project-1',
+      projectTitle: '测试项目',
+      projectStatus: 30,
+      itemId: 'item-1',
+      itemName: '测试类型',
+      hours: 7,
+      content: '第一条',
+    },
+    {
+      rowId: 'row-half',
+      reportDate: '2026-09-02',
+      sourceId: null,
+      projectId: 'project-1',
+      projectTitle: '测试项目',
+      projectStatus: 30,
+      itemId: 'item-1',
+      itemName: '测试类型',
+      hours: 0.5,
+      content: '第二条',
+    },
+  ];
+
+  weekFill.addRow('2026-09-02');
+  const thirdRow = weekFill.draftRows.value.at(-1);
+  assert.equal(thirdRow?.hours, 0.5);
+
+  if (!thirdRow) {
+    return;
+  }
+  weekFill.setRowHours(thirdRow.rowId, 1);
+  assert.equal(weekFill.draftRows.value.at(-1)?.hours, 0.5);
 });
 
 test('周看板同步全部明细并在撤回后保留可编辑记录和新草稿', async () => {

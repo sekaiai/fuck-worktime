@@ -6,9 +6,15 @@ export class TimesClientError extends Error {
   constructor(
     message: string,
     readonly statusCode?: number,
+    readonly responseData?: unknown,
   ) {
     super(message);
   }
+}
+
+export interface TimesPingResult {
+  statusCode: number;
+  data: unknown;
 }
 
 @Injectable()
@@ -39,25 +45,46 @@ export class TimesClient {
         },
       });
 
+      const responseRecord = this.asRecord(response.data);
+      if (typeof responseRecord?.code === 'number' && ![0, 200].includes(responseRecord.code)) {
+        const message = this.getResponseMessage(responseRecord) ?? `获取用户信息失败（code=${responseRecord.code}）`;
+        throw new TimesClientError(message, response.status, response.data);
+      }
+
       return response.data;
     } catch (error) {
       throw this.createClientError(error, '获取用户信息失败');
     }
   }
 
-  async ping(authorization: string): Promise<void> {
+  async ping(authorization: string): Promise<TimesPingResult> {
     try {
-      await this.client.get('/prod-api/system/menu/website/ping', {
+      const response = await this.client.get('/prod-api/system/menu/website/ping', {
         headers: {
           Authorization: authorization,
         },
       });
+
+      const responseRecord = this.asRecord(response.data);
+      if (typeof responseRecord?.code === 'number' && ![0, 200].includes(responseRecord.code)) {
+        const message = this.getResponseMessage(responseRecord) ?? `心跳业务失败（code=${responseRecord.code}）`;
+        throw new TimesClientError(message, response.status, response.data);
+      }
+
+      return {
+        statusCode: response.status,
+        data: response.data,
+      };
     } catch (error) {
       throw this.createClientError(error, '心跳请求失败');
     }
   }
 
-  private createClientError(error: unknown, fallbackMessage: string) {
+  private createClientError(error: unknown, fallbackMessage: string): TimesClientError {
+    if (error instanceof TimesClientError) {
+      return error;
+    }
+
     if (axios.isAxiosError(error)) {
       return this.formatAxiosError(error, fallbackMessage);
     }
@@ -69,7 +96,7 @@ export class TimesClient {
     return new TimesClientError(fallbackMessage);
   }
 
-  private formatAxiosError(error: AxiosError, fallbackMessage: string) {
+  private formatAxiosError(error: AxiosError, fallbackMessage: string): TimesClientError {
     const status = error.response?.status;
     const responseData = error.response?.data;
 
@@ -77,20 +104,45 @@ export class TimesClient {
       return new TimesClientError(
         status ? `${fallbackMessage}（HTTP ${status}）` : fallbackMessage,
         status,
+        responseData,
       );
     }
 
     if (responseData && typeof responseData === 'object') {
-      return new TimesClientError(status ? `${fallbackMessage}（HTTP ${status}）` : fallbackMessage, status);
+      return new TimesClientError(
+        status ? `${fallbackMessage}（HTTP ${status}）` : fallbackMessage,
+        status,
+        responseData,
+      );
     }
 
     if (error.message) {
       return new TimesClientError(
         status ? `${fallbackMessage}（HTTP ${status}）` : fallbackMessage,
         status,
+        responseData,
       );
     }
 
-    return new TimesClientError(fallbackMessage, status);
+    return new TimesClientError(fallbackMessage, status, responseData);
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+
+    return value as Record<string, unknown>;
+  }
+
+  private getResponseMessage(record: Record<string, unknown>): string | null {
+    for (const key of ['msg', 'message']) {
+      const value = record[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+
+    return null;
   }
 }

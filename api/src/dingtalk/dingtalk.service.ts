@@ -432,7 +432,7 @@ export class DingtalkService {
       return null;
     }
 
-    return this.resolveUserInfo(record);
+    return this.resolveUserInfo(record, true);
   }
 
   async getUserByPhone(phone: string): Promise<UserInfoData | null> {
@@ -463,12 +463,16 @@ export class DingtalkService {
     return (phone ?? '').replace(/[^\d]/g, '');
   }
 
-  private async resolveUserInfo(record: DingtalkUserRecord): Promise<UserInfoData> {
-    const inFlight = this.refreshPromises.get(record.userId);
-    if (record.status === 'refreshing' && inFlight) {
-      return inFlight;
+  private async resolveUserInfo(record: DingtalkUserRecord, forceRemoteFetch = false): Promise<UserInfoData> {
+    if (!forceRemoteFetch) {
+      const inFlight = this.refreshPromises.get(record.userId);
+      if (record.status === 'refreshing' && inFlight) {
+        return inFlight;
+      }
     }
 
+    // 每次 /api/dingtalk/user 请求都先使用当前 token 从 gzbdgc 获取最新用户信息。
+    // 只有上游获取失败后，才进入已有的 Cookie 自动恢复流程。
     const latestUserInfo = await this.tryFetchLatestUserInfo(record);
     if (latestUserInfo) {
       return latestUserInfo;

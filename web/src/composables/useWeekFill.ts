@@ -46,6 +46,13 @@ export interface UseWeekFillOptions {
 }
 
 let rowSeq = 0;
+const SUBMIT_REFRESH_DELAY_MS = 2000;
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
 
 function createRowId(): string {
   rowSeq += 1;
@@ -221,6 +228,28 @@ export function useWeekFill(options: UseWeekFillOptions) {
     return calculateRemainingHours(submittedHours, newDraftHours);
   }
 
+  function getMaxHoursForRow(rowId: string): number {
+    const row = draftRows.value.find((item) => item.rowId === rowId);
+    if (!row) {
+      return 0;
+    }
+
+    const day = days().find((item) => item.date === row.reportDate);
+    let submittedHours = day?.totalHours ?? 0;
+
+    // 可编辑的旧明细已经计入 day.totalHours，编辑时应扣除它原来的工时再计算上限。
+    if (row.sourceId) {
+      const sourceDetail = day?.details.find((detail) => detail.id === row.sourceId);
+      submittedHours -= sourceDetail?.hours ?? 0;
+    }
+
+    const otherNewDraftHours = draftRows.value
+      .filter((item) => item.reportDate === row.reportDate && !item.sourceId && item.rowId !== rowId)
+      .reduce((sum, item) => sum + (Number.isFinite(item.hours) ? item.hours : 0), 0);
+
+    return calculateRemainingHours(submittedHours, otherNewDraftHours);
+  }
+
   function addRow(reportDate: string): void {
     const remainingHours = getRemainingHours(reportDate);
     if (remainingHours <= 0) {
@@ -240,8 +269,18 @@ export function useWeekFill(options: UseWeekFillOptions) {
     }
 
     const source = draftRows.value[index];
+    const remainingHours = getRemainingHours(source.reportDate);
+    if (remainingHours <= 0) {
+      return;
+    }
+
     // 复制出的行是全新记录，必须清掉 sourceId，否则提交时会去更新原记录
-    const copy: WeekFillDraftRow = { ...source, rowId: createRowId(), sourceId: null };
+    const copy: WeekFillDraftRow = {
+      ...source,
+      rowId: createRowId(),
+      sourceId: null,
+      hours: Math.min(source.hours > 0 ? source.hours : remainingHours, remainingHours),
+    };
     const next = [...draftRows.value];
     next.splice(index + 1, 0, copy);
     draftRows.value = next;
@@ -319,7 +358,9 @@ export function useWeekFill(options: UseWeekFillOptions) {
   }
 
   function setRowHours(rowId: string, hours: number): void {
-    patchRow(rowId, { hours });
+    const maxHours = getMaxHoursForRow(rowId);
+    const nextHours = Number.isFinite(hours) ? Math.max(0, Math.min(hours, maxHours)) : 0;
+    patchRow(rowId, { hours: nextHours });
   }
 
   function setRowContent(rowId: string, content: string): void {
@@ -787,6 +828,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
         writeLastUsedDefaults({ ...defaults.value, work: weekTheme.value });
       }
       showToast(result.msg || '提交完成。');
+      await wait(SUBMIT_REFRESH_DELAY_MS);
       await refreshWeekBoard();
       if (allRowsSucceeded) {
         await initializeWeek();
@@ -833,6 +875,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
     setDefaultHours,
     setWeekTheme,
     getRemainingHours,
+    getMaxHoursForRow,
     revokeDetail,
     toggleDate,
     submitRow,

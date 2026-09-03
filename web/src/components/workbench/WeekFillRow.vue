@@ -93,6 +93,7 @@ function onContentInput(event: Event): void {
       type="number"
       min="0.5"
       step="0.5"
+      :max="props.readOnly ? undefined : homeStore.getWeekFillMaxHoursForRow(props.row.rowId)"
       :value="row.hours"
       :readonly="props.readOnly"
       :disabled="isLocked"

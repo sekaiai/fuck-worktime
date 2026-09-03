@@ -123,7 +123,7 @@ async function gzdataRawRequest(
   headers.set('Accept', 'application/json, text/plain, */*');
   headers.set('Authorization', normalizeToken(token));
 
-  if (init?.body) {
+  if (init?.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -472,6 +472,10 @@ export async function handleReportFlow(
     '/working-timing/flow/handle',
     {
       method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json;charset=UTF-8',
+      },
       body: JSON.stringify({
         taskId,
         submitInfo: {
@@ -479,13 +483,15 @@ export async function handleReportFlow(
           decision: 1,
           opinion: '',
           data: {
-            reportDate: entry.reportDate,
-            projectId: entry.projectId,
-            projectTitle: entry.projectTitle,
-            projectStatus: entry.projectStatus,
-            itemId: entry.itemId,
-            hours: entry.hours,
-            content: entry.content,
+            form: {
+              reportDate: entry.reportDate,
+              projectId: entry.projectId,
+              projectTitle: entry.projectTitle,
+              projectStatus: entry.projectStatus,
+              itemId: entry.itemId,
+              hours: entry.hours,
+              content: entry.content,
+            },
           },
         },
       }),
@@ -519,15 +525,18 @@ export async function updateEntry(
   };
 }
 
-export async function deleteEntry(id: string): Promise<{ code: number; msg: string }> {
-  const response = await apiRequest(`/timesheet/report/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  });
+export async function deleteEntry(id: string): Promise<ReportActionResponse> {
+  const payload = await gzdataRawRequest(
+    `/working/timing/delete/${encodeURIComponent(id)}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      body: null,
+    },
+    { allowBusinessFailure: true },
+  );
 
-  return {
-    code: response.code,
-    msg: response.msg || (isReportSuccessCode(response.code) ? '删除成功' : '删除失败'),
-  };
+  return normalizeReportResponse(payload, '删除成功', '删除失败');
 }
 
 export async function saveAutoFillConfig(
