@@ -8,8 +8,7 @@ import {
   type UserByUserIdResult,
   type UserLoginStatus,
 } from '../api/dingtalk-client';
-import { setAuthRequestGate } from '../api/request';
-import { clearGzdataToken, setAuthToken } from '../api/timesheet-client';
+import { clearAuthToken, setAuthRequestGate, setAuthToken } from '../api/request';
 import type { UserInfo } from '../types/user';
 import { clearSessionCache, getLocalStorage, removeLocalStorage, setLocalStorage } from '../utils/cache';
 
@@ -50,7 +49,7 @@ export const useAuthStore = defineStore('auth', () => {
   function clearRuntimeSession(): void {
     userInfo.value = null;
     clearSessionCache();
-    clearGzdataToken();
+    clearAuthToken();
   }
 
   function finalizeHydration(response: UserByUserIdResult | null): HydrateResult {

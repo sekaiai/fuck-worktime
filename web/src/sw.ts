@@ -16,8 +16,6 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  console.log('[Service Worker] Push event received');
-
   let payload:
     | {
         title?: string;
@@ -40,8 +38,6 @@ self.addEventListener('push', (event) => {
       body: event.data?.text() ?? '你有一条新的通知。',
     };
   }
-
-  console.log('[Service Worker] Push payload:', payload);
 
   console.info('[SW] Push event received.', {
     hasData: !!event.data,

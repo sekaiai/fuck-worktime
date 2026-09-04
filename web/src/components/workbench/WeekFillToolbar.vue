@@ -3,19 +3,15 @@ import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import { useHomeStore } from '../../stores/home';
+import { buildWorkTypeOptions } from '../../utils/work-types';
 
 const homeStore = useHomeStore();
 const { projects, weekFillDefaults, weekTheme, isWeekFillGenerating, editableDates } =
   storeToRefs(homeStore);
 
-const workTypeOptions = computed(() => {
-  const nodes = homeStore.getWorkTypesForProject(weekFillDefaults.value.projectId);
-  return nodes.flatMap((node) =>
-    node.children?.length
-      ? node.children.map((child) => ({ id: child.id, name: `${node.name} / ${child.name}` }))
-      : [{ id: node.id, name: node.name }],
-  );
-});
+const workTypeOptions = computed(() =>
+  buildWorkTypeOptions(homeStore.getWorkTypesForProject(weekFillDefaults.value.projectId)),
+);
 
 function onProjectChange(event: Event): void {
   void homeStore.setWeekFillDefaultProject((event.target as HTMLSelectElement).value);

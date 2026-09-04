@@ -1,6 +1,6 @@
 import { computed, shallowRef } from 'vue';
 
-import { ApiError } from '../api/request';
+import { ApiError, getErrorMessage } from '../api/request';
 import {
   buildBatchPayload,
   deleteEntry,
@@ -17,14 +17,18 @@ import type {
   Project,
   ReportActionResponse,
   TimesheetEntry,
+  WeekDay,
+  WorkTypeNode,
+} from '../types/timesheet';
+import type {
+  WeekFillDefaults,
+  WeekFillDraftRow,
+  WeekFillRowError,
   WeekFillSubmitItem,
   WeekFillSubmitResult,
   WeekFillSubmitStep,
   WeekFillSubmitStepName,
-  WeekDay,
-  WorkTypeNode,
-} from '../types/timesheet';
-import type { WeekFillDefaults, WeekFillDraftRow, WeekFillRowError } from '../types/week-fill';
+} from '../types/week-fill';
 import { isReadonlyTimesheetStatus, mapDayStatus } from '../utils/timesheet-status';
 import { calculateRemainingHours } from '../utils/week-fill-hours';
 import {
@@ -34,6 +38,8 @@ import {
   validateRows,
   writeLastUsedDefaults,
 } from '../utils/week-fill-defaults';
+import { flattenWorkTypes } from '../utils/work-types';
+import type { ToastType } from './useToast';
 
 export interface UseWeekFillOptions {
   days: () => WeekDay[];
@@ -42,7 +48,7 @@ export interface UseWeekFillOptions {
   loadWorkTypesByProject: (projectId: string) => Promise<WorkTypeNode[]>;
   getAutoFillConfig: () => AutoFillConfig | null;
   refreshWeekBoard: () => Promise<void>;
-  showToast: (msg: string) => void;
+  showToast: (msg: string, type?: ToastType) => void;
 }
 
 let rowSeq = 0;
@@ -59,12 +65,19 @@ function createRowId(): string {
   return `row_${Date.now()}_${rowSeq}`;
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
+/** 把提交链路异常转成用户可读的失败原因，展示层绝不出现原始 JSON 或技术信息 */
+function formatSubmitFailureMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
-    return error.message;
+    if (error.code === 'TIMEOUT') {
+      return '请求超时，请稍后重试';
+    }
+    if (error.status === undefined && error.code === undefined) {
+      return '网络异常，请检查网络';
+    }
+    return error.message.trim() || fallback;
   }
 
-  return error instanceof Error ? error.message : fallback;
+  return error instanceof Error && error.message.trim() ? error.message : fallback;
 }
 
 function toSubmitStep(
@@ -114,6 +127,13 @@ function createSubmitItem(
 }
 
 function buildSubmitResult(items: WeekFillSubmitItem[]): WeekFillSubmitResult {
+  // 展示层只读 errorMessage：失败但缺少可读原因时，用最后一步的上游 msg 兜底
+  for (const item of items) {
+    if (!item.success && !item.errorMessage) {
+      item.errorMessage = lastStep(item)?.msg || '提交失败，请稍后重试';
+    }
+  }
+
   const failedItem = items.find((item) => !item.success);
   const representativeItem = failedItem ?? items[items.length - 1];
   const representativeStep = representativeItem ? lastStep(representativeItem) : null;
@@ -129,6 +149,21 @@ function buildSubmitResult(items: WeekFillSubmitItem[]): WeekFillSubmitResult {
     data: items.length === 1 ? representativeStep?.data ?? null : null,
     items,
   };
+}
+
+/** 面向用户的提交结果摘要：全部成功 / 部分失败 / 全部失败 三档 */
+function buildSubmitSummary(result: WeekFillSubmitResult): { message: string; type: ToastType } {
+  const total = result.items.length;
+  const successCount = result.items.filter((item) => item.success).length;
+  const failCount = total - successCount;
+
+  if (failCount === 0) {
+    return { message: `提交完成：${total} 条已提交`, type: 'success' };
+  }
+  if (successCount === 0) {
+    return { message: `提交失败：${total} 条未成功`, type: 'error' };
+  }
+  return { message: `提交完成：成功 ${successCount} 条，失败 ${failCount} 条`, type: 'error' };
 }
 
 export function useWeekFill(options: UseWeekFillOptions) {
@@ -301,14 +336,14 @@ export function useWeekFill(options: UseWeekFillOptions) {
     try {
       const result = await deleteEntry(row.sourceId);
       if (!isReportSuccessCode(result.code)) {
-        showToast(`${row.reportDate} ${result.msg || '删除失败。'}`);
+        showToast(`${row.reportDate} ${result.msg || '删除失败。'}`, 'error');
         return;
       }
 
       draftRows.value = draftRows.value.filter((item) => item.rowId !== rowId);
-      showToast(result.msg || '删除成功。');
+      showToast(result.msg || '删除成功。', 'success');
     } catch (error) {
-      showToast(getErrorMessage(error, '删除工时失败。'));
+      showToast(getErrorMessage(error, '删除工时失败。'), 'error');
     } finally {
       deletingRowIds.value = deletingRowIds.value.filter((item) => item !== rowId);
     }
@@ -318,6 +353,23 @@ export function useWeekFill(options: UseWeekFillOptions) {
     draftRows.value = draftRows.value.map((row) =>
       row.rowId === rowId ? { ...row, ...patch } : row,
     );
+  }
+
+  /**
+   * 项目切换联动（spec §7）：按需加载该项目的工时类型列表。
+   * 类型列表由 useProjectCatalog 缓存，重复调用不会重复请求；加载失败仅提示，不抛出。
+   */
+  async function applyProjectChange(nextProjectId: string): Promise<WorkTypeNode[]> {
+    if (!nextProjectId) {
+      return [];
+    }
+
+    try {
+      return await loadWorkTypesByProject(nextProjectId);
+    } catch (error) {
+      showToast(getErrorMessage(error, '获取工时类型失败。'));
+      return [];
+    }
   }
 
   /**
@@ -334,15 +386,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
       itemName: '',
     });
 
-    if (!projectId) {
-      return;
-    }
-
-    try {
-      await loadWorkTypesByProject(projectId);
-    } catch (error) {
-      showToast(getErrorMessage(error, '获取工时类型失败。'));
-    }
+    await applyProjectChange(projectId);
   }
 
   function setRowWorkType(rowId: string, itemId: string): void {
@@ -352,7 +396,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
     }
 
     const workTypes = getWorkTypesForProject(row.projectId);
-    const flat = workTypes.flatMap((node) => (node.children?.length ? node.children : [node]));
+    const flat = flattenWorkTypes(workTypes);
     const target = flat.find((node) => node.id === itemId);
     patchRow(rowId, { itemId, itemName: target?.name ?? '' });
   }
@@ -375,9 +419,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
       ? projects().find((item) => item.id === detail.projectId)
       : undefined;
     const workTypes = detail.projectId ? getWorkTypesForProject(detail.projectId) : [];
-    const workType = workTypes
-      .flatMap((node) => (node.children?.length ? node.children : [node]))
-      .find((node) => node.id === detail.itemId);
+    const workType = flattenWorkTypes(workTypes).find((node) => node.id === detail.itemId);
 
     return buildRow(reportDate, {
       sourceId: detail.id,
@@ -409,7 +451,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
     if (resolved.projectId && resolved.itemId) {
       try {
         const workTypes = await loadWorkTypesByProject(resolved.projectId);
-        const flat = workTypes.flatMap((node) => (node.children?.length ? node.children : [node]));
+        const flat = flattenWorkTypes(workTypes);
         if (!flat.some((node) => node.id === resolved.itemId)) {
           defaults.value = { ...resolved, itemId: '', itemName: '' };
         }
@@ -481,7 +523,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
     try {
       const contents = await generateContent(weekTheme.value.trim(), dates.length);
       if (contents.length < dates.length) {
-        showToast('AI 暂时未生成足够内容，请稍后重试。');
+        showToast('AI 暂时未生成足够内容，请稍后重试。', 'error');
         return;
       }
 
@@ -516,7 +558,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
       draftRows.value = next;
       expandedDates.value = [...new Set([...expandedDates.value, ...dates])];
     } catch (error) {
-      showToast(getErrorMessage(error, '生成工时失败。'));
+      showToast(getErrorMessage(error, '生成工时失败。'), 'error');
     } finally {
       isGenerating.value = false;
     }
@@ -534,13 +576,13 @@ export function useWeekFill(options: UseWeekFillOptions) {
       const contents = await generateContent(weekTheme.value.trim(), 1);
       const content = contents[0];
       if (!content) {
-        showToast('AI 暂时未生成内容，请稍后重试。');
+        showToast('AI 暂时未生成内容，请稍后重试。', 'error');
         return;
       }
 
       patchRow(rowId, { content });
     } catch (error) {
-      showToast(getErrorMessage(error, '生成工时失败。'));
+      showToast(getErrorMessage(error, '生成工时失败。'), 'error');
     } finally {
       isGenerating.value = false;
     }
@@ -557,20 +599,12 @@ export function useWeekFill(options: UseWeekFillOptions) {
       itemName: '',
     };
 
-    if (!projectId) {
-      return;
-    }
-
-    try {
-      await loadWorkTypesByProject(projectId);
-    } catch (error) {
-      showToast(getErrorMessage(error, '获取工时类型失败。'));
-    }
+    await applyProjectChange(projectId);
   }
 
   function setDefaultWorkType(itemId: string): void {
     const workTypes = getWorkTypesForProject(defaults.value.projectId);
-    const flat = workTypes.flatMap((node) => (node.children?.length ? node.children : [node]));
+    const flat = flattenWorkTypes(workTypes);
     const target = flat.find((node) => node.id === itemId);
     defaults.value = { ...defaults.value, itemId, itemName: target?.name ?? '' };
   }
@@ -592,15 +626,15 @@ export function useWeekFill(options: UseWeekFillOptions) {
     try {
       const result = await revokeEntry(detailId);
       if (!isReportSuccessCode(result.code)) {
-        showToast(result.msg || '撤回失败。');
+        showToast(result.msg || '撤回失败。', 'error');
         return;
       }
 
-      showToast(result.msg || '撤回成功。');
+      showToast(result.msg || '撤回成功。', 'success');
       await refreshWeekBoard();
       await initializeWeek();
     } catch (error) {
-      showToast(getErrorMessage(error, '撤回工时失败。'));
+      showToast(getErrorMessage(error, '撤回工时失败。'), 'error');
     } finally {
       revokingDetailIds.value = revokingDetailIds.value.filter((id) => id !== detailId);
     }
@@ -706,6 +740,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
               item.steps.push(toSubmitStep('handle', response));
               item.success = isReportSuccessCode(response.code);
             } catch (error) {
+              item.errorMessage = formatSubmitFailureMessage(error, '提交失败，请稍后重试');
               item.steps.push(toErrorStep('handle', error, '重新提交失败。'));
             }
           }
@@ -715,11 +750,13 @@ export function useWeekFill(options: UseWeekFillOptions) {
             item.steps.push(toSubmitStep('reportBatch', response));
             item.success = isReportSuccessCode(response.code);
           } catch (error) {
+            item.errorMessage = formatSubmitFailureMessage(error, '提交失败，请稍后重试');
             item.steps.push(toErrorStep('reportBatch', error, '批量提交失败。'));
           }
         }
       } catch (error) {
         const stepName: WeekFillSubmitStepName = row.sourceId ? 'handle' : 'reportBatch';
+        item.errorMessage = formatSubmitFailureMessage(error, '提交失败，请稍后重试');
         item.steps.push(toErrorStep(stepName, error, '提交工时失败。'));
       }
 
@@ -728,8 +765,10 @@ export function useWeekFill(options: UseWeekFillOptions) {
       if (item.success) {
         draftRows.value = draftRows.value.filter((draftRow) => draftRow.rowId !== rowId);
         writeLastUsedDefaults({ ...defaults.value, work: weekTheme.value });
+        showToast('提交完成', 'success');
+      } else {
+        showToast(`提交失败：${item.errorMessage ?? '请稍后重试'}`, 'error');
       }
-      showToast(result.msg || '提交完成。');
       await refreshWeekBoard();
       if (item.success && draftRows.value.length === 0) {
         await initializeWeek();
@@ -794,6 +833,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
             successfulRowIds.add(row.rowId);
           }
         } catch (error) {
+          item.errorMessage = formatSubmitFailureMessage(error, '提交失败，请稍后重试');
           item.steps.push(toErrorStep('handle', error, '重新提交失败。'));
         }
       }
@@ -814,7 +854,9 @@ export function useWeekFill(options: UseWeekFillOptions) {
           }
         } catch (error) {
           const step = toErrorStep('reportBatch', error, '批量提交失败。');
+          const message = formatSubmitFailureMessage(error, '提交失败，请稍后重试');
           for (const item of batchItems) {
+            item.errorMessage = message;
             item.steps.push(step);
           }
         }
@@ -827,7 +869,8 @@ export function useWeekFill(options: UseWeekFillOptions) {
       if (allRowsSucceeded) {
         writeLastUsedDefaults({ ...defaults.value, work: weekTheme.value });
       }
-      showToast(result.msg || '提交完成。');
+      const summary = buildSubmitSummary(result);
+      showToast(summary.message, summary.type);
       await wait(SUBMIT_REFRESH_DELAY_MS);
       await refreshWeekBoard();
       if (allRowsSucceeded) {
@@ -835,11 +878,15 @@ export function useWeekFill(options: UseWeekFillOptions) {
       }
       return result;
     } catch (error) {
-      showToast(getErrorMessage(error, '提交工时失败。'));
+      showToast(getErrorMessage(error, '提交工时失败。'), 'error');
       return submitResult.value;
     } finally {
       isSubmitting.value = false;
     }
+  }
+
+  function clearSubmitResult(): void {
+    submitResult.value = null;
   }
 
   return {
@@ -880,5 +927,6 @@ export function useWeekFill(options: UseWeekFillOptions) {
     toggleDate,
     submitRow,
     submitAll,
+    clearSubmitResult,
   };
 }

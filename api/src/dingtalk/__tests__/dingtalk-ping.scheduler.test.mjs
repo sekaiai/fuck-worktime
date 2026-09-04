@@ -68,14 +68,21 @@ function createUser(userId = 'user-1', token = 'old-token') {
   };
 }
 
-function createScheduler({ users, ping, refreshUserToken, updateUserStatus }) {
+function createScheduler({
+  users,
+  ping,
+  getUserInfo = async () => ({ code: 200 }),
+  refreshUserToken = async () => null,
+  hasActiveInteractiveLogin = () => false,
+  updateUserStatusIfTokenMatches = async () => null,
+}) {
   const logs = [];
   const store = {
     getUsersByStatus: async () => users,
-    updateUserStatus,
+    updateUserStatusIfTokenMatches,
   };
-  const timesClient = { ping };
-  const dingtalkService = { refreshUserToken };
+  const timesClient = { ping, getUserInfo };
+  const dingtalkService = { refreshUserToken, hasActiveInteractiveLogin };
   const scheduler = new schedulerModule.DingtalkPingScheduler(store, timesClient, dingtalkService);
 
   scheduler.logger = {
@@ -88,9 +95,6 @@ function createScheduler({ users, ping, refreshUserToken, updateUserStatus }) {
 }
 
 test('心跳成功打印 HTTP 状态和脱敏后的上游响应内容', async () => {
-  const updateUserStatus = async () => {
-    throw new Error('不应更新用户状态');
-  };
   const { scheduler, logs } = createScheduler({
     users: [createUser()],
     ping: async () => ({
@@ -100,7 +104,9 @@ test('心跳成功打印 HTTP 状态和脱敏后的上游响应内容', async ()
     refreshUserToken: async () => {
       throw new Error('不应重登录');
     },
-    updateUserStatus,
+    updateUserStatusIfTokenMatches: async () => {
+      throw new Error('不应更新用户状态');
+    },
   });
 
   await scheduler.pingLoggedInUsers();
@@ -111,92 +117,109 @@ test('心跳成功打印 HTTP 状态和脱敏后的上游响应内容', async ()
   assert.equal(logs.some((message) => message.includes('response-token')), false);
 });
 
-test('心跳失败后只自动重登录一次并重试心跳', async () => {
-  const pingArguments = [];
+test('心跳发送失败只记录日志，不自动登录也不修改用户状态', async () => {
   let refreshCount = 0;
   let updateCount = 0;
   const { scheduler, logs } = createScheduler({
     users: [createUser()],
-    ping: async (authorization) => {
-      pingArguments.push(authorization);
-      if (pingArguments.length === 1) {
-        const error = new Error('心跳请求失败（HTTP 401）');
-        error.statusCode = 401;
-        error.responseData = { code: 401, msg: '登录状态已失效' };
-        throw error;
-      }
-
-      return { statusCode: 200, data: { code: 200, msg: '重试成功', data: null } };
-    },
-    refreshUserToken: async () => {
-      refreshCount += 1;
-      return 'refreshed-token';
-    },
-    updateUserStatus: async () => {
-      updateCount += 1;
-    },
-  });
-
-  await scheduler.pingLoggedInUsers();
-
-  assert.deepEqual(pingArguments, ['Bearer old-token', 'Bearer refreshed-token']);
-  assert.equal(refreshCount, 1);
-  assert.equal(updateCount, 0);
-  assert.equal(logs.some((message) => message.includes('登录状态已失效')), true);
-  assert.equal(logs.some((message) => message.includes('重试成功')), true);
-  assert.equal(logs.some((message) => message.includes('refreshed-token')), false);
-});
-
-test('空 token 也会触发一次自动重登录，重登录失败后标记 expired', async () => {
-  let pingCount = 0;
-  let refreshCount = 0;
-  const updatedStatuses = [];
-  const { scheduler, logs } = createScheduler({
-    users: [createUser('user-empty', '  ')],
     ping: async () => {
-      pingCount += 1;
-      throw new Error('不应使用空 token 发请求');
+      throw new Error('网络连接中断');
     },
     refreshUserToken: async () => {
       refreshCount += 1;
       return null;
     },
-    updateUserStatus: async (userId, status) => {
-      updatedStatuses.push([userId, status]);
+    updateUserStatusIfTokenMatches: async () => {
+      updateCount += 1;
+      return null;
     },
   });
 
   await scheduler.pingLoggedInUsers();
 
-  assert.equal(pingCount, 0);
-  assert.equal(refreshCount, 1);
-  assert.deepEqual(updatedStatuses, [['user-empty', 'expired']]);
-  assert.equal(logs.some((message) => message.includes('本地没有可用 token')), true);
+  assert.equal(refreshCount, 0);
+  assert.equal(updateCount, 0);
+  assert.equal(logs.some((message) => message.includes('心跳发送失败')), true);
 });
 
-test('自动重登录后的心跳重试失败时标记 expired', async () => {
-  let pingCount = 0;
+test('每小时通过 getInfo 校验失败后只执行一次 Cookie 自动登录', async () => {
+  const getInfoArguments = [];
+  let refreshCount = 0;
   let updateCount = 0;
   const { scheduler } = createScheduler({
     users: [createUser()],
-    ping: async () => {
-      pingCount += 1;
-      const error = new Error('上游不可用');
-      error.statusCode = 503;
-      throw error;
+    ping: async () => ({ statusCode: 200, data: null }),
+    getUserInfo: async (authorization) => {
+      getInfoArguments.push(authorization);
+      throw new Error('认证失败');
     },
-    refreshUserToken: async () => 'refreshed-token',
-    updateUserStatus: async (userId, status) => {
-      assert.equal(userId, 'user-1');
-      assert.equal(status, 'expired');
+    refreshUserToken: async () => {
+      refreshCount += 1;
+      return 'new-token';
+    },
+    updateUserStatusIfTokenMatches: async () => {
       updateCount += 1;
+      return null;
     },
   });
 
-  await scheduler.pingLoggedInUsers();
+  await scheduler.validateLoggedInUsers();
 
-  assert.equal(pingCount, 2);
-  assert.equal(updateCount, 1);
+  assert.deepEqual(getInfoArguments, ['Bearer old-token']);
+  assert.equal(refreshCount, 1);
+  assert.equal(updateCount, 0);
+});
+
+test('每小时校验及 Cookie 自动登录均失败后才标记 expired', async () => {
+  const updatedStatuses = [];
+  const { scheduler } = createScheduler({
+    users: [createUser()],
+    ping: async () => ({ statusCode: 200, data: null }),
+    getUserInfo: async () => {
+      throw new Error('认证失败');
+    },
+    refreshUserToken: async () => null,
+    updateUserStatusIfTokenMatches: async (userId, expectedToken, status) => {
+      updatedStatuses.push([userId, expectedToken, status]);
+      return { ...createUser(userId, expectedToken), status };
+    },
+  });
+
+  await scheduler.validateLoggedInUsers();
+
+  assert.deepEqual(updatedStatuses, [['user-1', 'old-token', 'expired']]);
+});
+
+test('后台校验结果过期时不会覆盖新的扫码登录状态', async () => {
+  const { scheduler, logs } = createScheduler({
+    users: [createUser()],
+    ping: async () => ({ statusCode: 200, data: null }),
+    getUserInfo: async () => {
+      throw new Error('认证失败');
+    },
+    refreshUserToken: async () => null,
+    updateUserStatusIfTokenMatches: async () => null,
+  });
+
+  await scheduler.validateLoggedInUsers();
+
+  assert.equal(logs.some((message) => message.includes('忽略过期校验结果')), true);
+});
+
+test('前端扫码登录进行中时跳过每小时登录态校验', async () => {
+  let getInfoCount = 0;
+  const { scheduler } = createScheduler({
+    users: [createUser()],
+    ping: async () => ({ statusCode: 200, data: null }),
+    getUserInfo: async () => {
+      getInfoCount += 1;
+    },
+    hasActiveInteractiveLogin: () => true,
+  });
+
+  await scheduler.validateLoggedInUsers();
+
+  assert.equal(getInfoCount, 0);
 });
 
 test('正在执行心跳时不会启动第二个调度周期', async () => {
@@ -218,7 +241,6 @@ test('正在执行心跳时不会启动第二个调度周期', async () => {
       return { statusCode: 200, data: { code: 200, msg: '操作成功', data: null } };
     },
     refreshUserToken: async () => null,
-    updateUserStatus: async () => {},
   });
 
   const firstRun = scheduler.pingLoggedInUsers();

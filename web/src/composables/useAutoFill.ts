@@ -1,35 +1,14 @@
 import { computed, shallowRef } from 'vue';
 
-import { ApiError } from '../api/request';
+import { getErrorMessage } from '../api/request';
 import { disableAutoFill, getAutoFillConfig, runAutoFillNow, saveAutoFillConfig } from '../api/timesheet-client';
 import type { Project, WorkTypeNode } from '../types/timesheet';
 import type { AutoFillConfig, AutoFillStatus } from '../types/auto-fill';
 import { getTodayKey } from '../utils/date';
 import type { WorkTypeGroup } from '../utils/work-types';
+import type { ToastType } from './useToast';
 
 const DEFAULT_REPORT_TIME = '17:00';
-
-interface ResultDialogState {
-  open: boolean;
-  title: string;
-  message: string;
-}
-
-function createDialogState(): ResultDialogState {
-  return {
-    open: false,
-    title: '',
-    message: '',
-  };
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof ApiError) {
-    return error.message;
-  }
-
-  return error instanceof Error ? error.message : fallback;
-}
 
 export function useAutoFill(options: {
   projects: () => Project[];
@@ -38,7 +17,7 @@ export function useAutoFill(options: {
   loadWorkTypesByProject: (projectId: string) => Promise<WorkTypeNode[]>;
   loadAutoFillConfig: (userId: string) => Promise<AutoFillConfig | null>;
   getUserId: () => string | null;
-  showToast: (msg: string) => void;
+  showToast: (msg: string, type?: ToastType) => void;
 }) {
   const { projects, getWorkTypeGroups, findWorkType, loadWorkTypesByProject, loadAutoFillConfig, getUserId, showToast } = options;
 
@@ -47,7 +26,6 @@ export function useAutoFill(options: {
   const isSaving = shallowRef(false);
   const isDisabling = shallowRef(false);
   const isTriggering = shallowRef(false);
-  const isOpen = shallowRef(false);
   const workTypes = shallowRef<WorkTypeNode[]>([]);
   const projectId = shallowRef('');
   const workTypeGroupId = shallowRef('');
@@ -56,7 +34,6 @@ export function useAutoFill(options: {
   const work = shallowRef('');
   const reportTime = shallowRef(DEFAULT_REPORT_TIME);
   const deadline = shallowRef('');
-  const resultDialog = shallowRef<ResultDialogState>(createDialogState());
 
   const status = computed<AutoFillStatus>(() => {
     if (!config.value?.enabled) {
@@ -141,22 +118,18 @@ export function useAutoFill(options: {
     }
   }
 
-  async function toggleOpen(): Promise<void> {
-    const previousOpen = isOpen.value;
-    isOpen.value = !previousOpen;
-    if (!isOpen.value) {
-      return;
+  async function open(): Promise<boolean> {
+    if (!projectId.value) {
+      return true;
     }
 
     try {
-      if (projectId.value) {
-        workTypes.value = await loadWorkTypesByProject(projectId.value);
-        syncAutoWorkTypeGroup();
-      }
+      workTypes.value = await loadWorkTypesByProject(projectId.value);
+      syncAutoWorkTypeGroup();
+      return true;
     } catch (error) {
-      // 失败时回滚 isOpen，避免 UI 显示空工时类型列表
-      isOpen.value = previousOpen;
-      showToast(getErrorMessage(error, '加载项目或工时类型失败。'));
+      showToast(getErrorMessage(error, '加载项目或工时类型失败。'), 'error');
+      return false;
     }
   }
 
@@ -199,27 +172,27 @@ export function useAutoFill(options: {
   async function saveConfig(): Promise<void> {
     const userId = getUserId();
     if (!userId) {
-      showToast('请先登录后再配置自动填报。');
+      showToast('请先登录后再配置自动填报。', 'error');
       return;
     }
 
     if (!projectId.value || !workTypeGroupId.value || !itemId.value) {
-      showToast('项目、一级工时类型和二级工时类型为必填项。');
+      showToast('项目、一级工时类型和二级工时类型为必填项。', 'error');
       return;
     }
 
     if (!Number.isFinite(hours.value) || hours.value <= 0) {
-      showToast('工时必须大于 0。');
+      showToast('工时必须大于 0。', 'error');
       return;
     }
 
     if (!work.value.trim()) {
-      showToast('工作内容为必填项。');
+      showToast('工作内容为必填项。', 'error');
       return;
     }
 
     if (!selectedProject.value || !selectedWorkTypeGroup.value || !selectedWorkType.value) {
-      showToast('请选择有效的项目和工时类型。');
+      showToast('请选择有效的项目和工时类型。', 'error');
       return;
     }
 
@@ -241,22 +214,16 @@ export function useAutoFill(options: {
         deadline: deadline.value || null,
       });
 
-      resultDialog.value = {
-        open: true,
-        title: result.code === 200 ? '保存成功' : '保存失败',
-        message: result.msg,
-      };
       if (result.code === 200) {
+        showToast(result.msg || '保存成功', 'success');
         const reloadedConfig = await loadAutoFillConfig(userId);
         config.value = reloadedConfig;
         syncFormFromConfig(reloadedConfig);
+      } else {
+        showToast(result.msg || '保存失败', 'error');
       }
     } catch (error) {
-      resultDialog.value = {
-        open: true,
-        title: '保存失败',
-        message: getErrorMessage(error, '保存自动填报失败'),
-      };
+      showToast(getErrorMessage(error, '保存自动填报失败'), 'error');
     } finally {
       isSaving.value = false;
     }
@@ -265,27 +232,23 @@ export function useAutoFill(options: {
   async function runNow(): Promise<void> {
     const userId = getUserId();
     if (!userId) {
-      showToast('请先登录再执行自动填报。');
+      showToast('请先登录再执行自动填报。', 'error');
       return;
     }
 
     isTriggering.value = true;
     try {
       const result = await runAutoFillNow(userId);
-      resultDialog.value = {
-        open: true,
-        title: result.code === 200 ? '执行成功' : '执行失败',
-        message: result.msg,
-      };
-      const reloadedConfig = await loadAutoFillConfig(userId);
-      config.value = reloadedConfig;
-      syncFormFromConfig(reloadedConfig);
+      if (result.code === 200) {
+        showToast(result.msg || '执行成功', 'success');
+        const reloadedConfig = await loadAutoFillConfig(userId);
+        config.value = reloadedConfig;
+        syncFormFromConfig(reloadedConfig);
+      } else {
+        showToast(result.msg || '执行失败', 'error');
+      }
     } catch (error) {
-      resultDialog.value = {
-        open: true,
-        title: '执行失败',
-        message: getErrorMessage(error, '立即执行自动填报失败'),
-      };
+      showToast(getErrorMessage(error, '立即执行自动填报失败'), 'error');
     } finally {
       isTriggering.value = false;
     }
@@ -300,29 +263,19 @@ export function useAutoFill(options: {
     isDisabling.value = true;
     try {
       const result = await disableAutoFill(userId);
-      resultDialog.value = {
-        open: true,
-        title: result.code === 200 ? '禁用成功' : '禁用失败',
-        message: result.msg,
-      };
       if (result.code === 200) {
+        showToast(result.msg || '禁用成功', 'success');
         const reloadedConfig = await loadAutoFillConfig(userId);
         config.value = reloadedConfig;
         syncFormFromConfig(reloadedConfig);
+      } else {
+        showToast(result.msg || '禁用失败', 'error');
       }
     } catch (error) {
-      resultDialog.value = {
-        open: true,
-        title: '禁用失败',
-        message: getErrorMessage(error, '关闭自动填报失败'),
-      };
+      showToast(getErrorMessage(error, '关闭自动填报失败'), 'error');
     } finally {
       isDisabling.value = false;
     }
-  }
-
-  function closeResultDialog(): void {
-    resultDialog.value = { ...resultDialog.value, open: false };
   }
 
   return {
@@ -331,7 +284,6 @@ export function useAutoFill(options: {
     isSaving,
     isDisabling,
     isTriggering,
-    isOpen,
     workTypes,
     projectId,
     workTypeGroupId,
@@ -340,7 +292,6 @@ export function useAutoFill(options: {
     work,
     reportTime,
     deadline,
-    resultDialog,
     status,
     workTypeGroups,
     selectedProject,
@@ -349,7 +300,7 @@ export function useAutoFill(options: {
     availableWorkTypes,
     overviewItems,
     initialize,
-    toggleOpen,
+    open,
     setProject,
     setWorkTypeGroup,
     setItem,
@@ -360,6 +311,5 @@ export function useAutoFill(options: {
     saveConfig,
     runNow,
     disable,
-    closeResultDialog,
   };
 }

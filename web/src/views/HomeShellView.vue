@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
-import { storeToRefs } from 'pinia';
 
-import InlineToast from '../components/common/InlineToast.vue';
 import WeekFillHeader from '../components/workbench/WeekFillHeader.vue';
 import WeekFillSubmitBar from '../components/workbench/WeekFillSubmitBar.vue';
 import WeekFillTable from '../components/workbench/WeekFillTable.vue';
@@ -10,7 +8,6 @@ import WeekFillToolbar from '../components/workbench/WeekFillToolbar.vue';
 import { useHomeStore } from '../stores/home';
 
 const homeStore = useHomeStore();
-const { manualToastMessage } = storeToRefs(homeStore);
 
 onMounted(() => {
   void homeStore.initialize();
@@ -23,7 +20,6 @@ onMounted(() => {
     <WeekFillToolbar />
     <WeekFillTable />
     <WeekFillSubmitBar />
-    <InlineToast v-if="manualToastMessage" :message="manualToastMessage" />
   </main>
 </template>
 

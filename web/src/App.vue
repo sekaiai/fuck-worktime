@@ -3,6 +3,7 @@ import { computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRoute } from 'vue-router';
 
+import AppToast from './components/common/AppToast.vue';
 import { useAuthStore } from './stores/auth';
 
 const route = useRoute();
@@ -46,6 +47,8 @@ watch(
         </div>
       </div>
     </Transition>
+
+    <AppToast />
   </div>
 </template>
 

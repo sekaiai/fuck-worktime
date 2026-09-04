@@ -1,29 +1,44 @@
-import { onBeforeUnmount, shallowRef } from 'vue';
+import { ref } from 'vue';
+import type { Ref } from 'vue';
 
-export function useToast() {
-  const message = shallowRef('');
-  let timer: number | null = null;
+export type ToastType = 'success' | 'error' | 'info';
 
-  function show(nextMessage: string): void {
-    message.value = nextMessage;
-    if (timer !== null) {
-      window.clearTimeout(timer);
-    }
-    timer = window.setTimeout(() => {
-      message.value = '';
-    }, 2600);
+export interface ToastState {
+  id: number;
+  message: string;
+  type: ToastType;
+}
+
+const TOAST_DURATION_MS: Record<ToastType, number> = {
+  success: 2600,
+  error: 5000,
+  info: 2600,
+};
+
+// 模块级单例状态：全局仅一条 toast，新消息覆盖旧消息并重置计时
+const toastState = ref<ToastState | null>(null);
+let toastTimer: number | null = null;
+let toastSeq = 0;
+
+export function showToast(message: string, type: ToastType = 'info'): void {
+  if (!message.trim()) {
+    return;
   }
 
-  // 组件卸载后必须清理 timer，否则可能在卸载后仍触发 ref 赋值
-  onBeforeUnmount(() => {
-    if (timer !== null) {
-      window.clearTimeout(timer);
-      timer = null;
-    }
-  });
+  if (toastTimer !== null) {
+    window.clearTimeout(toastTimer);
+    toastTimer = null;
+  }
 
-  return {
-    message,
-    show,
-  };
+  toastSeq += 1;
+  toastState.value = { id: toastSeq, message, type };
+
+  toastTimer = window.setTimeout(() => {
+    toastState.value = null;
+    toastTimer = null;
+  }, TOAST_DURATION_MS[type]);
+}
+
+export function useToastState(): Readonly<Ref<ToastState | null>> {
+  return toastState;
 }

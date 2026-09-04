@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
 
 import { getQrcode, pollStatus } from '../api/dingtalk-client';
+import { getErrorMessage } from '../api/request';
 import { usePwaDetect } from '../composables/usePwaDetect';
 import { useAuthStore } from '../stores/auth';
 
@@ -204,7 +205,7 @@ async function startPolling(): Promise<void> {
       }
     } catch (error) {
       status.value = 'error';
-      message.value = error instanceof Error ? error.message : '查询登录状态失败。';
+      message.value = getErrorMessage(error, '查询登录状态失败。');
       clearTimer();
     }
   }, POLL_INTERVAL_MS);
@@ -234,7 +235,7 @@ async function loadQrcode(): Promise<void> {
     await startPolling();
   } catch (error) {
     status.value = 'error';
-    message.value = error instanceof Error ? error.message : '获取二维码失败。';
+    message.value = getErrorMessage(error, '获取二维码失败。');
   }
 }
 

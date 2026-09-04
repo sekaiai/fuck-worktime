@@ -4,6 +4,8 @@ import { storeToRefs } from 'pinia';
 
 import { useHomeStore } from '../../stores/home';
 import type { WeekFillDraftRow } from '../../types/week-fill';
+import { buildWorkTypeOptions } from '../../utils/work-types';
+import { isRejectedTimesheetStatus } from '../../utils/timesheet-status';
 
 interface WeekFillRowProps {
   row: WeekFillDraftRow;
@@ -27,16 +29,15 @@ const {
 const isDeleting = computed(() => weekFillDeletingRowIds.value.includes(props.row.rowId));
 const isSubmitting = computed(() => weekFillSubmittingRowIds.value.includes(props.row.rowId));
 const isLocked = computed(() => isDeleting.value || isSubmitting.value || isWeekFillSubmitting.value);
+/** 驳回明细的 statusDesc 是驳回原因，展示时使用更明确的标签 */
+const isRejected = computed(() =>
+  isRejectedTimesheetStatus(props.row.status ?? '', props.row.statusDesc ?? ''),
+);
 
 /** 二级工时类型拍平：一级节点若无子节点则自身可选 */
-const workTypeOptions = computed(() => {
-  const nodes = homeStore.getWorkTypesForProject(props.row.projectId);
-  return nodes.flatMap((node) =>
-    node.children?.length
-      ? node.children.map((child) => ({ id: child.id, name: `${node.name} / ${child.name}` }))
-      : [{ id: node.id, name: node.name }],
-  );
-});
+const workTypeOptions = computed(() =>
+  buildWorkTypeOptions(homeStore.getWorkTypesForProject(props.row.projectId)),
+);
 
 function onProjectChange(event: Event): void {
   void homeStore.setWeekFillRowProject(props.row.rowId, (event.target as HTMLSelectElement).value);
@@ -61,7 +62,9 @@ function onContentInput(event: Event): void {
     <div v-if="row.period || row.status || row.statusDesc" class="wf-row__meta">
       <span v-if="row.period">期间：{{ row.period }}</span>
       <span v-if="row.status">状态：{{ row.status }}</span>
-      <span v-if="row.statusDesc && row.statusDesc !== row.status">状态说明：{{ row.statusDesc }}</span>
+      <span v-if="row.statusDesc && row.statusDesc !== row.status">
+        {{ isRejected ? '驳回原因' : '状态说明' }}：{{ row.statusDesc }}
+      </span>
     </div>
 
     <select
@@ -111,27 +114,29 @@ function onContentInput(event: Event): void {
       @input="onContentInput"
     ></textarea>
 
-    <div v-if="!props.readOnly" class="wf-row__actions">
-      <button
-        type="button"
-        title="AI 重新生成本行"
-        :disabled="isWeekFillGenerating || isLocked"
-        @click="homeStore.regenerateWeekFillRow(row.rowId)"
-      >✨</button>
-      <button type="button" title="复制本行" :disabled="isLocked" @click="homeStore.duplicateWeekFillRow(row.rowId)">
-        复制
-      </button>
-      <button
-        type="button"
-        title="单独提交本行"
-        :disabled="isLocked"
-        @click="void homeStore.submitWeekFillRow(row.rowId)"
-      >
-        {{ isSubmitting ? '提交中…' : '单独提交' }}
-      </button>
-      <button type="button" title="删除本行" :disabled="isLocked" @click="void homeStore.removeWeekFillRow(row.rowId)">
-        {{ isDeleting ? '删除中…' : '删除' }}
-      </button>
+    <!-- 只读行传入 action 插槽（如撤回按钮）时也渲染操作区，使扩展操作与编辑操作同位 -->
+    <div v-if="!props.readOnly || $slots.action" class="wf-row__actions">
+      <template v-if="!props.readOnly">
+        <button
+          type="button"
+          title="AI 重新生成本行"
+          :disabled="isWeekFillGenerating || isLocked"
+          @click="homeStore.regenerateWeekFillRow(row.rowId)"
+        >✨</button>
+      
+        <button
+          type="button"
+          title="单独提交本行"
+          :disabled="isLocked"
+          @click="void homeStore.submitWeekFillRow(row.rowId)"
+        >
+          {{ isSubmitting ? '提交中…' : '单独提交' }}
+        </button>
+        <button type="button" title="删除本行" :disabled="isLocked" @click="void homeStore.removeWeekFillRow(row.rowId)">
+          {{ isDeleting ? '删除中…' : '删除' }}
+        </button>
+      </template>
+      <slot name="action" />
     </div>
 
     <p v-if="errorMessage" class="wf-row__error">{{ errorMessage }}</p>

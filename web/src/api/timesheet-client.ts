@@ -2,7 +2,6 @@ import type { AutoFillConfig } from '../types/auto-fill';
 import type {
   Project,
   ReportBatchRequest,
-  ReportBatchResponse,
   ReportActionResponse,
   ReportFlowButtonsResponse,
   ReportFlowStartResponse,
@@ -12,16 +11,16 @@ import type {
   WorkDetail,
   WorkTypeNode,
 } from '../types/timesheet';
-import { formatWeekRange } from '../utils/date';
-import { ApiError, apiRequest, clearAuthToken, getApiBase, getAuthToken, setAuthToken } from './request';
+import { formatWeekRange, getWeekdayLabel } from '../utils/date';
+import {
+  ApiError,
+  apiRequest,
+  createTimeoutSignal,
+  getAuthToken,
+  unwrapApiData,
+} from './request';
 
 const GZDATA_BASE = 'https://times.gzbdgc.com.cn:8099/prod-api';
-
-/**
- * gzdata 慢响应或网络挂起时，没有超时会无限阻塞 authGate 之后的请求。
- * 默认 15 秒，与 request.ts 保持一致。
- */
-const GZDATA_TIMEOUT_MS = 15_000;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -49,14 +48,6 @@ function toNumberValue(value: unknown, fallback = 0): number {
   }
 
   return fallback;
-}
-
-function unwrapData<T>(value: unknown): T {
-  if (isRecord(value) && 'data' in value) {
-    return value.data as T;
-  }
-
-  return value as T;
 }
 
 function extractMessage(payload: unknown, fallback: string): string {
@@ -127,15 +118,8 @@ async function gzdataRawRequest(
     headers.set('Content-Type', 'application/json');
   }
 
-  // 若调用方未传 signal，则附加默认超时
-  let signal = init?.signal;
-  let cleanup: () => void = () => {};
-  if (!signal) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), GZDATA_TIMEOUT_MS);
-    signal = controller.signal;
-    cleanup = () => clearTimeout(timer);
-  }
+  // 若调用方未传 signal，则附加默认超时（与 request.ts 一致）
+  const { signal, cleanup } = createTimeoutSignal(init);
 
   let response: Response;
   try {
@@ -186,39 +170,23 @@ async function gzdataRawRequest(
 
 async function gzdataRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const payload = await gzdataRawRequest(path, init);
-  return unwrapData<T>(payload);
+  return unwrapApiData<T>(payload);
 }
 
+/**
+ * 后端 JSON 请求：内部复用 apiRequest，获得 authGate / x-gzdata-token / 15s 超时 / 401 处理的一致行为。
+ * 在此基础上保留原有语义：数组原样返回；带 code+data 的信封在业务 code 非 200/0 时抛 ApiError，否则解包 data。
+ */
 async function backendJsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  headers.set('Content-Type', 'application/json');
-
-  const response = await fetch(`${getApiBase()}${path}`, {
-    ...init,
-    headers,
-  });
-
-  const payload = await parseJson<unknown>(response);
-
-  if (response.status === 401) {
-    throw new ApiError('登录已失效，请重新登录', 401, 'TOKEN_EXPIRED');
-  }
-
-  if (!response.ok) {
-    throw new ApiError(extractMessage(payload, `请求失败（${response.status}）`), response.status);
-  }
+  const payload: unknown = await apiRequest<unknown>(path, init);
 
   if (Array.isArray(payload)) {
     return payload as T;
   }
 
   if (isRecord(payload) && 'code' in payload && 'data' in payload) {
-    if (payload.code === 401) {
-      throw new ApiError(extractMessage(payload, '登录已失效，请重新登录'), 401, 'TOKEN_EXPIRED');
-    }
-
     if (typeof payload.code === 'number' && payload.code !== 200 && payload.code !== 0) {
-      throw new ApiError(extractMessage(payload, '请求失败'), response.status);
+      throw new ApiError(extractMessage(payload, '请求失败'));
     }
 
     return payload.data as T;
@@ -248,12 +216,6 @@ function normalizeWorkDetail(detail: unknown): WorkDetail {
     ...(itemId ? { itemId } : {}),
     ...(itemName ? { itemName } : {}),
   };
-}
-
-function getWeekdayLabel(dateKey: string): string {
-  const date = new Date(`${dateKey}T00:00:00`);
-  const labels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-  return labels[date.getDay()] ?? '';
 }
 
 function normalizeWeekDay(day: unknown): WeekDay {
@@ -357,12 +319,6 @@ function unwrapListSource(value: unknown): unknown[] {
   return [];
 }
 
-export { setAuthToken };
-
-export function clearGzdataToken(): void {
-  clearAuthToken();
-}
-
 export async function getWeekBoard(date: string): Promise<WeekBoardResponse> {
   const payload = await gzdataRequest<unknown>(`/working/timing/week-board?date=${encodeURIComponent(date)}`);
   return normalizeWeekBoard(payload);
@@ -398,7 +354,7 @@ export async function generateContent(work: string, days: number): Promise<strin
   return [];
 }
 
-export async function submitBatch(body: ReportBatchRequest): Promise<ReportBatchResponse> {
+export async function submitBatch(body: ReportBatchRequest): Promise<ReportActionResponse> {
   const payload = await gzdataRawRequest(
     '/working/timing/reportBatch',
     {
@@ -500,29 +456,6 @@ export async function handleReportFlow(
   );
 
   return normalizeReportResponse(payload, '提交成功', '重新提交失败');
-}
-
-export async function updateEntry(
-  id: string,
-  entry: TimesheetEntry,
-): Promise<{ code: number; msg: string }> {
-  const response = await apiRequest(`/timesheet/report/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    body: JSON.stringify({
-      reportDate: entry.reportDate,
-      projectId: entry.projectId,
-      projectTitle: entry.projectTitle,
-      projectStatus: entry.projectStatus,
-      itemId: entry.itemId,
-      content: entry.content,
-      hours: entry.hours,
-    }),
-  });
-
-  return {
-    code: response.code,
-    msg: response.msg || (isReportSuccessCode(response.code) ? '修改成功' : '修改失败'),
-  };
 }
 
 export async function deleteEntry(id: string): Promise<ReportActionResponse> {

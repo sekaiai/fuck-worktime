@@ -36,6 +36,8 @@ export class DingtalkService {
   private readonly logger = new Logger(DingtalkService.name);
   private readonly sessions = new Map<string, LoginSession>();
   private readonly refreshPromises = new Map<string, Promise<UserInfoData>>();
+  private readonly tokenRefreshPromises = new Map<string, Promise<string | null>>();
+  private qrcodeInitializations = 0;
   private readonly TIMEOUT_MS = 60000;
   private readonly LOGIN_BUTTON_SELECTORS = [
     '.app-page-curr div.module-confirm-button.base-comp-button.base-comp-button-type-primary:has-text("立即登录")',
@@ -70,6 +72,7 @@ export class DingtalkService {
     let context: BrowserContext | null = null;
     let page: Page | null = null;
     let sessionRegistered = false;
+    this.qrcodeInitializations += 1;
 
     try {
       // ============================================
@@ -239,7 +242,13 @@ export class DingtalkService {
       }
 
       throw error;
+    } finally {
+      this.qrcodeInitializations = Math.max(0, this.qrcodeInitializations - 1);
     }
+  }
+
+  hasActiveInteractiveLogin(): boolean {
+    return this.qrcodeInitializations > 0 || [...this.sessions.values()].some((session) => session.status === 'waiting');
   }
 
   /**
@@ -522,16 +531,24 @@ export class DingtalkService {
   }
 
   private async doRefreshUserInfo(record: DingtalkUserRecord): Promise<UserInfoData> {
-    const refreshingRecord =
-      (await this.dingtalkStore.updateUserStatus(record.userId, 'refreshing')) ?? {
+    const refreshingRecord = await this.dingtalkStore.updateUserStatusIfTokenMatches(
+      record.userId,
+      record.token,
+      'refreshing',
+    );
+    if (!refreshingRecord) {
+      const currentRecord = await this.dingtalkStore.getUser(record.userId);
+      return this.toUserInfo(currentRecord ?? {
         ...record,
-        status: 'refreshing' satisfies DingtalkLoginStatus,
-      };
+        status: 'expired' satisfies DingtalkLoginStatus,
+      });
+    }
 
     const refreshedToken = await this.refreshUserToken(record.userId);
     if (!refreshedToken) {
       const expiredRecord =
-        (await this.dingtalkStore.updateUserStatus(record.userId, 'expired')) ?? {
+        (await this.dingtalkStore.updateUserStatusIfTokenMatches(record.userId, record.token, 'expired')) ??
+        (await this.dingtalkStore.getUser(record.userId)) ?? {
           ...refreshingRecord,
           status: 'expired' satisfies DingtalkLoginStatus,
         };
@@ -554,7 +571,12 @@ export class DingtalkService {
     }
 
     const expiredRecord =
-      (await this.dingtalkStore.updateUserStatus(record.userId, 'expired')) ?? {
+      (await this.dingtalkStore.updateUserStatusIfTokenMatches(
+        record.userId,
+        refreshedRecord.token,
+        'expired',
+      )) ??
+      (await this.dingtalkStore.getUser(record.userId)) ?? {
         ...refreshedRecord,
         status: 'expired' satisfies DingtalkLoginStatus,
       };
@@ -575,6 +597,19 @@ export class DingtalkService {
   }
 
   async refreshUserToken(userId: string): Promise<string | null> {
+    const inFlight = this.tokenRefreshPromises.get(userId);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const refreshPromise = this.doRefreshUserToken(userId).finally(() => {
+      this.tokenRefreshPromises.delete(userId);
+    });
+    this.tokenRefreshPromises.set(userId, refreshPromise);
+    return refreshPromise;
+  }
+
+  private async doRefreshUserToken(userId: string): Promise<string | null> {
     const record = await this.dingtalkStore.getUser(userId);
     if (!record) {
       return null;
@@ -639,7 +674,7 @@ export class DingtalkService {
   private extractUserInfo(response: unknown): { nickname: string; phone: string; department: string } {
     const envelope = this.asRecord(response);
 
-    if (!envelope || envelope.code !== 200) {
+    if (!envelope || ![0, 200].includes(Number(envelope.code))) {
       return { nickname: '', phone: '', department: '' };
     }
 

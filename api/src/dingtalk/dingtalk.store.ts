@@ -135,6 +135,33 @@ export class DingtalkStore {
     });
   }
 
+  /**
+   * 仅当 token 仍与校验开始时一致才更新状态，避免过时的后台校验覆盖刚完成的扫码登录。
+   */
+  async updateUserStatusIfTokenMatches(
+    userId: string,
+    expectedToken: string,
+    status: DingtalkLoginStatus,
+  ): Promise<DingtalkUserRecord | null> {
+    return this.serializeWrite(async () => {
+      const data = await this.safeReadAll();
+      const current = data[userId];
+      if (!current || current.token !== expectedToken) {
+        return null;
+      }
+
+      const nextRecord: DingtalkUserRecord = {
+        ...current,
+        status,
+        updatedAt: new Date().toISOString(),
+      };
+
+      data[userId] = nextRecord;
+      await this.atomicWrite(JSON.stringify(data, null, 2));
+      return nextRecord;
+    });
+  }
+
   async setAutoFill(config: AutoFillConfig): Promise<void> {
     return this.serializeWrite(async () => {
       const data = await this.safeReadAll();

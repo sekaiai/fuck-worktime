@@ -101,8 +101,9 @@ test('/api/dingtalk/user 上游认证失败后进入自动重登录并使用新 
   };
   const store = {
     getUser: async () => ({ ...record, token: currentToken }),
-    updateUserStatus: async (userId, status) => {
+    updateUserStatusIfTokenMatches: async (userId, expectedToken, status) => {
       assert.equal(userId, 'user-2');
+      assert.equal(expectedToken, currentToken);
       statuses.push(status);
       return { ...record, token: currentToken, status };
     },
@@ -150,8 +151,9 @@ test('/api/dingtalk/user 自动重登录失败后返回 expired', async () => {
   };
   const store = {
     getUser: async () => record,
-    updateUserStatus: async (userId, status) => {
+    updateUserStatusIfTokenMatches: async (userId, expectedToken, status) => {
       assert.equal(userId, 'user-3');
+      assert.equal(expectedToken, 'expired-token');
       statuses.push(status);
       return { ...record, status };
     },
@@ -169,4 +171,55 @@ test('/api/dingtalk/user 自动重登录失败后返回 expired', async () => {
   assert.deepEqual(statuses, ['refreshing', 'expired']);
   assert.equal(result.status, 'expired');
   assert.equal(result.token, null);
+});
+
+test('过时的自动恢复结果不会覆盖扫码登录写入的新 token', async () => {
+  const oldRecord = {
+    userId: 'user-race',
+    token: 'old-token',
+    dingtalkCookies: {},
+    updatedAt: '2026-09-03T00:00:00.000Z',
+    status: 'logged_in',
+  };
+  const newRecord = {
+    ...oldRecord,
+    token: 'new-token',
+    status: 'logged_in',
+  };
+  const store = {
+    getUser: async () => newRecord,
+    updateUserStatusIfTokenMatches: async () => null,
+  };
+  const timesClient = {
+    getUserInfo: async () => {
+      throw new Error('旧 token 认证失败');
+    },
+  };
+  const service = new serviceModule.DingtalkService(store, timesClient);
+
+  const result = await service.doRefreshUserInfo(oldRecord);
+
+  assert.equal(result.status, 'logged_in');
+  assert.equal(result.token, 'new-token');
+});
+
+test('同一用户并发刷新 token 时复用同一个登录流程', async () => {
+  let refreshCount = 0;
+  let releaseRefresh;
+  const refreshRelease = new Promise((resolve) => {
+    releaseRefresh = resolve;
+  });
+  const service = new serviceModule.DingtalkService({}, {});
+  service.doRefreshUserToken = async () => {
+    refreshCount += 1;
+    await refreshRelease;
+    return 'new-token';
+  };
+
+  const first = service.refreshUserToken('user-lock');
+  const second = service.refreshUserToken('user-lock');
+  releaseRefresh();
+
+  assert.deepEqual(await Promise.all([first, second]), ['new-token', 'new-token']);
+  assert.equal(refreshCount, 1);
 });

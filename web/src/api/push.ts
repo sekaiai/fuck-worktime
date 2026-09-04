@@ -1,4 +1,4 @@
-import { apiRequest, type ApiEnvelope } from './request';
+import { apiRequest, unwrapApiData, type ApiEnvelope } from './request';
 
 export interface PushSubscriptionPayload {
   userId: string;
@@ -18,18 +18,12 @@ export interface PushTestResult {
   failed: number;
 }
 
-function unwrapApiResponse<T>(response: ApiEnvelope<T> | T): T {
-  return typeof response === 'object' && response !== null && 'data' in response
-    ? response.data
-    : response;
-}
-
 export async function getPushPublicKey(): Promise<string> {
   const response = (await apiRequest<{ publicKey: string }>(
     '/push/public-key',
   )) as ApiEnvelope<{ publicKey: string }> | { publicKey: string };
 
-  return unwrapApiResponse(response).publicKey;
+  return unwrapApiData<{ publicKey: string }>(response).publicKey;
 }
 
 export async function subscribePush(payload: PushSubscriptionPayload): Promise<void> {
@@ -55,5 +49,5 @@ export async function sendPushTest(): Promise<PushTestResult> {
     }),
   })) as ApiEnvelope<PushTestResult> | PushTestResult;
 
-  return unwrapApiResponse(response);
+  return unwrapApiData<PushTestResult>(response);
 }

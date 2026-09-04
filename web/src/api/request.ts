@@ -16,8 +16,16 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE = import.meta.env.PROD ? 'https://fka.logacg.com/api' : 'http://localhost:10002/api';
-// const API_BASE = 'https://w2.logacg.com/api'
+export function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+  return error instanceof Error ? error.message : fallback;
+}
+
+// 使用可选链：Vite dev/build 下 import.meta.env 恒存在，语义与直接取值一致；
+// Node 测试环境（esbuild bundle 不注入 env）下安全回退到 PROD 分支。
+const API_BASE = (import.meta.env.PROD ? 'https://fka.logacg.com/api' : 'http://localhost:10002/api');
 let authToken = '';
 let authGate: Promise<unknown> | null = null;
 
@@ -25,7 +33,7 @@ let authGate: Promise<unknown> | null = null;
  * 默认请求超时 15 秒，避免 gzdata 慢响应或网络挂起导致 authGate 后所有请求无限等待。
  * 调用方可通过 init.signal 自定义，但 fetch 的 signal 一旦由外部传入则不再自动追加超时。
  */
-const DEFAULT_TIMEOUT_MS = 15_000;
+export const DEFAULT_TIMEOUT_MS = 15_000;
 
 export function getApiBase(): string {
   return API_BASE;
@@ -75,18 +83,33 @@ async function parseResponse<T>(response: Response): Promise<T> {
 
 /**
  * 创建带超时的 fetch 信号；若 init 已提供 signal 则原样返回，避免覆盖调用方控制。
+ * timeoutMs 缺省时使用 DEFAULT_TIMEOUT_MS。
  */
-function createTimeoutSignal(init?: RequestInit): { signal: AbortSignal | undefined; cleanup: () => void } {
+export function createTimeoutSignal(
+  init?: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): { signal: AbortSignal | undefined; cleanup: () => void } {
   if (init?.signal) {
     return { signal: init.signal, cleanup: () => {} };
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   return {
     signal: controller.signal,
     cleanup: () => clearTimeout(timer),
   };
+}
+
+/**
+ * 从响应载荷中提取 data 字段；载荷不是带 data 字段的对象时（含 null、数组、原始值）原样返回。
+ */
+export function unwrapApiData<T>(value: unknown): T {
+  if (typeof value === 'object' && value !== null && 'data' in value) {
+    return value.data as T;
+  }
+
+  return value as T;
 }
 
 export async function apiRequest<T>(

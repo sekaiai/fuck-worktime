@@ -3,12 +3,4 @@ export interface UserInfo {
   nickname: string;
   phone: string;
   department?: string;
-  deptName?: string;
-  avatar?: string;
-}
-
-export interface UserAuthState {
-  userId: string | null;
-  userInfo: UserInfo | null;
-  isAuthenticated: boolean;
 }

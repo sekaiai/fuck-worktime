@@ -26,3 +26,17 @@ export function findWorkTypeById(groups: WorkTypeGroup[], workTypeId: string): W
 
   return null;
 }
+
+/** 拍平二级工时类型：一级节点有子级时取其子级，否则取自身 */
+export function flattenWorkTypes(workTypes: WorkTypeNode[]): WorkTypeNode[] {
+  return workTypes.flatMap((node) => (node.children?.length ? node.children : [node]));
+}
+
+/** 下拉用的扁平选项：有子级的节点产出子级（父名 / 子名），无子级产出自身 */
+export function buildWorkTypeOptions(workTypes: WorkTypeNode[]): { id: string; name: string }[] {
+  return workTypes.flatMap((node) =>
+    node.children?.length
+      ? node.children.map((child) => ({ id: child.id, name: `${node.name} / ${child.name}` }))
+      : [{ id: node.id, name: node.name }],
+  );
+}

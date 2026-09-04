@@ -20,6 +20,16 @@ export interface DayStatusResult {
   color: string;
 }
 
+/** 明细是否处于审核失败（驳回）状态 */
+export function isRejectedTimesheetStatus(status: string, statusDesc: string): boolean {
+  return /不通过|未通过|失败|驳回/.test(`${status} ${statusDesc}`);
+}
+
+/** 明细是否处于待审核/待审批状态（可撤回） */
+export function isPendingReviewTimesheetStatus(status: string, statusDesc: string): boolean {
+  return /待审核|待审批/.test(`${status} ${statusDesc}`);
+}
+
 /**
  * 只有审批中/审批完成的明细锁定输入；驳回、撤回等明确可编辑状态优先级更高。
  * dayStatusKey 只作为明细没有状态文案时的兜底，避免聚合状态误锁定驳回明细。
@@ -30,7 +40,7 @@ export function isReadonlyTimesheetStatus(
   dayStatusKey?: DayStatusKey,
 ): boolean {
   const text = `${status} ${statusDesc}`;
-  if (/不通过|未通过|失败|驳回|撤回|未提交/.test(text)) {
+  if (isRejectedTimesheetStatus(status, statusDesc) || /撤回|未提交/.test(text)) {
     return false;
   }
   if (/待审核|待审批|通过|已审核|已完成/.test(text)) {

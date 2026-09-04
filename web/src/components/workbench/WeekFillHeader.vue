@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 
+import AutoFillSettingsDialog from './AutoFillSettingsDialog.vue';
 import { useHomeStore } from '../../stores/home';
 
 const homeStore = useHomeStore();
-const { board, weekTitle, weekRange, isCurrentWeek, isWeekLoading, totalHours, workDays, averageHours, dayForms } =
+const { board, weekTitle, weekRange, isCurrentWeek, isWeekLoading, totalHours, workDays, averageHours, dayForms, autoFillStatus } =
   storeToRefs(homeStore);
+
+const isAutoFillDialogOpen = ref(false);
 
 const summary = computed(() => {
   const pending = dayForms.value.filter((item) => item.status.key === 'none').length;
@@ -14,11 +17,30 @@ const summary = computed(() => {
   const approvalPending = dayForms.value.filter((item) => item.status.key === 'pending').length;
   return { pending, rejected, approvalPending };
 });
+
+const autoFillBadge = computed(() => {
+  if (autoFillStatus.value === 'enabled') {
+    return { className: 'is-enabled', label: '已开启' };
+  }
+
+  if (autoFillStatus.value === 'expired') {
+    return { className: 'is-expired', label: '已过期' };
+  }
+
+  return { className: 'is-disabled', label: '未开启' };
+});
+
+async function onOpenAutoFill(): Promise<void> {
+  const ok = await homeStore.openAutoFillSettings();
+  if (ok) {
+    isAutoFillDialogOpen.value = true;
+  }
+}
 </script>
 
 <template>
   <header class="wf-header">
-    <div class="">
+    <div>
       <div class="wf-header__nav">
       <button
         type="button"
@@ -42,6 +64,16 @@ const summary = computed(() => {
     </div>
 
     <div class="wf-header__info">
+      <div class="wf-header__entries">
+        <button type="button" class="wf-header__autofill" @click="onOpenAutoFill">
+          自动填报
+          <span class="wf-header__autofill-badge" :class="autoFillBadge.className">
+            <span class="wf-header__autofill-dot" aria-hidden="true"></span>
+            {{ autoFillBadge.label }}
+          </span>
+        </button>
+        <RouterLink to="/notifications" class="wf-header__notify">🔔 通知</RouterLink>
+      </div>
       <p v-if="board?.userName || board?.deptName" class="wf-header__meta">
         <template v-if="board?.userName">{{ board.userName }}</template>
         <template v-if="board?.userName && board?.deptName"> · </template>
@@ -55,6 +87,8 @@ const summary = computed(() => {
       </p>
     </div>
   </header>
+
+  <AutoFillSettingsDialog :open="isAutoFillDialogOpen" @close="isAutoFillDialogOpen = false" />
 </template>
 
 <style scoped>
@@ -100,6 +134,83 @@ const summary = computed(() => {
 
 .wf-header__info {
   text-align: right;
+}
+
+.wf-header__autofill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.32rem 0.8rem;
+  background: var(--color-bg-panel);
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.wf-header__autofill:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-primary);
+}
+
+.wf-header__entries {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin: 0 0 0.35rem;
+}
+
+.wf-header__notify {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.32rem 0.8rem;
+  background: var(--color-bg-panel);
+  color: var(--color-text-secondary);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.wf-header__notify:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-primary);
+}
+
+.wf-header__autofill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.74rem;
+}
+
+.wf-header__autofill-badge.is-enabled {
+  color: var(--color-success);
+}
+
+.wf-header__autofill-badge.is-expired {
+  color: var(--color-warning);
+}
+
+.wf-header__autofill-dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: var(--color-text-tertiary);
+}
+
+.wf-header__autofill-badge.is-enabled .wf-header__autofill-dot {
+  background: var(--color-success);
+}
+
+.wf-header__autofill-badge.is-expired .wf-header__autofill-dot {
+  background: var(--color-warning);
 }
 
 .wf-header__range {

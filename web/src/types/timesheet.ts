@@ -74,12 +74,6 @@ export interface ReportBatchRequest {
   workingTimingList: TimesheetEntry[];
 }
 
-export interface ReportBatchResponse {
-  code: number;
-  msg: string;
-  data: unknown | null;
-}
-
 export interface ReportActionResponse {
   code: number;
   msg: string;
@@ -92,28 +86,4 @@ export interface ReportFlowStartResponse extends ReportActionResponse {
 
 export interface ReportFlowButtonsResponse extends ReportActionResponse {
   buttonKey: string | null;
-}
-
-export type WeekFillSubmitMode = 'flow' | 'reportBatch';
-
-export type WeekFillSubmitStepName = 'flow' | 'buttons' | 'handle' | 'reportBatch';
-
-export interface WeekFillSubmitStep {
-  name: WeekFillSubmitStepName;
-  code: number;
-  msg: string;
-  data: unknown | null;
-}
-
-export interface WeekFillSubmitItem {
-  rowId: string;
-  reportDate: string;
-  mode: WeekFillSubmitMode;
-  success: boolean;
-  steps: WeekFillSubmitStep[];
-  errorMessage?: string;
-}
-
-export interface WeekFillSubmitResult extends ReportBatchResponse {
-  items: WeekFillSubmitItem[];
 }

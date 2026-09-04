@@ -76,7 +76,8 @@ function getErrorResponseData(error: unknown): unknown {
 @Injectable()
 export class DingtalkPingScheduler {
   private readonly logger = new Logger(DingtalkPingScheduler.name);
-  private isRunning = false;
+  private isHeartbeatRunning = false;
+  private isValidationRunning = false;
 
   constructor(
     private readonly dingtalkStore: DingtalkStore,
@@ -85,88 +86,125 @@ export class DingtalkPingScheduler {
   ) {}
 
   /**
-   * 每 10 秒对 logged_in 用户做一次心跳，确认 token 仍然有效。
-   * 心跳失败时使用已保存的钉钉 Cookie 自动登录一次，并立即重试心跳。
+   * 每 10 秒发送一次心跳。心跳只用于维持连接，不参与登录态判断。
    */
   @Cron('*/10 * * * * *')
   async pingLoggedInUsers(): Promise<void> {
-    if (this.isRunning) {
+    if (this.isHeartbeatRunning) {
       return;
     }
 
-    this.isRunning = true;
+    this.isHeartbeatRunning = true;
     try {
       const users = await this.dingtalkStore.getUsersByStatus('logged_in');
       if (users.length === 0) {
         return;
       }
 
-      const results = await Promise.allSettled(users.map((user) => this.checkUserHeartbeat(user)));
+      const results = await Promise.allSettled(users.map((user) => this.sendHeartbeat(user)));
 
       const rejectedCount = results.filter((result) => result.status === 'rejected').length;
       if (rejectedCount > 0) {
         this.logger.warn(`用户心跳检查完成，但有 ${rejectedCount} 个请求异常拒绝。`);
       }
     } finally {
-      this.isRunning = false;
+      this.isHeartbeatRunning = false;
     }
   }
 
-  private async checkUserHeartbeat(user: DingtalkUserRecord): Promise<void> {
-    const token = user.token.trim();
-
-    if (token) {
-      try {
-        const result = await this.timesClient.ping(`Bearer ${token}`);
-        this.logPingResponse(user.userId, 'initial', result);
-        return;
-      } catch (error) {
-        this.logPingFailure(user.userId, 'initial', error);
-      }
-    } else {
-      this.logger.warn(`用户心跳失败：userId=${user.userId}，阶段=initial，原因=本地没有可用 token`);
+  /**
+   * 每小时通过 /getInfo 校验一次登录态；失效后仅尝试一次 Cookie 自动登录。
+   */
+  @Cron('0 0 * * * *')
+  async validateLoggedInUsers(): Promise<void> {
+    if (this.isValidationRunning || this.dingtalkService.hasActiveInteractiveLogin()) {
+      return;
     }
 
-    let refreshedToken: string | null = null;
+    this.isValidationRunning = true;
     try {
-      this.logger.log(`用户心跳失败，开始自动重登录：userId=${user.userId}`);
-      refreshedToken = await this.dingtalkService.refreshUserToken(user.userId);
-    } catch (error) {
-      this.logger.warn(`用户自动重登录异常：userId=${user.userId}，错误=${sanitizeForLog(getErrorMessage(error))}`);
+      const users = await this.dingtalkStore.getUsersByStatus('logged_in');
+      const results = await Promise.allSettled(users.map((user) => this.validateUserSession(user)));
+      const rejectedCount = results.filter((result) => result.status === 'rejected').length;
+      if (rejectedCount > 0) {
+        this.logger.warn(`用户登录态校验完成，但有 ${rejectedCount} 个请求异常拒绝。`);
+      }
+    } finally {
+      this.isValidationRunning = false;
     }
+  }
 
-    if (!refreshedToken?.trim()) {
-      await this.markExpired(user.userId, '自动重登录未返回有效 token');
+  private async sendHeartbeat(user: DingtalkUserRecord): Promise<void> {
+    const token = user.token.trim();
+    if (!token) {
+      this.logger.warn(`用户心跳未发送：userId=${user.userId}，原因=本地没有可用 token`);
       return;
     }
 
     try {
-      const result = await this.timesClient.ping(`Bearer ${refreshedToken}`);
-      this.logPingResponse(user.userId, 'retry', result);
+      const result = await this.timesClient.ping(`Bearer ${token}`);
+      this.logPingResponse(user.userId, result);
     } catch (error) {
-      this.logPingFailure(user.userId, 'retry', error);
-      await this.markExpired(user.userId, '自动重登录后心跳重试失败');
+      this.logPingFailure(user.userId, error);
     }
   }
 
-  private logPingResponse(userId: string, attempt: 'initial' | 'retry', result: TimesPingResult): void {
-    this.logger.log(
-      `用户心跳响应：userId=${userId}，阶段=${attempt}，HTTP=${result.statusCode}，响应=${stringifyForLog(result.data)}`,
-    );
-  }
+  private async validateUserSession(user: DingtalkUserRecord): Promise<void> {
+    const token = user.token.trim();
+    if (token) {
+      try {
+        await this.timesClient.getUserInfo(`Bearer ${token}`);
+        this.logger.log(`用户登录态校验成功：userId=${user.userId}`);
+        return;
+      } catch (error) {
+        this.logger.warn(
+          `用户登录态校验失败：userId=${user.userId}，HTTP=${getErrorStatus(error)}，错误=${sanitizeForLog(getErrorMessage(error))}，响应=${stringifyForLog(getErrorResponseData(error))}`,
+        );
+      }
+    } else {
+      this.logger.warn(`用户登录态校验失败：userId=${user.userId}，原因=本地没有可用 token`);
+    }
 
-  private logPingFailure(userId: string, attempt: 'initial' | 'retry', error: unknown): void {
-    this.logger.warn(
-      `用户心跳失败：userId=${userId}，阶段=${attempt}，HTTP=${getErrorStatus(error)}，错误=${sanitizeForLog(getErrorMessage(error))}，响应=${stringifyForLog(getErrorResponseData(error))}`,
-    );
-  }
+    // 前端正在扫码时不启动 Cookie 登录，避免两个 Playwright 登录流程互相竞争。
+    if (this.dingtalkService.hasActiveInteractiveLogin()) {
+      this.logger.log(`跳过自动重登录：userId=${user.userId}，原因=前端扫码登录正在进行`);
+      return;
+    }
 
-  private async markExpired(userId: string, reason: string): Promise<void> {
+    let refreshedToken: string | null = null;
     try {
-      await this.dingtalkStore.updateUserStatus(userId, 'expired');
-      this.logger.warn(`用户登录状态已失效：userId=${userId}，原因=${reason}`);
+      this.logger.log(`用户登录态已失效，开始 Cookie 自动重登录：userId=${user.userId}`);
+      refreshedToken = await this.dingtalkService.refreshUserToken(user.userId);
     } catch (error) {
-      this.logger.error(`更新用户失效状态失败：userId=${userId}，错误=${sanitizeForLog(getErrorMessage(error))}`);
+      this.logger.warn(`用户 Cookie 自动重登录异常：userId=${user.userId}，错误=${sanitizeForLog(getErrorMessage(error))}`);
     }
+
+    if (refreshedToken?.trim()) {
+      this.logger.log(`用户 Cookie 自动重登录成功：userId=${user.userId}`);
+      return;
+    }
+
+    const expiredRecord = await this.dingtalkStore.updateUserStatusIfTokenMatches(
+      user.userId,
+      user.token,
+      'expired',
+    );
+    if (expiredRecord) {
+      this.logger.warn(`用户登录状态已失效：userId=${user.userId}，原因=Cookie 自动重登录失败`);
+    } else {
+      this.logger.log(`忽略过期校验结果：userId=${user.userId}，原因=用户 token 已被新的登录流程更新`);
+    }
+  }
+
+  private logPingResponse(userId: string, result: TimesPingResult): void {
+    this.logger.log(
+      `用户心跳响应：userId=${userId}，HTTP=${result.statusCode}，响应=${stringifyForLog(result.data)}`,
+    );
+  }
+
+  private logPingFailure(userId: string, error: unknown): void {
+    this.logger.warn(
+      `用户心跳发送失败：userId=${userId}，HTTP=${getErrorStatus(error)}，错误=${sanitizeForLog(getErrorMessage(error))}，响应=${stringifyForLog(getErrorResponseData(error))}`,
+    );
   }
 }

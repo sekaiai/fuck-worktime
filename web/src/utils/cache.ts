@@ -45,9 +45,6 @@ export function getSessionCache<T>(key: string): T | null {
   }
 }
 
-export const getCache = getSessionCache;
-export const setCache = setSessionCache;
-
 export function removeSessionCache(key: string): void {
   sessionStorage.removeItem(CACHE_PREFIX + key);
 }
@@ -63,8 +60,6 @@ export function clearSessionCache(): void {
 
   keysToRemove.forEach((key) => sessionStorage.removeItem(key));
 }
-
-export const clearAllCache = clearSessionCache;
 
 export function getLocalStorage(key: string): string | null {
   return localStorage.getItem(CACHE_PREFIX + key);

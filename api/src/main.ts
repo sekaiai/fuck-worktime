@@ -9,13 +9,9 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
-  const corsOrigin = process.env.CORS_ORIGIN ?? 'http://localhost:10001';
-  const isDevelopment = process.env.NODE_ENV !== 'production';
 
-  app.enableCors({
-    origin: isDevelopment ? ['http://localhost:10001', corsOrigin] : corsOrigin,
-    credentials: true,
-  });
+  // 全部开放：反射任意来源，允许携带凭据
+  app.enableCors({ origin: true, credentials: true });
 
   app.setGlobalPrefix('api');
   app.useGlobalPipes(

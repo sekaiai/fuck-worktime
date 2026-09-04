@@ -65,12 +65,6 @@ export class TimesClient {
         },
       });
 
-      const responseRecord = this.asRecord(response.data);
-      if (typeof responseRecord?.code === 'number' && ![0, 200].includes(responseRecord.code)) {
-        const message = this.getResponseMessage(responseRecord) ?? `心跳业务失败（code=${responseRecord.code}）`;
-        throw new TimesClientError(message, response.status, response.data);
-      }
-
       return {
         statusCode: response.status,
         data: response.data,

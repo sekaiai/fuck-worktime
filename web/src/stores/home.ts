@@ -4,7 +4,7 @@ import { useWeekBoard } from '../composables/useWeekBoard';
 import { useProjectCatalog } from '../composables/useProjectCatalog';
 import { useAutoFill } from '../composables/useAutoFill';
 import { useWeekFill } from '../composables/useWeekFill';
-import { useToast } from '../composables/useToast';
+import { showToast } from '../composables/useToast';
 import { getAutoFillConfig } from '../api/timesheet-client';
 
 export const useHomeStore = defineStore('home', () => {
@@ -13,8 +13,6 @@ export const useHomeStore = defineStore('home', () => {
   // Create the composables
   const weekBoard = useWeekBoard();
   const projectCatalog = useProjectCatalog();
-  const manualToast = useToast();
-  const autoToast = useToast();
 
   // Auto fill composable
   const autoFill = useAutoFill({
@@ -24,7 +22,7 @@ export const useHomeStore = defineStore('home', () => {
     loadWorkTypesByProject: projectCatalog.loadWorkTypesByProject,
     loadAutoFillConfig: getAutoFillConfig,
     getUserId: () => authStore.userId,
-    showToast: autoToast.show,
+    showToast,
   });
 
   const weekFill = useWeekFill({
@@ -36,7 +34,7 @@ export const useHomeStore = defineStore('home', () => {
     refreshWeekBoard: async () => {
       await weekBoard.loadWeek();
     },
-    showToast: manualToast.show,
+    showToast,
   });
 
   // Initialize function
@@ -147,19 +145,14 @@ export const useHomeStore = defineStore('home', () => {
     submitWeekFillRow: weekFill.submitRow,
     toggleWeekFillDate: weekFill.toggleDate,
     submitWeekFill: weekFill.submitAll,
+    clearWeekFillSubmitResult: weekFill.clearSubmitResult,
     switchWeekAndReset,
-
-    // Manual fill
-    manualToastMessage: manualToast.message,
 
     // Auto fill
     autoFillConfig: autoFill.config,
     autoFillStatus: autoFill.status,
     isAutoFillLoading: autoFill.isLoading,
-    isSaving: autoFill.isSaving,
-    isDisabling: autoFill.isDisabling,
-    isTriggering: autoFill.isTriggering,
-    autoIsOpen: autoFill.isOpen,
+    loadAutoFill: autoFill.initialize,
     autoWorkTypes: autoFill.workTypes,
     autoProjectId: autoFill.projectId,
     autoWorkTypeGroupId: autoFill.workTypeGroupId,
@@ -168,16 +161,13 @@ export const useHomeStore = defineStore('home', () => {
     autoWork: autoFill.work,
     autoReportTime: autoFill.reportTime,
     autoDeadline: autoFill.deadline,
-    autoToastMessage: autoToast.message,
-    autoResultDialog: autoFill.resultDialog,
     autoWorkTypeGroups: autoFill.workTypeGroups,
-    autoSelectedProject: autoFill.selectedProject,
-    autoSelectedWorkTypeGroup: autoFill.selectedWorkTypeGroup,
-    autoSelectedWorkType: autoFill.selectedWorkType,
     autoAvailableWorkTypes: autoFill.availableWorkTypes,
     autoOverviewItems: autoFill.overviewItems,
-    loadAutoFill: autoFill.initialize,
-    toggleAutoFillOpen: autoFill.toggleOpen,
+    isAutoFillSaving: autoFill.isSaving,
+    isAutoFillTriggering: autoFill.isTriggering,
+    isAutoFillDisabling: autoFill.isDisabling,
+    openAutoFillSettings: autoFill.open,
     setAutoProject: autoFill.setProject,
     setAutoWorkTypeGroup: autoFill.setWorkTypeGroup,
     setAutoItem: autoFill.setItem,
@@ -185,11 +175,9 @@ export const useHomeStore = defineStore('home', () => {
     setAutoWork: autoFill.setWork,
     setAutoReportTime: autoFill.setReportTime,
     setAutoDeadline: autoFill.setDeadline,
-    saveCurrentAutoFillConfig: autoFill.saveConfig,
-    runAutoFillConfigNow: autoFill.runNow,
-    disableCurrentAutoFillConfig: autoFill.disable,
-    closeAutoResultDialog: autoFill.closeResultDialog,
-    notifyVisible,
+    saveAutoFillConfig: autoFill.saveConfig,
+    runAutoFillNow: autoFill.runNow,
+    disableAutoFill: autoFill.disable,
 
     // Common
     initialize,

@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import WeekFillRow from './WeekFillRow.vue';
+import ConfirmDialog from '../common/ConfirmDialog.vue';
 import { useHomeStore } from '../../stores/home';
+import { formatShortDateKey } from '../../utils/date';
 import type { WeekDay, WorkDetail } from '../../types/timesheet';
 import type { WeekFillDraftRow } from '../../types/week-fill';
-import { isReadonlyTimesheetStatus, type DayStatusResult } from '../../utils/timesheet-status';
+import { isReadonlyTimesheetStatus, isPendingReviewTimesheetStatus, type DayStatusResult } from '../../utils/timesheet-status';
 
 const props = defineProps<{
   day: WeekDay;
@@ -16,6 +18,8 @@ const props = defineProps<{
 
 const homeStore = useHomeStore();
 const { rowsByDate, rowErrors, expandedDates, weekFillRevokingDetailIds } = storeToRefs(homeStore);
+
+const revokeConfirmTarget = ref<WorkDetail | null>(null);
 
 const allRows = computed(() => rowsByDate.value[props.day.date] ?? []);
 const rows = computed(() =>
@@ -52,11 +56,6 @@ const isCompactDay = computed(
 const errorOf = computed(() => (rowId: string): string => {
   return rowErrors.value.find((error) => error.rowId === rowId)?.message ?? '';
 });
-
-/** 审核失败时展示驳回原因，取第一条非空 statusDesc */
-const rejectReason = computed(
-  () => props.day.details.find((detail) => detail.statusDesc)?.statusDesc ?? '',
-);
 
 const newDraftHours = computed(() =>
   rows.value
@@ -97,26 +96,30 @@ function toDetailRow(detail: WorkDetail, index: number): WeekFillDraftRow {
   };
 }
 
+/**
+ * 明细级判断：不依赖天聚合状态。
+ * 修复 bug：一天多条明细时撤回一条后，天聚合状态可能不再是“待审核”，
+ * 导致其余待审核明细的撤回按钮消失。
+ */
 function canRevoke(detail: WorkDetail): boolean {
-  const detailStatus = `${detail.status} ${detail.statusDesc}`;
-  return props.status.key === 'pending' && Boolean(detail.id) && /待审核|待审批/.test(detailStatus);
+  return Boolean(detail.id) && isPendingReviewTimesheetStatus(detail.status, detail.statusDesc);
 }
 
-function onRevoke(detail: WorkDetail): void {
-  const confirmed = typeof window === 'undefined' ||
-    window.confirm(`确认撤回 ${props.day.date} 的 ${detail.hours} 小时填报吗？`);
-  if (!confirmed) {
+function onConfirmRevoke(): void {
+  const target = revokeConfirmTarget.value;
+  if (!target) {
     return;
   }
 
-  void homeStore.revokeWeekFillDetail(detail.id);
+  revokeConfirmTarget.value = null;
+  void homeStore.revokeWeekFillDetail(target.id);
 }
 </script>
 
 <template>
   <!-- 没有任何明细的周末/未来日仍保持紧凑展示 -->
   <div v-if="isCompactDay" class="wf-day wf-day--muted">
-    <span class="wf-day__title">{{ day.dayOfWeek }} {{ day.date.slice(5) }}</span>
+    <span class="wf-day__title">{{ day.dayOfWeek }} {{ formatShortDateKey(day.date) }}</span>
     <span class="wf-day__tag">{{ day.displayStatus || day.displayText || day.status || (form === 'rest' ? '休息日' : '未到') }}</span>
   </div>
 
@@ -124,7 +127,7 @@ function onRevoke(detail: WorkDetail): void {
   <div v-else class="wf-day">
     <button type="button" class="wf-day__head" @click="homeStore.toggleWeekFillDate(day.date)">
       <span class="wf-day__caret">{{ isExpanded ? '▾' : '▸' }}</span>
-      <span class="wf-day__title">{{ day.dayOfWeek }} {{ day.date.slice(5) }}</span>
+      <span class="wf-day__title">{{ day.dayOfWeek }} {{ formatShortDateKey(day.date) }}</span>
       <span class="wf-day__hours">{{ dayHours }}h</span>
       <span class="wf-day__status" :style="{ color: status.color }">
         {{ day.displayStatus || day.displayText || day.status || status.label }}
@@ -132,10 +135,6 @@ function onRevoke(detail: WorkDetail): void {
     </button>
 
     <div v-if="isExpanded" class="wf-day__body">
-      <p v-if="status.key === 'rejected' && rejectReason" class="wf-day__reject">
-        驳回原因：{{ rejectReason }}
-      </p>
-
       <div
         v-for="detailRow in displayedDetailRows"
         :key="detailRow.row.rowId"
@@ -145,16 +144,19 @@ function onRevoke(detail: WorkDetail): void {
           :row="detailRow.row"
           :error-message="''"
           :read-only="detailRow.readOnly"
-        />
-        <button
-          v-if="canRevoke(detailRow.detail)"
-          type="button"
-          class="wf-day__revoke"
-          :disabled="weekFillRevokingDetailIds.length > 0"
-          @click.stop="onRevoke(detailRow.detail)"
         >
-          {{ isRevoking(detailRow.detail.id) ? '撤回中…' : '撤回' }}
-        </button>
+          <!-- 撤回与复制/单独提交/删除同位：渲染在 wf-row__actions 操作区 -->
+          <template v-if="canRevoke(detailRow.detail)" #action>
+            <button
+              type="button"
+              class="wf-day__revoke"
+              :disabled="weekFillRevokingDetailIds.length > 0"
+              @click.stop="revokeConfirmTarget = detailRow.detail"
+            >
+              {{ isRevoking(detailRow.detail.id) ? '撤回中…' : '撤回' }}
+            </button>
+          </template>
+        </WeekFillRow>
       </div>
 
       <WeekFillRow
@@ -178,6 +180,16 @@ function onRevoke(detail: WorkDetail): void {
       </button>
     </div>
   </div>
+
+  <ConfirmDialog
+    :open="Boolean(revokeConfirmTarget)"
+    title="撤回填报"
+    :message="`确认撤回 ${day.date} 的 ${revokeConfirmTarget?.hours ?? 0} 小时填报吗？`"
+    confirm-text="确认撤回"
+    danger
+    @confirm="onConfirmRevoke"
+    @cancel="revokeConfirmTarget = null"
+  />
 </template>
 
 <style scoped>
@@ -249,15 +261,6 @@ function onRevoke(detail: WorkDetail): void {
   gap: 0.25rem;
 }
 
-.wf-day__reject {
-  margin: 0;
-  padding: 0.45rem 0.6rem;
-  border-radius: 10px;
-  background: color-mix(in srgb, #dc4c42 8%, white);
-  color: #dc4c42;
-  font-size: 0.8rem;
-}
-
 .wf-day__detail {
   margin: 0;
   font-size: 0.83rem;
@@ -265,14 +268,15 @@ function onRevoke(detail: WorkDetail): void {
   line-height: 1.6;
 }
 
+/* 撤回按钮经插槽渲染进 wf-row__actions；scoped 样式不穿透插槽，需自带完整样式并与其他操作按钮同尺寸 */
 .wf-day__revoke {
   border: 1px solid color-mix(in srgb, #dc4c42 45%, var(--color-border));
-  border-radius: 8px;
-  padding: 0.15rem 0.45rem;
-  background: transparent;
+  border-radius: 10px;
+  padding: 0.4rem 0.5rem;
+  background: var(--color-bg-panel);
   color: #dc4c42;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   cursor: pointer;
 }
 

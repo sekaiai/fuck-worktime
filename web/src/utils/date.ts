@@ -35,3 +35,14 @@ export function formatWeekRange(days: string[]): string {
   const sorted = [...days].sort();
   return `${formatDisplayDate(sorted[0])} - ${formatDisplayDate(sorted[sorted.length - 1])}`;
 }
+
+/** yyyy-MM-dd → MM-DD，用于紧凑的行内展示 */
+export function formatShortDateKey(dateKey: string): string {
+  return dateKey.slice(5);
+}
+
+export function getWeekdayLabel(dateKey: string): string {
+  const date = new Date(`${dateKey}T00:00:00`);
+  const labels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  return labels[date.getDay()] ?? '';
+}

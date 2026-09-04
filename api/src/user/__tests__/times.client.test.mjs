@@ -80,3 +80,13 @@ test('getUserInfo 接受业务成功码 200 和 0', async () => {
     assert.deepEqual(await client.getUserInfo('Bearer test-token'), responseData);
   }
 });
+
+test('ping 不使用响应内容判断登录状态', async () => {
+  const responseData = { code: 401, msg: '该接口响应不代表登录状态' };
+  const client = createClient({ status: 200, data: responseData });
+
+  assert.deepEqual(await client.ping('Bearer test-token'), {
+    statusCode: 200,
+    data: responseData,
+  });
+});

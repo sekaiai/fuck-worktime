@@ -1,6 +1,7 @@
 import { computed, onMounted, shallowRef } from 'vue';
 
 import { getPushPublicKey, sendPushTest, subscribePush, unsubscribePush } from '../api/push';
+import { getErrorMessage } from '../api/request';
 
 function base64ToUint8Array(value: string) {
   const padded = `${value}${'='.repeat((4 - (value.length % 4)) % 4)}`;
@@ -90,7 +91,7 @@ export function usePushSubscriptionCenter(userId: string | null) {
       });
       statusMessage.value = '订阅成功，后续可接收自动填报通知。';
     } catch (error) {
-      statusMessage.value = error instanceof Error ? error.message : '订阅通知失败。';
+      statusMessage.value = getErrorMessage(error, '订阅通知失败。');
     } finally {
       isLoading.value = false;
     }
@@ -124,7 +125,7 @@ export function usePushSubscriptionCenter(userId: string | null) {
         ? '已取消通知订阅。'
         : '订阅已在服务端取消，浏览器端可能仍保留状态。';
     } catch (error) {
-      statusMessage.value = error instanceof Error ? error.message : '取消订阅失败。';
+      statusMessage.value = getErrorMessage(error, '取消订阅失败。');
     } finally {
       isLoading.value = false;
     }
@@ -141,7 +142,7 @@ export function usePushSubscriptionCenter(userId: string | null) {
       const result = await sendPushTest();
       statusMessage.value = result.message;
     } catch (error) {
-      statusMessage.value = error instanceof Error ? error.message : '发送测试通知失败。';
+      statusMessage.value = getErrorMessage(error, '发送测试通知失败。');
     } finally {
       isLoading.value = false;
     }
@@ -157,7 +158,7 @@ export function usePushSubscriptionCenter(userId: string | null) {
       const registration = await getRegistration();
       currentSubscription.value = await registration.pushManager.getSubscription();
     } catch (error) {
-      statusMessage.value = error instanceof Error ? error.message : '初始化通知订阅失败。';
+      statusMessage.value = getErrorMessage(error, '初始化通知订阅失败。');
     }
   });
 

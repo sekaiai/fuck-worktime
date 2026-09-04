@@ -32,7 +32,6 @@ Create `/home/fuck-working/api/.env` from `docker/api.env.example`.
 Required runtime keys:
 
 - `PORT`
-- `CORS_ORIGIN`
 - `VAPID_SUBJECT`
 - `VAPID_PUBLIC_KEY`
 - `VAPID_PRIVATE_KEY`

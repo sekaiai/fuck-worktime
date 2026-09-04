@@ -25,7 +25,6 @@ pnpm dev:web
 后端需要配置以下环境变量：
 
 - `PORT`
-- `CORS_ORIGIN`
 - `VAPID_SUBJECT`
 - `VAPID_PUBLIC_KEY`
 - `VAPID_PRIVATE_KEY`
@@ -37,9 +36,6 @@ pnpm dev:web
 - `DEEPSEEK_API_KEY`
 - `DEEPSEEK_MODEL`
 
-前端可配置：
-
-- `VITE_API_BASE_URL`
 
 ## 目录
 
