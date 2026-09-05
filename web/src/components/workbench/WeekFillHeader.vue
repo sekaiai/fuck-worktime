@@ -2,9 +2,11 @@
 import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 
+import { useAuthStore } from '../../stores/auth';
 import { useHomeStore } from '../../stores/home';
 
 const homeStore = useHomeStore();
+const authStore = useAuthStore();
 const {
   board,
   weekRange,
@@ -100,6 +102,20 @@ const autoFillBadge = computed(() => {
           <span class="wfh-divider" aria-hidden="true"></span>
           <p class="wfh-meta">{{ userMeta }}</p>
         </template>
+
+        <button
+          type="button"
+          class="wfh-logout"
+          title="退出登录"
+          @click="authStore.logout()"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M16 17l5-5-5-5" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M21 12H9" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          退出
+        </button>
       </div>
     </div>
   </header>
@@ -247,6 +263,32 @@ const autoFillBadge = computed(() => {
 }
 
 .wfh-notify svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.wfh-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.34rem 0.85rem;
+  background: var(--color-bg-panel);
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.wfh-logout:hover {
+  border-color: color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  color: var(--color-danger);
+}
+
+.wfh-logout svg {
   width: 0.95rem;
   height: 0.95rem;
 }
