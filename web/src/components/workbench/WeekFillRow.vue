@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import { useHomeStore } from '../../stores/home';
@@ -39,6 +39,36 @@ const workTypeOptions = computed(() =>
   buildWorkTypeOptions(homeStore.getWorkTypesForProject(props.row.projectId)),
 );
 
+/**
+ * 只读行名称解析（三级兜底，保证不空白）：
+ * 后端名称字段 → 项目目录/工时类型树反查 → 原始 ID。
+ * 工时类型反查依赖 workTypeMap[projectId]，只读行通常未加载，见下方按需补载。
+ */
+const resolvedProjectName = computed(() => {
+  const { projectId, projectTitle } = props.row;
+  return projectTitle || projects.value.find((project) => project.id === projectId)?.title || projectId;
+});
+
+const resolvedItemName = computed(() => {
+  const { itemId, itemName } = props.row;
+  return itemName || workTypeOptions.value.find((option) => option.id === itemId)?.name || itemId;
+});
+
+watch(
+  () => [props.readOnly, props.row.projectId] as const,
+  ([readOnly, projectId]) => {
+    if (!readOnly || !projectId) {
+      return;
+    }
+
+    // 项目树未加载时补载；session 缓存保证多行同项目只请求一次
+    if (homeStore.getWorkTypesForProject(projectId).length === 0) {
+      void homeStore.loadWorkTypesByProject(projectId);
+    }
+  },
+  { immediate: true },
+);
+
 function onProjectChange(event: Event): void {
   void homeStore.setWeekFillRowProject(props.row.rowId, (event.target as HTMLSelectElement).value);
 }
@@ -67,10 +97,17 @@ function onContentInput(event: Event): void {
       </span>
     </div>
 
+    <!-- 只读行四个字段统一为同款浅底文本块；编辑行保持输入控件 -->
+    <span
+      v-if="props.readOnly"
+      class="wf-row__text"
+      :title="resolvedProjectName"
+    >{{ resolvedProjectName }}</span>
     <select
+      v-else
       class="wf-row__select"
       :value="row.projectId"
-      :disabled="props.readOnly || isLocked"
+      :disabled="isLocked"
       @change="onProjectChange"
     >
       <option value="">选择项目</option>
@@ -79,10 +116,16 @@ function onContentInput(event: Event): void {
       </option>
     </select>
 
+    <span
+      v-if="props.readOnly"
+      class="wf-row__text"
+      :title="resolvedItemName"
+    >{{ resolvedItemName }}</span>
     <select
+      v-else
       class="wf-row__select"
       :value="row.itemId"
-      :disabled="props.readOnly || !row.projectId || isLocked"
+      :disabled="!row.projectId || isLocked"
       @change="onWorkTypeChange"
     >
       <option value="">选择工时类型</option>
@@ -91,25 +134,27 @@ function onContentInput(event: Event): void {
       </option>
     </select>
 
+    <span v-if="props.readOnly" class="wf-row__text">{{ row.hours }}h</span>
     <input
+      v-else
       class="wf-row__hours"
       type="number"
       min="0.5"
       step="0.5"
-      :max="props.readOnly ? undefined : homeStore.getWeekFillMaxHoursForRow(props.row.rowId)"
+      :max="homeStore.getWeekFillMaxHoursForRow(props.row.rowId)"
       :value="row.hours"
-      :readonly="props.readOnly"
       :disabled="isLocked"
       @input="onHoursInput"
     />
 
+    <span v-if="props.readOnly" class="wf-row__text wf-row__text--content">{{ row.content }}</span>
     <textarea
+      v-else
       class="wf-row__content"
       rows="1"
       maxlength="200"
       placeholder="工作内容"
       :value="row.content"
-      :readonly="props.readOnly"
       :disabled="isLocked"
       @input="onContentInput"
     ></textarea>
@@ -179,6 +224,28 @@ function onContentInput(event: Event): void {
   font-size: 0.85rem;
   font-family: inherit;
   color: var(--color-text-primary);
+}
+
+/* 只读行的名称文本：与 select 同尺寸占位，保证网格对齐 */
+.wf-row__text {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  /* 极浅底色仅作只读示意，不干扰阅读 */
+  background: color-mix(in srgb, var(--color-bg-soft) 40%, white);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* 只读工作内容：保留原文换行 */
+.wf-row__text--content {
+  display: block;
+  white-space: pre-wrap;
 }
 
 .wf-row__content {

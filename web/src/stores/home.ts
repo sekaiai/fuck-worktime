@@ -8,8 +8,9 @@ import { useWeekFill } from '../composables/useWeekFill';
 import { useMonthCalendar } from '../composables/useMonthCalendar';
 import { showToast } from '../composables/useToast';
 import { getAutoFillConfig, getTimingList } from '../api/timesheet-client';
-import { getWeekStart } from '../utils/date';
+import { getWeekStart, shiftDateKeyByDays } from '../utils/date';
 import type { AutoFillConfig } from '../types/auto-fill';
+import type { TimingRecord } from '../types/timesheet';
 
 export const useHomeStore = defineStore('home', () => {
   const authStore = useAuthStore();
@@ -71,8 +72,68 @@ export const useHomeStore = defineStore('home', () => {
       : statusLabel;
   });
 
+  /**
+   * week-board 的明细只有 id/hours/content/status，不带项目与工时类型字段；
+   * 用 timing/list（日历数据源）按明细 id 建立映射，补齐 projectId/projectTitle/itemId。
+   */
+  const timingDetailMap = shallowRef(new Map<string, TimingRecord>());
+
+  function mergeTimingRecords(records: TimingRecord[]): void {
+    if (records.length === 0) {
+      return;
+    }
+
+    const next = new Map(timingDetailMap.value);
+    for (const record of records) {
+      next.set(record.id, record);
+    }
+    timingDetailMap.value = next;
+  }
+
+  /** 拉取当前查看周（周一 ~ 周日）的填报记录，失败不阻塞主流程（只读行退回 ID 兜底） */
+  async function syncTimingForWeek(): Promise<void> {
+    const start = weekBoard.currentDate.value;
+    const end = shiftDateKeyByDays(start, 6);
+    try {
+      mergeTimingRecords(await getTimingList(start, end));
+    } catch {
+      // 静默失败：明细行最多退化为显示原始 ID
+    }
+  }
+
+  /** 补齐后的 days：明细按 id 从 timingDetailMap 合入缺失字段 */
+  const enrichedDays = computed(() => {
+    const map = timingDetailMap.value;
+    if (map.size === 0) {
+      return weekBoard.days.value;
+    }
+
+    return weekBoard.days.value.map((day) => {
+      if (day.details.length === 0) {
+        return day;
+      }
+
+      return {
+        ...day,
+        details: day.details.map((detail) => {
+          const record = map.get(detail.id);
+          if (!record) {
+            return detail;
+          }
+
+          return {
+            ...detail,
+            projectId: detail.projectId ?? record.projectId,
+            projectTitle: detail.projectTitle ?? record.projectTitle,
+            itemId: detail.itemId ?? record.itemId,
+          };
+        }),
+      };
+    });
+  });
+
   const weekFill = useWeekFill({
-    days: () => weekBoard.days.value,
+    days: () => enrichedDays.value,
     projects: () => projectCatalog.projects.value,
     getWorkTypesForProject: projectCatalog.getWorkTypesForProject,
     loadWorkTypesByProject: projectCatalog.loadWorkTypesByProject,
@@ -96,6 +157,9 @@ export const useHomeStore = defineStore('home', () => {
       projectCatalog.loadProjectsByUser(authStore.userId),
     ]);
 
+    // 明细补齐映射必须在 initializeWeek 之前就绪，否则已填报行拿不到项目/类型
+    await syncTimingForWeek();
+
     // 必须在三者都完成后再初始化：依赖 days、projects 与 autoFill.config
     await weekFill.initializeWeek();
     // 日历是填报主流程的辅助视图，失败不阻塞首屏，故不 await
@@ -105,6 +169,7 @@ export const useHomeStore = defineStore('home', () => {
   async function refreshWeekBoard(): Promise<void> {
     const ok = await weekBoard.loadWeek();
     if (ok) {
+      await syncTimingForWeek();
       await weekFill.initializeWeek();
       void monthCalendar.load();
     }
@@ -115,6 +180,7 @@ export const useHomeStore = defineStore('home', () => {
 
   async function switchWeekAndReset(direction: 'previous' | 'current' | 'next'): Promise<void> {
     await weekBoard.switchWeek(direction);
+    await syncTimingForWeek();
     await weekFill.initializeWeek(false);
     await monthCalendar.revealDate(weekBoard.currentDate.value);
   }
@@ -127,6 +193,7 @@ export const useHomeStore = defineStore('home', () => {
     const targetWeek = getWeekStart(date);
     if (targetWeek !== weekBoard.currentDate.value) {
       await weekBoard.loadWeek(targetWeek);
+      await syncTimingForWeek();
       await weekFill.initializeWeek(false);
       await monthCalendar.revealDate(targetWeek);
     } else {
@@ -163,7 +230,7 @@ export const useHomeStore = defineStore('home', () => {
     isWeekLoading: weekBoard.isWeekLoading,
     errorMessage: weekBoard.errorMessage,
     errorCode: weekBoard.errorCode,
-    days: weekBoard.days,
+    days: enrichedDays,
     fillableDays: weekBoard.fillableDays,
     totalHours: weekBoard.totalHours,
     workDays: weekBoard.workDays,
