@@ -123,6 +123,9 @@ const autoFillBadge = computed(() => {
 
 <style scoped>
 .wfh-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   flex-shrink: 0;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-panel-blur);
