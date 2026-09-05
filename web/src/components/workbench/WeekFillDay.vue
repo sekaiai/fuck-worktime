@@ -148,7 +148,9 @@ function onConfirmRevoke(): void {
     <button type="button" class="wf-day__head" @click="homeStore.toggleWeekFillDate(day.date)">
       <span class="wf-day__caret">{{ isExpanded ? '▾' : '▸' }}</span>
       <span class="wf-day__title">{{ day.dayOfWeek }} {{ formatShortDateKey(day.date) }}</span>
-      <span class="wf-day__hours">{{ dayHours }}h</span>
+      <span class="wf-day__hours">
+        <!-- {{ dayHours }}h -->
+      </span>
       <span class="wf-day__status" :style="{ color: status.color }">
         {{ day.displayStatus || day.displayText || day.status || status.label }}
       </span>
