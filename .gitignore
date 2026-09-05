@@ -5,6 +5,7 @@ coverage/
 .idea/
 .vscode/
 *.log
+*.tsbuildinfo
 
 api/.env
 web/.env
