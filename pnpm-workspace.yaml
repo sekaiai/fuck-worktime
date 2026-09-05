@@ -1,6 +1,6 @@
 packages:
-  - api
-  - web
+  - apps/api
+  - apps/web
 
 ignoredBuiltDependencies:
   - '@nestjs/core'

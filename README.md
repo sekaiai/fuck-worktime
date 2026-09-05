@@ -1,13 +1,13 @@
 # 云上工时
 
-项目已初始化为两个独立目录：
+pnpm workspace 单仓库，两个应用统一放在 `apps/` 下：
 
-- `api`: NestJS 后端
-- `web`: Vue 3 + Vite + PWA 前端
+- `apps/api`: NestJS 后端
+- `apps/web`: Vue 3 + Vite + PWA 前端
 
 ## 启动
 
-先分别安装依赖：
+先安装依赖：
 
 ```bash
 pnpm install
@@ -16,33 +16,30 @@ pnpm install
 开发模式：
 
 ```bash
-pnpm dev:api
-pnpm dev:web
+pnpm dev      # 后端（apps/api）
+pnpm dev:web  # 前端（apps/web）
 ```
 
-## Web Push 配置
+构建：
 
-后端需要配置以下环境变量：
+```bash
+pnpm build:api
+pnpm build:web
+```
 
-- `PORT`
-- `VAPID_SUBJECT`
-- `VAPID_PUBLIC_KEY`
-- `VAPID_PRIVATE_KEY`
+## 运行时配置
 
-## AI 配置
-
-后端需要配置以下环境变量：
-
-- `DEEPSEEK_API_KEY`
-- `DEEPSEEK_MODEL`
-
+- 环境变量仅 `PORT`（见 `apps/api/.env.example`）
+- 钉钉凭据、推送订阅、LLM 密钥等存放在 `apps/api/data/user-config.json`
 
 ## 目录
 
 ```text
 .
-├─ api
-└─ web
+├─ apps
+│  ├─ api
+│  └─ web
+└─ docker
 ```
 
 前端部署:

@@ -6,37 +6,34 @@ Upload only the following content to the server:
 
 ```text
 /home/fuck-working/
-  api/
-    dist/
-    node_modules/
-    data/
-    package.json
-    .env
-  web/
-    dist/
+  apps/
+    api/
+      dist/
+      node_modules/
+      data/
+      package.json
+      .env
+    web/
+      dist/
   docker/
     docker-compose.yaml
     .env
-    api.env.example
     openresty/
       conf.d/
         my.conf
 ```
 
-Do not upload `api/src`, `web/src`, workspace root source files, or lockfiles when deploying this runtime layout.
+Do not upload `apps/api/src`, `apps/web/src`, workspace root source files, or lockfiles when deploying this runtime layout.
 
 ## Backend Runtime Env
 
-Create `/home/fuck-working/api/.env` from `docker/api.env.example`.
+Create `/home/fuck-working/apps/api/.env` from `apps/api/.env.example`.
 
 Required runtime keys:
 
 - `PORT`
-- `VAPID_SUBJECT`
-- `VAPID_PUBLIC_KEY`
-- `VAPID_PRIVATE_KEY`
-- `DEEPSEEK_API_KEY`
-- `DEEPSEEK_MODEL`
+
+Note: DingTalk credentials, push subscriptions, and LLM keys are stored in `apps/api/data/user-config.json` and are not injected via environment variables.
 
 ## Start
 
