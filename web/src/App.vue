@@ -56,7 +56,9 @@ watch(
 .app-shell {
   position: relative;
   min-height: 100dvh;
+  /* clip 与 hidden 同样裁切光斑装饰，但不会创建滚动容器，避免破坏子元素 position: sticky */
   overflow: hidden;
+  overflow: clip;
   padding-bottom: var(--safe-bottom);
 }
 
