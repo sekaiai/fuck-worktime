@@ -6,6 +6,7 @@ import type {
   ReportFlowButtonsResponse,
   ReportFlowStartResponse,
   TimesheetEntry,
+  TimingRecord,
   WeekBoardResponse,
   WeekDay,
   WorkDetail,
@@ -299,6 +300,71 @@ function normalizeWorkType(node: unknown, parentId: string | null = null): WorkT
         }
       : undefined,
   };
+}
+
+/**
+ * 上游 /working/timing/list 用数字状态码表示审批状态。
+ * 这里翻译成中文状态文案，再交给 mapDayStatus 复用全应用统一的状态判定与配色。
+ * 取值已与 /working/timing/week-board 的同 id 明细逐条对齐验证。
+ */
+const TIMING_STATUS_LABELS: Record<number, string> = {
+  100: '审批通过',
+  10: '待审批',
+  5: '审批不通过',
+};
+
+function normalizeTimingRecord(value: unknown): TimingRecord | null {
+  const record = isRecord(value) ? value : null;
+  if (!record) {
+    return null;
+  }
+
+  const reportDate = toStringValue(record.reportDate ?? record.date);
+  if (!reportDate) {
+    return null;
+  }
+
+  const status = toNumberValue(record.status, -1);
+
+  return {
+    id: toStringValue(record.id ?? record.reportId ?? record.timingId),
+    reportDate,
+    hours: toNumberValue(record.hours ?? record.workHours),
+    content: toStringValue(record.content ?? record.workContent ?? ''),
+    projectId: toStringValue(record.projectId ?? record.proId ?? ''),
+    projectTitle: toStringValue(record.projectTitle ?? record.projectName ?? ''),
+    itemId: toStringValue(record.itemId ?? record.workTypeId ?? ''),
+    status,
+    finishStatus: toNumberValue(record.finishStattus ?? record.finishStatus, -1),
+    reviewStatus: toNumberValue(record.reviewStatus, -1),
+  };
+}
+
+/** 状态码 → 中文状态文案；未知码统一按未提交处理，避免误判为已通过 */
+export function getTimingStatusLabel(status: number): string {
+  return TIMING_STATUS_LABELS[status] ?? '未提交';
+}
+
+/**
+ * 月历视图数据源：拉取 [startTime, endTime] 区间的填报记录。
+ * 与 week-board 同域，复用 gzdataRequest 的鉴权、超时与错误语义。
+ */
+export async function getTimingList(
+  startTime: string,
+  endTime: string,
+  pageSize = 50,
+): Promise<TimingRecord[]> {
+  const query = new URLSearchParams({
+    pageNum: '1',
+    pageSize: String(pageSize),
+    reportStartTime: startTime,
+    reportEndTime: endTime,
+  });
+  const payload = await gzdataRequest<unknown>(`/working/timing/list?${query.toString()}`);
+
+  return unwrapListSource(payload)
+    .map(normalizeTimingRecord)
+    .filter((item): item is TimingRecord => item !== null);
 }
 
 function unwrapListSource(value: unknown): unknown[] {

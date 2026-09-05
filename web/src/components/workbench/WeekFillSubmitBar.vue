@@ -98,10 +98,11 @@ const resultSummary = computed(() => {
   gap: 1rem;
   flex-wrap: wrap;
   padding: 0.75rem 1.1rem;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--color-bg-panel-blur);
   backdrop-filter: blur(12px);
   border: 1px solid var(--color-border);
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
 }
 
 .wf-submit__stat {
@@ -113,14 +114,14 @@ const resultSummary = computed(() => {
 
 .wf-submit__error {
   margin: 0;
-  color: #dc4c42;
+  color: var(--color-danger);
   font-size: 0.8rem;
 }
 
 .wf-submit__btn {
   margin-left: auto;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 0.6rem 1.4rem;
   background: var(--color-primary);
   color: #fff;
@@ -128,6 +129,10 @@ const resultSummary = computed(() => {
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
+}
+
+.wf-submit__btn:hover:not(:disabled) {
+  background: var(--color-primary-strong);
 }
 
 .wf-submit__btn:disabled {
@@ -155,11 +160,11 @@ const resultSummary = computed(() => {
 }
 
 .wf-submit__summary.is-success {
-  color: #2f9e63;
+  color: var(--color-success);
 }
 
 .wf-submit__summary.is-error {
-  color: #dc4c42;
+  color: var(--color-danger);
 }
 
 .wf-submit__close {
@@ -183,7 +188,7 @@ const resultSummary = computed(() => {
   gap: 0.25rem;
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
 }
 
 .wf-submit__item-title {
@@ -193,6 +198,6 @@ const resultSummary = computed(() => {
 
 .wf-submit__item-error {
   margin: 0;
-  color: #dc4c42;
+  color: var(--color-danger);
 }
 </style>

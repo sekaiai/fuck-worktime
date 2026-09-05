@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import WeekFillRow from './WeekFillRow.vue';
@@ -17,9 +17,29 @@ const props = defineProps<{
 }>();
 
 const homeStore = useHomeStore();
-const { rowsByDate, rowErrors, expandedDates, weekFillRevokingDetailIds } = storeToRefs(homeStore);
+const { rowsByDate, rowErrors, expandedDates, weekFillRevokingDetailIds, focusTarget } =
+  storeToRefs(homeStore);
 
 const revokeConfirmTarget = ref<WorkDetail | null>(null);
+const dayEl = ref<HTMLElement | null>(null);
+const isFlash = ref(false);
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
+// 日历点击定位：store 写入 focusTarget 后滚动到对应日块并短暂高亮
+watch(focusTarget, (target) => {
+  if (!target || target.date !== props.day.date) {
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    dayEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  isFlash.value = true;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => {
+    isFlash.value = false;
+  }, 1200);
+});
 
 const allRows = computed(() => rowsByDate.value[props.day.date] ?? []);
 const rows = computed(() =>
@@ -118,13 +138,13 @@ function onConfirmRevoke(): void {
 
 <template>
   <!-- 没有任何明细的周末/未来日仍保持紧凑展示 -->
-  <div v-if="isCompactDay" class="wf-day wf-day--muted">
+  <div v-if="isCompactDay" ref="dayEl" class="wf-day wf-day--muted">
     <span class="wf-day__title">{{ day.dayOfWeek }} {{ formatShortDateKey(day.date) }}</span>
     <span class="wf-day__tag">{{ day.displayStatus || day.displayText || day.status || (form === 'rest' ? '休息日' : '未到') }}</span>
   </div>
 
   <!-- 有明细的日期统一展示原始明细；只读与可编辑由明细状态决定 -->
-  <div v-else class="wf-day">
+  <div v-else ref="dayEl" class="wf-day" :class="{ 'is-flash': isFlash }">
     <button type="button" class="wf-day__head" @click="homeStore.toggleWeekFillDate(day.date)">
       <span class="wf-day__caret">{{ isExpanded ? '▾' : '▸' }}</span>
       <span class="wf-day__title">{{ day.dayOfWeek }} {{ formatShortDateKey(day.date) }}</span>
@@ -198,6 +218,12 @@ function onConfirmRevoke(): void {
   gap: 0.5rem;
   padding: 0.6rem 0.75rem;
   border-bottom: 1px solid var(--color-border);
+  transition: background-color 400ms ease;
+}
+
+/* 日历点击定位后的短暂高亮 */
+.wf-day.is-flash {
+  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
 }
 
 .wf-day--muted {
@@ -270,11 +296,11 @@ function onConfirmRevoke(): void {
 
 /* 撤回按钮经插槽渲染进 wf-row__actions；scoped 样式不穿透插槽，需自带完整样式并与其他操作按钮同尺寸 */
 .wf-day__revoke {
-  border: 1px solid color-mix(in srgb, #dc4c42 45%, var(--color-border));
-  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 45%, var(--color-border));
+  border-radius: var(--radius-sm);
   padding: 0.4rem 0.5rem;
   background: var(--color-bg-panel);
-  color: #dc4c42;
+  color: var(--color-danger);
   font: inherit;
   font-size: 0.78rem;
   cursor: pointer;
@@ -288,7 +314,7 @@ function onConfirmRevoke(): void {
 .wf-day__add {
   justify-self: start;
   border: 1px dashed var(--color-border-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 0.4rem 0.8rem;
   background: transparent;
   color: var(--color-primary);

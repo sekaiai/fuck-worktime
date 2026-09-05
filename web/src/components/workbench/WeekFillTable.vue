@@ -55,9 +55,10 @@ function onRetry(): void {
 
 <style scoped>
 .wf-table {
-  background: var(--color-bg-panel);
+  background: var(--color-bg-panel-blur);
   border: 1px solid var(--color-border);
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
   overflow: hidden;
 }
 

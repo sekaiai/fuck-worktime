@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import ConfirmDialog from '../common/ConfirmDialog.vue';
 import { useHomeStore } from '../../stores/home';
-import type { AutoFillConfig } from '../../types/auto-fill';
 
 defineProps<{
   open: boolean;
@@ -19,6 +18,7 @@ const {
   projects,
   autoFillConfig,
   autoFillStatus,
+  autoFillExecutionText,
   autoProjectId,
   autoWorkTypeGroupId,
   autoItemId,
@@ -35,33 +35,6 @@ const {
 } = storeToRefs(homeStore);
 
 const isDisableConfirmOpen = ref(false);
-
-const LAST_EXECUTION_STATUS_LABELS: Record<NonNullable<AutoFillConfig['lastExecutionStatus']>, string> = {
-  success: '成功',
-  failed: '失败',
-  skipped: '跳过',
-  expired: '过期',
-};
-
-function formatDateTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-const lastExecutionText = computed(() => {
-  const config = autoFillConfig.value;
-  if (!config?.lastExecutionStatus) {
-    return '';
-  }
-
-  const statusLabel = LAST_EXECUTION_STATUS_LABELS[config.lastExecutionStatus];
-  return config.lastExecutedAt ? `${statusLabel}（${formatDateTime(config.lastExecutedAt)}）` : statusLabel;
-});
 
 function onClose(): void {
   emit('close');
@@ -139,11 +112,13 @@ function onCancelDisable(): void {
                 <dd>{{ item.value }}</dd>
               </div>
             </dl>
-            <p v-if="lastExecutionText" class="afd-overview__exec">最近执行：{{ lastExecutionText }}</p>
+            <p v-if="autoFillExecutionText" class="afd-overview__exec">
+              最近执行：{{ autoFillExecutionText }}
+            </p>
           </section>
 
           <form class="afd-form" @submit.prevent>
-            <label class="field">
+            <label class="afd-field">
               <span>项目</span>
               <select :value="autoProjectId" @change="onProjectChange">
                 <option value="">选择项目</option>
@@ -153,7 +128,7 @@ function onCancelDisable(): void {
               </select>
             </label>
 
-            <label class="field">
+            <label class="afd-field">
               <span>一级工时类型</span>
               <select :value="autoWorkTypeGroupId" @change="onWorkTypeGroupChange">
                 <option value="">选择一级工时类型</option>
@@ -163,7 +138,7 @@ function onCancelDisable(): void {
               </select>
             </label>
 
-            <label class="field">
+            <label class="afd-field">
               <span>二级工时类型</span>
               <select :value="autoItemId" :disabled="!autoWorkTypeGroupId" @change="onItemChange">
                 <option value="">选择二级工时类型</option>
@@ -173,12 +148,12 @@ function onCancelDisable(): void {
               </select>
             </label>
 
-            <label class="field">
+            <label class="afd-field">
               <span>每日工时</span>
               <input type="number" min="0.5" step="0.5" :value="autoHours" @input="onHoursInput" />
             </label>
 
-            <label class="field">
+            <label class="afd-field afd-field--full">
               <span>工作内容</span>
               <textarea
                 rows="3"
@@ -188,12 +163,12 @@ function onCancelDisable(): void {
               ></textarea>
             </label>
 
-            <label class="field">
+            <label class="afd-field">
               <span>填报时间</span>
               <input type="time" :value="autoReportTime" @input="onReportTimeInput" />
             </label>
 
-            <div class="field">
+            <div class="afd-field">
               <span>截止日期</span>
               <div class="afd-deadline">
                 <input type="date" :value="autoDeadline" @input="onDeadlineInput" />
@@ -352,7 +327,56 @@ function onCancelDisable(): void {
 
 .afd-form {
   display: grid;
-  gap: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem 0.85rem;
+}
+
+.afd-field {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.afd-field--full {
+  grid-column: 1 / -1;
+}
+
+.afd-field > span {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.afd-field select,
+.afd-field input,
+.afd-field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.6rem;
+  background: var(--color-bg-panel);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 0.82rem;
+}
+
+.afd-field select:focus,
+.afd-field input:focus,
+.afd-field textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.afd-field textarea {
+  resize: vertical;
+  line-height: 1.55;
+}
+
+@media (max-width: 640px) {
+  .afd-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .afd-deadline {
@@ -367,18 +391,20 @@ function onCancelDisable(): void {
 }
 
 .afd-clear {
-  flex-shrink: 0;
-  border: 0;
-  padding: 0.35rem 0.4rem;
-  background: transparent;
-  color: var(--color-text-tertiary);
+  flex: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.42rem 0.65rem;
+  background: var(--color-bg-panel);
+  color: var(--color-text-secondary);
+  font-family: inherit;
   font-size: 0.78rem;
-  text-decoration: underline;
   cursor: pointer;
 }
 
 .afd-clear:hover {
-  color: var(--color-danger);
+  border-color: var(--color-border-strong);
+  color: var(--color-primary);
 }
 
 .afd-actions {

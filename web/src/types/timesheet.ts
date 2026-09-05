@@ -80,6 +80,21 @@ export interface ReportActionResponse {
   data: unknown | null;
 }
 
+/** GET /working/timing/list 返回的原始记录，用于月历视图的日期状态着色 */
+export interface TimingRecord {
+  id: string;
+  reportDate: string;
+  hours: number;
+  content: string;
+  projectId: string;
+  projectTitle: string;
+  itemId: string;
+  /** 上游状态码：100 审批通过 / 10 待审批 / 5 审批不通过 */
+  status: number;
+  finishStatus: number;
+  reviewStatus: number;
+}
+
 export interface ReportFlowStartResponse extends ReportActionResponse {
   taskId: string | null;
 }

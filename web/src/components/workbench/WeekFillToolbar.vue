@@ -38,13 +38,14 @@ function onGenerate(): void {
 <template>
   <section class="wf-toolbar">
     <div class="wf-toolbar__defaults">
-      <span class="wf-toolbar__label">默认值</span>
+      <span class="wf-toolbar__label">项目</span>
       <select :value="weekFillDefaults.projectId" @change="onProjectChange">
         <option value="">选择项目</option>
         <option v-for="project in projects" :key="project.id" :value="project.id">
           {{ project.title }}
         </option>
       </select>
+      <span class="wf-toolbar__label">类型</span>
       <select
         :value="weekFillDefaults.itemId"
         :disabled="!weekFillDefaults.projectId"
@@ -55,11 +56,12 @@ function onGenerate(): void {
           {{ option.name }}
         </option>
       </select>
+      <span class="wf-toolbar__label">工时</span>
       <input type="number" min="0.5" step="0.5" :value="weekFillDefaults.hours" @input="onHoursInput" />
     </div>
 
     <div class="wf-toolbar__theme">
-      <span class="wf-toolbar__label">本周主题</span>
+      <span class="wf-toolbar__label">工作内容</span>
       <input
         type="text"
         placeholder="例如：完成工作台重构与联调"
@@ -84,9 +86,10 @@ function onGenerate(): void {
   display: grid;
   gap: 0.7rem;
   padding: 0.9rem 1.1rem;
-  background: var(--color-bg-panel);
+  background: var(--color-bg-panel-blur);
   border: 1px solid var(--color-border);
-  border-radius: 18px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
 }
 
 .wf-toolbar__defaults,
@@ -108,8 +111,8 @@ function onGenerate(): void {
 .wf-toolbar input {
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: #fff;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-panel);
   font-family: inherit;
   font-size: 0.85rem;
   color: var(--color-text-primary);
@@ -123,7 +126,7 @@ function onGenerate(): void {
 .wf-toolbar__generate {
   justify-self: end;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 0.55rem 1.1rem;
   background: var(--color-primary);
   color: #fff;
@@ -131,6 +134,10 @@ function onGenerate(): void {
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
+}
+
+.wf-toolbar__generate:hover:not(:disabled) {
+  background: var(--color-primary-strong);
 }
 
 .wf-toolbar__generate:disabled {

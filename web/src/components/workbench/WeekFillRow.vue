@@ -151,7 +151,7 @@ function onContentInput(event: Event): void {
   align-items: start;
   padding: 0.5rem;
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--color-bg-panel);
 }
 
@@ -165,7 +165,7 @@ function onContentInput(event: Event): void {
 }
 
 .wf-row--error {
-  border-color: #dc4c42;
+  border-color: var(--color-danger);
 }
 
 .wf-row__select,
@@ -174,8 +174,8 @@ function onContentInput(event: Event): void {
   min-width: 0;
   padding: 0.45rem 0.55rem;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: #fff;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-panel);
   font-size: 0.85rem;
   font-family: inherit;
   color: var(--color-text-primary);
@@ -194,7 +194,7 @@ function onContentInput(event: Event): void {
 
 .wf-row__actions button {
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 0.4rem 0.5rem;
   background: var(--color-bg-panel);
   color: var(--color-text-secondary);
@@ -210,7 +210,7 @@ function onContentInput(event: Event): void {
 .wf-row__error {
   grid-column: 1 / -1;
   margin: 0;
-  color: #dc4c42;
+  color: var(--color-danger);
   font-size: 0.75rem;
 }
 

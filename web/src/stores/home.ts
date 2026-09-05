@@ -1,11 +1,15 @@
-import { defineStore, storeToRefs } from 'pinia';
+import { defineStore } from 'pinia';
+import { computed, ref, shallowRef } from 'vue';
 import { useAuthStore } from './auth';
 import { useWeekBoard } from '../composables/useWeekBoard';
 import { useProjectCatalog } from '../composables/useProjectCatalog';
 import { useAutoFill } from '../composables/useAutoFill';
 import { useWeekFill } from '../composables/useWeekFill';
+import { useMonthCalendar } from '../composables/useMonthCalendar';
 import { showToast } from '../composables/useToast';
-import { getAutoFillConfig } from '../api/timesheet-client';
+import { getAutoFillConfig, getTimingList } from '../api/timesheet-client';
+import { getWeekStart } from '../utils/date';
+import type { AutoFillConfig } from '../types/auto-fill';
 
 export const useHomeStore = defineStore('home', () => {
   const authStore = useAuthStore();
@@ -13,6 +17,15 @@ export const useHomeStore = defineStore('home', () => {
   // Create the composables
   const weekBoard = useWeekBoard();
   const projectCatalog = useProjectCatalog();
+  const monthCalendar = useMonthCalendar({
+    fetchRange: (start, end) => getTimingList(start, end),
+  });
+
+  /** 自动填报弹窗由布局层统一渲染一份，顶栏与左栏共用该开关 */
+  const isAutoFillDialogOpen = ref(false);
+  /** 日历点击后需要滚动定位的日期；token 递增保证连点同一天也能触发 */
+  const focusTarget = shallowRef<{ date: string; token: number } | null>(null);
+  let focusToken = 0;
 
   // Auto fill composable
   const autoFill = useAutoFill({
@@ -23,6 +36,39 @@ export const useHomeStore = defineStore('home', () => {
     loadAutoFillConfig: getAutoFillConfig,
     getUserId: () => authStore.userId,
     showToast,
+  });
+
+  const LAST_EXECUTION_STATUS_LABELS: Record<
+    NonNullable<AutoFillConfig['lastExecutionStatus']>,
+    string
+  > = {
+    success: '成功',
+    failed: '失败',
+    skipped: '跳过',
+    expired: '过期',
+  };
+
+  function formatDateTime(iso: string): string {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) {
+      return iso;
+    }
+
+    const pad = (value: number): string => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  /** 最近执行结果文案：左栏常驻卡与设置弹窗共用同一份格式化逻辑 */
+  const autoFillExecutionText = computed(() => {
+    const config = autoFill.config.value;
+    if (!config?.lastExecutionStatus) {
+      return '';
+    }
+
+    const statusLabel = LAST_EXECUTION_STATUS_LABELS[config.lastExecutionStatus];
+    return config.lastExecutedAt
+      ? `${statusLabel}（${formatDateTime(config.lastExecutedAt)}）`
+      : statusLabel;
   });
 
   const weekFill = useWeekFill({
@@ -52,12 +98,15 @@ export const useHomeStore = defineStore('home', () => {
 
     // 必须在三者都完成后再初始化：依赖 days、projects 与 autoFill.config
     await weekFill.initializeWeek();
+    // 日历是填报主流程的辅助视图，失败不阻塞首屏，故不 await
+    void monthCalendar.load();
   }
 
   async function refreshWeekBoard(): Promise<void> {
     const ok = await weekBoard.loadWeek();
     if (ok) {
       await weekFill.initializeWeek();
+      void monthCalendar.load();
     }
     if (!ok && weekBoard.errorCode.value === 'TOKEN_EXPIRED') {
       authStore.handleTokenExpired();
@@ -67,6 +116,36 @@ export const useHomeStore = defineStore('home', () => {
   async function switchWeekAndReset(direction: 'previous' | 'current' | 'next'): Promise<void> {
     await weekBoard.switchWeek(direction);
     await weekFill.initializeWeek(false);
+    await monthCalendar.revealDate(weekBoard.currentDate.value);
+  }
+
+  /**
+   * 日历点击：跨周则先切到该周并展开对应日期，同周则仅展开/收起该日。
+   * 切换与展开完成后写入 focusTarget，由日期区块自行滚动定位。
+   */
+  async function focusCalendarDate(date: string): Promise<void> {
+    const targetWeek = getWeekStart(date);
+    if (targetWeek !== weekBoard.currentDate.value) {
+      await weekBoard.loadWeek(targetWeek);
+      await weekFill.initializeWeek(false);
+      await monthCalendar.revealDate(targetWeek);
+    } else {
+      weekFill.toggleDate(date);
+    }
+
+    focusToken += 1;
+    focusTarget.value = { date, token: focusToken };
+  }
+
+  async function openAutoFillDialog(): Promise<void> {
+    const ok = await autoFill.open();
+    if (ok) {
+      isAutoFillDialogOpen.value = true;
+    }
+  }
+
+  function closeAutoFillDialog(): void {
+    isAutoFillDialogOpen.value = false;
   }
 
   async function ensureProjectsLoaded(): Promise<void> {
@@ -92,6 +171,7 @@ export const useHomeStore = defineStore('home', () => {
     weekTitle: weekBoard.weekTitle,
     weekRange: weekBoard.weekRange,
     isCurrentWeek: weekBoard.isCurrentWeek,
+    currentDate: weekBoard.currentDate,
     selectedDayDate: weekBoard.selectedDayDate,
     selectedDay: weekBoard.selectedDay,
     loadWeek: weekBoard.loadWeek,
@@ -147,10 +227,21 @@ export const useHomeStore = defineStore('home', () => {
     submitWeekFill: weekFill.submitAll,
     clearWeekFillSubmitResult: weekFill.clearSubmitResult,
     switchWeekAndReset,
+    focusCalendarDate,
+
+    // Month calendar
+    calendarWeeks: monthCalendar.weeks,
+    calendarMonthLabel: monthCalendar.monthLabel,
+    isCalendarLoading: monthCalendar.isLoading,
+    calendarErrorMessage: monthCalendar.errorMessage,
+    loadMonthCalendar: monthCalendar.load,
+    shiftCalendarMonth: monthCalendar.shiftMonthBy,
+    goCalendarMonth: monthCalendar.goToMonth,
 
     // Auto fill
     autoFillConfig: autoFill.config,
     autoFillStatus: autoFill.status,
+    autoFillExecutionText,
     isAutoFillLoading: autoFill.isLoading,
     loadAutoFill: autoFill.initialize,
     autoWorkTypes: autoFill.workTypes,
@@ -168,6 +259,9 @@ export const useHomeStore = defineStore('home', () => {
     isAutoFillTriggering: autoFill.isTriggering,
     isAutoFillDisabling: autoFill.isDisabling,
     openAutoFillSettings: autoFill.open,
+    isAutoFillDialogOpen,
+    openAutoFillDialog,
+    closeAutoFillDialog,
     setAutoProject: autoFill.setProject,
     setAutoWorkTypeGroup: autoFill.setWorkTypeGroup,
     setAutoItem: autoFill.setItem,
@@ -183,5 +277,6 @@ export const useHomeStore = defineStore('home', () => {
     initialize,
     refreshWeekBoard,
     ensureProjectsLoaded,
+    focusTarget,
   };
 });

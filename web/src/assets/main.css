@@ -17,11 +17,15 @@
   --color-warning: #ef9a18;
   --color-danger: #dc4c42;
   --color-info: #1d7afc;
+  --color-bg-strong: #dbe7ff;
+  /* 设计稿 --wtw-surface-panel：面板底色带一点透光，配合顶栏毛玻璃 */
+  --color-bg-panel-blur: rgba(255, 255, 255, 0.88);
   --radius-2xl: 28px;
   --radius-xl: 22px;
   --radius-lg: 18px;
   --radius-md: 14px;
   --radius-sm: 10px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
   --shadow-soft: 0 18px 48px rgba(15, 23, 42, 0.08);
   --shadow-float: 0 24px 60px rgba(37, 99, 235, 0.14);
   --font-display: 'Inter', 'PingFang SC', sans-serif;
@@ -74,6 +78,59 @@ select, input[type='date'], input[type='time'] { appearance: none; }
   background: var(--color-bg-panel);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-soft);
+}
+
+/* 工作台左栏卡片：日历 / 本周统计 / 自动填报 共用同一套容器与卡头规格 */
+.wfa-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.95rem 1.05rem;
+  background: var(--color-bg-panel-blur);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
+}
+
+.wfa-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.wfa-card__title,
+.wfa-card__title-btn {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.wfa-card__title-btn {
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.wfa-card__title-btn:hover {
+  color: var(--color-primary);
+}
+
+.wfa-card__chip {
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  background: color-mix(in srgb, var(--color-primary) 6%, white);
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.wfa-card__hint {
+  font-size: 0.72rem;
+  color: var(--color-text-tertiary);
 }
 
 /* 通用表单控件（供各面板复用） */

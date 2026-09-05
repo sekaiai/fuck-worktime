@@ -515,7 +515,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
       return;
     }
     if (!weekTheme.value.trim()) {
-      showToast('请先填写本周主题。');
+      showToast('请先填写工作内容。');
       return;
     }
 
@@ -567,7 +567,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
   /** 行内 ✨：只重新生成这一行，允许覆盖本行已有内容（用户主动触发） */
   async function regenerateRow(rowId: string): Promise<void> {
     if (!weekTheme.value.trim()) {
-      showToast('请先填写本周主题。');
+      showToast('请先填写工作内容。');
       return;
     }
 
