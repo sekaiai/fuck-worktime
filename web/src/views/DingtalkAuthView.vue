@@ -36,7 +36,7 @@ const heroTitle = computed(() => {
 
   return route.query.reason === 'expired'
     ? '登录信息已失效'
-    : '进入云上工时前，先完成身份校验';
+    : '云山工时系统，非官方。';
 });
 
 const heroCopy = computed(() => {
@@ -50,7 +50,7 @@ const heroCopy = computed(() => {
 
   return loginState.value === 'auto_login'
     ? '系统正在复用网页端已有的钉钉授权，成功后会直接恢复登录。'
-    : '使用钉钉扫码完成授权，系统会自动换取工时系统 token 并恢复会话。';
+    : '主要功能是ai填补，自动填报。这玩意儿只是为了方便我自己填报用的，我不会收集你的任何信息，拿来也没用。';
 });
 
 const accessModeLabel = computed(() => {
@@ -374,8 +374,8 @@ onUnmounted(() => {
 }
 
 .login-page__hero {
-  display: grid;
-  align-content: space-between;
+  /* display: grid; */
+  /* align-content: space-between; */
   min-height: min(44rem, calc(100vh - 4rem));
   background:
     radial-gradient(circle at 82% 10%, rgba(112, 170, 255, 0.32), transparent 38%),
@@ -400,9 +400,9 @@ onUnmounted(() => {
 }
 
 .login-page__title {
-  max-width: 16ch;
   font-size: clamp(2.4rem, 6vw, 4.8rem);
   line-height: 0.92;
+  margin-bottom: auto;
 }
 
 .login-page__copy {
