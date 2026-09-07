@@ -50,18 +50,11 @@ export interface UseWeekFillOptions {
   getWorkTypesForProject: (projectId: string) => WorkTypeNode[];
   loadWorkTypesByProject: (projectId: string) => Promise<WorkTypeNode[]>;
   getAutoFillConfig: () => AutoFillConfig | null;
-  refreshWeekBoard: () => Promise<void>;
+  scheduleWeekRefresh: () => Promise<void>;
   showToast: (msg: string, type?: ToastType) => void;
 }
 
 let rowSeq = 0;
-const SUBMIT_REFRESH_DELAY_MS = 2000;
-
-function wait(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
-}
 
 function createRowId(): string {
   rowSeq += 1;
@@ -176,7 +169,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
     getWorkTypesForProject,
     loadWorkTypesByProject,
     getAutoFillConfig,
-    refreshWeekBoard,
+    scheduleWeekRefresh,
     showToast,
   } = options;
 
@@ -384,6 +377,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
 
       draftRows.value = draftRows.value.filter((item) => item.rowId !== rowId);
       showToast(result.msg || '删除成功。', 'success');
+      await scheduleWeekRefresh();
     } catch (error) {
       showToast(getErrorMessage(error, '删除工时失败。'), 'error');
     } finally {
@@ -690,8 +684,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
       }
 
       showToast(result.msg || '撤回成功。', 'success');
-      await refreshWeekBoard();
-      await initializeWeek();
+      await scheduleWeekRefresh();
     } catch (error) {
       showToast(getErrorMessage(error, '撤回工时失败。'), 'error');
     } finally {
@@ -828,9 +821,8 @@ export function useWeekFill(options: UseWeekFillOptions) {
       } else {
         showToast(`提交失败：${item.errorMessage ?? '请稍后重试'}`, 'error');
       }
-      await refreshWeekBoard();
-      if (item.success && draftRows.value.length === 0) {
-        await initializeWeek();
+      if (item.success) {
+        await scheduleWeekRefresh();
       }
 
       return result;
@@ -930,10 +922,8 @@ export function useWeekFill(options: UseWeekFillOptions) {
       }
       const summary = buildSubmitSummary(result);
       showToast(summary.message, summary.type);
-      await wait(SUBMIT_REFRESH_DELAY_MS);
-      await refreshWeekBoard();
-      if (allRowsSucceeded) {
-        await initializeWeek();
+      if (successfulRowIds.size > 0) {
+        await scheduleWeekRefresh();
       }
       return result;
     } catch (error) {

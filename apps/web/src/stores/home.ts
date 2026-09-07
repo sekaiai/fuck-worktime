@@ -10,6 +10,7 @@ import { showToast } from '../composables/useToast';
 import { getAutoFillConfig, getTimingList } from '../api/timesheet-client';
 import { getErrorMessage } from '../api/request';
 import { getWeekStart, getWeekdayLabel, shiftDateKeyByDays } from '../utils/date';
+import { createDeferredRemoteRefresh } from '../utils/remote-refresh';
 import type { AutoFillConfig } from '../types/auto-fill';
 import type { PreviousWeekContent, TimingRecord } from '../types/timesheet';
 
@@ -133,15 +134,17 @@ export const useHomeStore = defineStore('home', () => {
     });
   });
 
+  const scheduleWeekRefresh = createDeferredRemoteRefresh(async () => {
+    await refreshWeekBoard(true);
+  });
+
   const weekFill = useWeekFill({
     days: () => enrichedDays.value,
     projects: () => projectCatalog.projects.value,
     getWorkTypesForProject: projectCatalog.getWorkTypesForProject,
     loadWorkTypesByProject: projectCatalog.loadWorkTypesByProject,
     getAutoFillConfig: () => autoFill.config.value,
-    refreshWeekBoard: async () => {
-      await weekBoard.loadWeek();
-    },
+    scheduleWeekRefresh,
     showToast,
   });
 
@@ -167,12 +170,12 @@ export const useHomeStore = defineStore('home', () => {
     void monthCalendar.load();
   }
 
-  async function refreshWeekBoard(): Promise<void> {
-    const ok = await weekBoard.loadWeek();
+  async function refreshWeekBoard(silent = false): Promise<void> {
+    const ok = await weekBoard.loadWeek(undefined, { silent });
     if (ok) {
       await syncTimingForWeek();
       await weekFill.initializeWeek();
-      void monthCalendar.load();
+      void monthCalendar.load({ silent });
     }
     if (!ok && weekBoard.errorCode.value === 'TOKEN_EXPIRED') {
       authStore.handleTokenExpired();

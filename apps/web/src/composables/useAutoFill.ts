@@ -5,6 +5,7 @@ import { disableAutoFill, getAutoFillConfig, runAutoFillNow, saveAutoFillConfig 
 import type { Project, WorkTypeNode } from '../types/timesheet';
 import type { AutoFillConfig, AutoFillStatus } from '../types/auto-fill';
 import { getTodayKey } from '../utils/date';
+import { waitForRemoteRefresh } from '../utils/remote-refresh';
 import type { WorkTypeGroup } from '../utils/work-types';
 import type { ToastType } from './useToast';
 
@@ -98,6 +99,13 @@ export function useAutoFill(options: {
     work.value = nextConfig.work;
     reportTime.value = nextConfig.reportTime || DEFAULT_REPORT_TIME;
     deadline.value = nextConfig.deadline ?? '';
+  }
+
+  async function reloadConfigAfterRemoteUpdate(userId: string): Promise<void> {
+    await waitForRemoteRefresh();
+    const reloadedConfig = await loadAutoFillConfig(userId);
+    config.value = reloadedConfig;
+    syncFormFromConfig(reloadedConfig);
   }
 
   async function initialize(userId: string): Promise<void> {
@@ -216,9 +224,7 @@ export function useAutoFill(options: {
 
       if (result.code === 200) {
         showToast(result.msg || '保存成功', 'success');
-        const reloadedConfig = await loadAutoFillConfig(userId);
-        config.value = reloadedConfig;
-        syncFormFromConfig(reloadedConfig);
+        await reloadConfigAfterRemoteUpdate(userId);
       } else {
         showToast(result.msg || '保存失败', 'error');
       }
@@ -241,9 +247,7 @@ export function useAutoFill(options: {
       const result = await runAutoFillNow(userId);
       if (result.code === 200) {
         showToast(result.msg || '执行成功', 'success');
-        const reloadedConfig = await loadAutoFillConfig(userId);
-        config.value = reloadedConfig;
-        syncFormFromConfig(reloadedConfig);
+        await reloadConfigAfterRemoteUpdate(userId);
       } else {
         showToast(result.msg || '执行失败', 'error');
       }
@@ -265,9 +269,7 @@ export function useAutoFill(options: {
       const result = await disableAutoFill(userId);
       if (result.code === 200) {
         showToast(result.msg || '禁用成功', 'success');
-        const reloadedConfig = await loadAutoFillConfig(userId);
-        config.value = reloadedConfig;
-        syncFormFromConfig(reloadedConfig);
+        await reloadConfigAfterRemoteUpdate(userId);
       } else {
         showToast(result.msg || '禁用失败', 'error');
       }

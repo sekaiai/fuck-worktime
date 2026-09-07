@@ -91,11 +91,13 @@ export function useMonthCalendar(options: UseMonthCalendarOptions) {
     ),
   );
 
-  async function load(): Promise<boolean> {
+  async function load(options: { silent?: boolean } = {}): Promise<boolean> {
     const mySeq = ++requestSeq;
     const { start, end } = getMonthRange(viewYear.value, viewMonth.value);
-    isLoading.value = true;
-    errorMessage.value = '';
+    if (!options.silent) {
+      isLoading.value = true;
+      errorMessage.value = '';
+    }
 
     try {
       const data = await fetchRange(start, end);

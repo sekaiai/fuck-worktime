@@ -56,12 +56,17 @@ export function useWeekBoard() {
     selectedDayDate.value = firstFilledDay?.date ?? '';
   }
 
-  async function loadWeek(date = currentDate.value): Promise<boolean> {
+  async function loadWeek(
+    date = currentDate.value,
+    options: { silent?: boolean } = {},
+  ): Promise<boolean> {
     const mySeq = ++requestSeq;
     currentDate.value = getWeekStart(date);
-    isWeekLoading.value = true;
-    errorMessage.value = '';
-    errorCode.value = '';
+    if (!options.silent) {
+      isWeekLoading.value = true;
+      errorMessage.value = '';
+      errorCode.value = '';
+    }
 
     try {
       const result = await getWeekBoard(currentDate.value);

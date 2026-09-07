@@ -308,7 +308,7 @@ test('useWeekFill 部分成功时只移除成功的旧记录', async () => {
     getWorkTypesForProject: () => [],
     loadWorkTypesByProject: async () => [],
     getAutoFillConfig: () => null,
-    refreshWeekBoard: async () => {
+    scheduleWeekRefresh: async () => {
       refreshCount += 1;
       events.push('refresh');
     },
@@ -365,7 +365,7 @@ test('每行可单独通过 flow 重新提交', async () => {
     getWorkTypesForProject: () => [],
     loadWorkTypesByProject: async () => [],
     getAutoFillConfig: () => null,
-    refreshWeekBoard: async () => {
+    scheduleWeekRefresh: async () => {
       refreshCount += 1;
     },
     showToast: () => {},
@@ -419,7 +419,7 @@ test('新建行可单独调用 reportBatch 提交', async () => {
     getWorkTypesForProject: () => [],
     loadWorkTypesByProject: async () => [],
     getAutoFillConfig: () => null,
-    refreshWeekBoard: async () => {},
+    scheduleWeekRefresh: async () => {},
     showToast: () => {},
   });
   weekFill.draftRows.value = [{
@@ -443,6 +443,47 @@ test('新建行可单独调用 reportBatch 提交', async () => {
   assert.equal(result.items[0].success, true);
 });
 
+test('删除已提交行先提示成功，再排入工时刷新队列', async () => {
+  const events = [];
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ code: 200, msg: '删除成功', data: null }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  client.setAuthToken('frontend-test-token');
+
+  const weekFill = client.useWeekFill({
+    days: () => [],
+    projects: () => [],
+    getWorkTypesForProject: () => [],
+    loadWorkTypesByProject: async () => [],
+    getAutoFillConfig: () => null,
+    scheduleWeekRefresh: async () => {
+      events.push('refresh');
+    },
+    showToast: () => {
+      events.push('message');
+    },
+  });
+  weekFill.draftRows.value = [{
+    rowId: 'row-submitted',
+    reportDate: '2026-09-02',
+    sourceId: 'detail-submitted',
+    projectId: 'project-1',
+    projectTitle: '测试项目',
+    projectStatus: 30,
+    itemId: 'item-1',
+    itemName: '测试类型',
+    hours: 1,
+    content: '已提交内容',
+  }];
+
+  await weekFill.removeRow('row-submitted');
+
+  assert.deepEqual(events, ['message', 'refresh']);
+  assert.deepEqual(weekFill.draftRows.value, []);
+});
+
 test('单日工时超过八小时输入时自动回退到剩余工时', () => {
   const weekFill = client.useWeekFill({
     days: () => [{
@@ -459,7 +500,7 @@ test('单日工时超过八小时输入时自动回退到剩余工时', () => {
     getWorkTypesForProject: () => [],
     loadWorkTypesByProject: async () => [],
     getAutoFillConfig: () => null,
-    refreshWeekBoard: async () => {},
+    scheduleWeekRefresh: async () => {},
     showToast: () => {},
   });
   weekFill.draftRows.value = [
@@ -546,7 +587,7 @@ test('周看板同步全部明细并在撤回后保留可编辑记录和新草�
     getWorkTypesForProject: () => [],
     loadWorkTypesByProject: async () => [],
     getAutoFillConfig: () => null,
-    refreshWeekBoard: async () => {},
+    scheduleWeekRefresh: async () => {},
     showToast: () => {},
   });
   const newDraft = {
@@ -644,7 +685,7 @@ test('根据上周内容生成仅填充空白草稿，并按目标星期回填',
     getWorkTypesForProject: () => [],
     loadWorkTypesByProject: async () => [],
     getAutoFillConfig: () => null,
-    refreshWeekBoard: async () => {},
+    scheduleWeekRefresh: async () => {},
     showToast: () => {},
   });
   weekFill.defaults.value = {
@@ -714,7 +755,7 @@ test('行内 AI 优先按已有内容生成，内容为空时使用默认工作�
     getWorkTypesForProject: () => [],
     loadWorkTypesByProject: async () => [],
     getAutoFillConfig: () => null,
-    refreshWeekBoard: async () => {},
+    scheduleWeekRefresh: async () => {},
     showToast: () => {},
   });
   weekFill.weekTheme.value = '默认工作内容';

@@ -50,7 +50,7 @@ const toast = useToastState();
 <style scoped>
 .app-toast {
   position: fixed;
-  bottom: calc(0.75rem + var(--safe-bottom, 0px));
+  top: calc(0.75rem + env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 40;
@@ -113,6 +113,6 @@ const toast = useToastState();
 .app-toast-enter-from,
 .app-toast-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(12px);
+  transform: translateX(-50%) translateY(-12px);
 }
 </style>
