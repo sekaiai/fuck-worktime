@@ -17,6 +17,8 @@ const bundle = await build({
         getReportFlowTask,
         handleReportFlow,
         deleteEntry,
+        generateContent,
+        generateContentFromLastWeek,
         submitBatch,
       } from './web/src/api/timesheet-client.ts';
       export { useWeekFill } from './web/src/composables/useWeekFill.ts';
@@ -43,6 +45,48 @@ afterEach(() => {
   } else {
     globalThis.localStorage = originalLocalStorage;
   }
+});
+
+test('根据上周内容生成接口按目标星期透传请求并解析内容', async () => {
+  let request;
+  globalThis.fetch = async (input, init) => {
+    request = { input: String(input), init };
+    return new Response(JSON.stringify(['周一生成内容', '周二生成内容']), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  const result = await client.generateContentFromLastWeek(
+    [{ weekday: '周一', content: '上周周一内容\n上周周一第二条' }],
+    ['周一', '周二'],
+  );
+
+  assert.equal(request.input, 'http://localhost:10002/api/timesheet/generate');
+  assert.equal(request.init.method, 'POST');
+  assert.deepEqual(JSON.parse(request.init.body), {
+    work: '根据上周填报内容生成',
+    days: 2,
+    lastWeekContents: [{ weekday: '周一', content: '上周周一内容\n上周周一第二条' }],
+    targetWeekdays: ['周一', '周二'],
+  });
+  assert.deepEqual(result, ['周一生成内容', '周二生成内容']);
+});
+
+test('普通 AI 生成接口保持原有请求格式', async () => {
+  let request;
+  globalThis.fetch = async (input, init) => {
+    request = { input: String(input), init };
+    return new Response(JSON.stringify(['生成内容']), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  await client.generateContent('完成联调', 1);
+
+  assert.equal(request.input, 'http://localhost:10002/api/timesheet/generate');
+  assert.deepEqual(JSON.parse(request.init.body), { work: '完成联调', days: 1 });
 });
 
 test('submitBatch 直连上游并透传成功响应', async () => {
@@ -559,4 +603,149 @@ test('周看板同步全部明细并在撤回后保留可编辑记录和新草�
   assert.equal(revokedRow.content, '待审批原始内容');
   assert.equal(weekFill.draftRows.value.find((row) => row.rowId === 'row-rejected').content, '用户已经编辑的内容');
   assert.equal(weekFill.draftRows.value.some((row) => row.rowId === 'row-new-draft'), true);
+});
+
+test('根据上周内容生成仅填充空白草稿，并按目标星期回填', async () => {
+  const boardDays = client.ref([
+    {
+      date: '2020-09-07',
+      dayOfWeek: '周一',
+      isWeekend: false,
+      status: '未提交',
+      displayText: '未提交',
+      displayStatus: '未提交',
+      totalHours: 0,
+      details: [],
+    },
+    {
+      date: '2020-09-08',
+      dayOfWeek: '周二',
+      isWeekend: false,
+      status: '未提交',
+      displayText: '未提交',
+      displayStatus: '未提交',
+      totalHours: 0,
+      details: [],
+    },
+    {
+      date: '2020-09-09',
+      dayOfWeek: '周三',
+      isWeekend: false,
+      status: '未提交',
+      displayText: '未提交',
+      displayStatus: '未提交',
+      totalHours: 0,
+      details: [],
+    },
+  ]);
+  const weekFill = client.useWeekFill({
+    days: () => boardDays.value,
+    projects: () => [],
+    getWorkTypesForProject: () => [],
+    loadWorkTypesByProject: async () => [],
+    getAutoFillConfig: () => null,
+    refreshWeekBoard: async () => {},
+    showToast: () => {},
+  });
+  weekFill.defaults.value = {
+    projectId: 'project-1',
+    projectTitle: '测试项目',
+    projectStatus: 30,
+    itemId: 'item-1',
+    itemName: '测试类型',
+    hours: 1,
+    work: '',
+  };
+  weekFill.draftRows.value = [
+    {
+      rowId: 'row-filled',
+      reportDate: '2020-09-07',
+      sourceId: null,
+      projectId: 'project-1',
+      projectTitle: '测试项目',
+      projectStatus: 30,
+      itemId: 'item-1',
+      itemName: '测试类型',
+      hours: 1,
+      content: '保留的本周内容',
+    },
+    {
+      rowId: 'row-blank',
+      reportDate: '2020-09-08',
+      sourceId: null,
+      projectId: 'project-1',
+      projectTitle: '测试项目',
+      projectStatus: 30,
+      itemId: 'item-1',
+      itemName: '测试类型',
+      hours: 1,
+      content: '',
+    },
+  ];
+
+  let request;
+  globalThis.fetch = async (input, init) => {
+    request = { input: String(input), init };
+    return new Response(JSON.stringify(['周二生成内容', '周三生成内容']), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  await weekFill.generateFromLastWeek([
+    { weekday: '周一', content: '上周周一内容' },
+    { weekday: '周二', content: '上周周二内容\n上周周二第二条' },
+    { weekday: '周三', content: '上周周三内容' },
+  ]);
+
+  assert.deepEqual(JSON.parse(request.init.body).targetWeekdays, ['周二', '周三']);
+  assert.equal(weekFill.draftRows.value.find((row) => row.rowId === 'row-filled').content, '保留的本周内容');
+  assert.equal(weekFill.draftRows.value.find((row) => row.rowId === 'row-blank').content, '周二生成内容');
+  assert.equal(
+    weekFill.draftRows.value.find((row) => row.reportDate === '2020-09-09').content,
+    '周三生成内容',
+  );
+});
+
+test('行内 AI 优先按已有内容生成，内容为空时使用默认工作内容', async () => {
+  const weekFill = client.useWeekFill({
+    days: () => [],
+    projects: () => [],
+    getWorkTypesForProject: () => [],
+    loadWorkTypesByProject: async () => [],
+    getAutoFillConfig: () => null,
+    refreshWeekBoard: async () => {},
+    showToast: () => {},
+  });
+  weekFill.weekTheme.value = '默认工作内容';
+  weekFill.draftRows.value = [{
+    rowId: 'row-ai',
+    reportDate: '2020-09-07',
+    sourceId: null,
+    projectId: 'project-1',
+    projectTitle: '测试项目',
+    projectStatus: 30,
+    itemId: 'item-1',
+    itemName: '测试类型',
+    hours: 1,
+    content: '已有工作内容',
+  }];
+
+  const requests = [];
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input: String(input), init });
+    return new Response(JSON.stringify([requests.length === 1 ? '优化后的内容' : '默认内容生成结果']), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  await weekFill.regenerateRow('row-ai');
+  assert.deepEqual(JSON.parse(requests[0].init.body), { work: '已有工作内容', days: 1 });
+  assert.equal(weekFill.draftRows.value[0].content, '优化后的内容');
+
+  weekFill.draftRows.value[0].content = '   ';
+  await weekFill.regenerateRow('row-ai');
+  assert.deepEqual(JSON.parse(requests[1].init.body), { work: '默认工作内容', days: 1 });
+  assert.equal(weekFill.draftRows.value[0].content, '默认内容生成结果');
 });

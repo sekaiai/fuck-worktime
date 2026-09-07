@@ -58,7 +58,12 @@ export class TimesheetController {
   async generateContent(
     @Body() data: GenerateContentDto,
   ): Promise<string[]> {
-    return this.timesheetService.generateContent(data.work, data.days);
+    return this.timesheetService.generateContent(
+      data.work,
+      data.days,
+      data.lastWeekContents,
+      data.targetWeekdays,
+    );
   }
 
   @Get('week-board')

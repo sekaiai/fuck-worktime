@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 
 import { useAuthStore } from '../../stores/auth';
@@ -7,6 +7,7 @@ import { useHomeStore } from '../../stores/home';
 
 const homeStore = useHomeStore();
 const authStore = useAuthStore();
+const subtitle = ref('工时填报工作台');
 const {
   board,
   weekRange,
@@ -32,6 +33,25 @@ const autoFillBadge = computed(() => {
 
   return { className: 'is-disabled', label: '未开启' };
 });
+
+onMounted(async () => {
+  try {
+    const response = await fetch('https://hi.logacg.com/?z=20');
+    const data: unknown = await response.json();
+    if (
+      response.ok &&
+      typeof data === 'object' &&
+      data !== null &&
+      'hitokoto' in data &&
+      typeof data.hitokoto === 'string' &&
+      data.hitokoto.trim()
+    ) {
+      subtitle.value = data.hitokoto;
+    }
+  } catch {
+    // 接口不可用时保留默认文案，不影响填报主流程。
+  }
+});
 </script>
 
 <template>
@@ -46,7 +66,7 @@ const autoFillBadge = computed(() => {
         </span> -->
         <div class="wfh-bar__brand-text">
           <p class="wfh-eyebrow">云上工时</p>
-          <p class="wfh-bar__subtitle">工时填报工作台</p>
+          <p class="wfh-bar__subtitle">{{ subtitle }}</p>
         </div>
       </div>
 

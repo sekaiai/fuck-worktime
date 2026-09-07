@@ -33,6 +33,10 @@ function onThemeInput(event: Event): void {
 function onGenerate(): void {
   void homeStore.generateWeekFillForDates(editableDates.value);
 }
+
+function onGenerateFromLastWeek(): void {
+  void homeStore.generateWeekFillFromLastWeek();
+}
 </script>
 
 <template>
@@ -70,14 +74,24 @@ function onGenerate(): void {
       />
     </div>
 
-    <button
-      type="button"
-      class="wf-toolbar__generate"
-      :disabled="isWeekFillGenerating || editableDates.length === 0"
-      @click="onGenerate"
-    >
-      {{ isWeekFillGenerating ? '生成中…' : `✨ AI 生成待填 ${editableDates.length} 天` }}
-    </button>
+    <div class="wf-toolbar__actions">
+      <button
+        type="button"
+        class="wf-toolbar__generate wf-toolbar__generate--previous"
+        :disabled="isWeekFillGenerating || editableDates.length === 0"
+        @click="onGenerateFromLastWeek"
+      >
+        {{ isWeekFillGenerating ? '生成中…' : `🗓 AI 根据上周生成 ${editableDates.length} 天` }}
+      </button>
+      <button
+        type="button"
+        class="wf-toolbar__generate"
+        :disabled="isWeekFillGenerating || editableDates.length === 0"
+        @click="onGenerate"
+      >
+        {{ isWeekFillGenerating ? '生成中…' : `✨ AI 生成待填 ${editableDates.length} 天` }}
+      </button>
+    </div>
   </section>
 </template>
 
@@ -124,7 +138,6 @@ function onGenerate(): void {
 }
 
 .wf-toolbar__generate {
-  justify-self: end;
   border: 0;
   border-radius: var(--radius-md);
   padding: 0.55rem 1.1rem;
@@ -134,6 +147,24 @@ function onGenerate(): void {
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
+}
+
+.wf-toolbar__actions {
+  display: flex;
+  justify-self: end;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.wf-toolbar__generate--previous {
+  background: var(--color-bg-panel);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+  color: var(--color-primary);
+}
+
+.wf-toolbar__generate--previous:hover:not(:disabled) {
+  background: var(--color-primary);
+  color: #fff;
 }
 
 .wf-toolbar__generate:hover:not(:disabled) {

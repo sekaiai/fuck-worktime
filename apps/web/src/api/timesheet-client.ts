@@ -1,6 +1,7 @@
 import type { AutoFillConfig } from '../types/auto-fill';
 import type {
   Project,
+  PreviousWeekContent,
   ReportBatchRequest,
   ReportActionResponse,
   ReportFlowButtonsResponse,
@@ -22,6 +23,7 @@ import {
 } from './request';
 
 const GZDATA_BASE = 'https://times.gzbdgc.com.cn:8099/prod-api';
+const AI_GENERATION_TIMEOUT_MS = 90_000;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -175,25 +177,34 @@ async function gzdataRequest<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * 后端 JSON 请求：内部复用 apiRequest，获得 authGate / x-gzdata-token / 15s 超时 / 401 处理的一致行为。
+ * 后端 JSON 请求：内部复用 apiRequest，获得 authGate / x-gzdata-token / 401 处理的一致行为。
  * 在此基础上保留原有语义：数组原样返回；带 code+data 的信封在业务 code 非 200/0 时抛 ApiError，否则解包 data。
  */
-async function backendJsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const payload: unknown = await apiRequest<unknown>(path, init);
+async function backendJsonRequest<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs?: number,
+): Promise<T> {
+  const { signal, cleanup } = createTimeoutSignal(init, timeoutMs);
+  try {
+    const payload: unknown = await apiRequest<unknown>(path, { ...init, signal });
 
-  if (Array.isArray(payload)) {
-    return payload as T;
-  }
-
-  if (isRecord(payload) && 'code' in payload && 'data' in payload) {
-    if (typeof payload.code === 'number' && payload.code !== 200 && payload.code !== 0) {
-      throw new ApiError(extractMessage(payload, '请求失败'));
+    if (Array.isArray(payload)) {
+      return payload as T;
     }
 
-    return payload.data as T;
-  }
+    if (isRecord(payload) && 'code' in payload && 'data' in payload) {
+      if (typeof payload.code === 'number' && payload.code !== 200 && payload.code !== 0) {
+        throw new ApiError(extractMessage(payload, '请求失败'));
+      }
 
-  return payload as T;
+      return payload.data as T;
+    }
+
+    return payload as T;
+  } finally {
+    cleanup();
+  }
 }
 
 function normalizeWorkDetail(detail: unknown): WorkDetail {
@@ -411,7 +422,28 @@ export async function generateContent(work: string, days: number): Promise<strin
   const payload = await backendJsonRequest<unknown>('/timesheet/generate', {
     method: 'POST',
     body: JSON.stringify({ work, days }),
-  });
+  }, AI_GENERATION_TIMEOUT_MS);
+
+  if (Array.isArray(payload)) {
+    return payload.map((item) => toStringValue(item)).filter(Boolean);
+  }
+
+  return [];
+}
+
+export async function generateContentFromLastWeek(
+  lastWeekContents: PreviousWeekContent[],
+  targetWeekdays: string[],
+): Promise<string[]> {
+  const payload = await backendJsonRequest<unknown>('/timesheet/generate', {
+    method: 'POST',
+    body: JSON.stringify({
+      work: '根据上周填报内容生成',
+      days: targetWeekdays.length,
+      lastWeekContents,
+      targetWeekdays,
+    }),
+  }, AI_GENERATION_TIMEOUT_MS);
 
   if (Array.isArray(payload)) {
     return payload.map((item) => toStringValue(item)).filter(Boolean);

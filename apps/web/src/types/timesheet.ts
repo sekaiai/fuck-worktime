@@ -95,6 +95,12 @@ export interface TimingRecord {
   reviewStatus: number;
 }
 
+/** 供 AI 参考的上周填报内容，已在前端按星期聚合。 */
+export interface PreviousWeekContent {
+  weekday: string;
+  content: string;
+}
+
 export interface ReportFlowStartResponse extends ReportActionResponse {
   taskId: string | null;
 }

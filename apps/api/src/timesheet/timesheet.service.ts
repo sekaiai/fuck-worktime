@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { Agent } from 'https';
@@ -10,6 +10,7 @@ import { UpdateReportDto } from './dto/update-report.dto';
 import { ProjectDto } from './dto/project.dto';
 import { WorkTypeDto } from './dto/work-type.dto';
 import { AiService } from './ai/ai.service';
+import type { PreviousWeekContentDto } from './dto/generate-content.dto';
 
 @Injectable()
 export class TimesheetService {
@@ -53,7 +54,20 @@ export class TimesheetService {
     }
   }
 
-  async generateContent(work: string, days: number): Promise<string[]> {
+  async generateContent(
+    work: string,
+    days: number,
+    lastWeekContents?: PreviousWeekContentDto[],
+    targetWeekdays?: string[],
+  ): Promise<string[]> {
+    if (lastWeekContents || targetWeekdays) {
+      if (!lastWeekContents || !targetWeekdays || targetWeekdays.length !== days) {
+        throw new BadRequestException('上周参考内容与目标星期必须完整且数量一致');
+      }
+
+      return this.aiService.generateWorkContentsFromLastWeek(lastWeekContents, targetWeekdays);
+    }
+
     return this.aiService.generateWorkContents(work, days);
   }
 

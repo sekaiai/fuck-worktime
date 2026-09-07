@@ -8,9 +8,10 @@ import { useWeekFill } from '../composables/useWeekFill';
 import { useMonthCalendar } from '../composables/useMonthCalendar';
 import { showToast } from '../composables/useToast';
 import { getAutoFillConfig, getTimingList } from '../api/timesheet-client';
-import { getWeekStart, shiftDateKeyByDays } from '../utils/date';
+import { getErrorMessage } from '../api/request';
+import { getWeekStart, getWeekdayLabel, shiftDateKeyByDays } from '../utils/date';
 import type { AutoFillConfig } from '../types/auto-fill';
-import type { TimingRecord } from '../types/timesheet';
+import type { PreviousWeekContent, TimingRecord } from '../types/timesheet';
 
 export const useHomeStore = defineStore('home', () => {
   const authStore = useAuthStore();
@@ -223,6 +224,32 @@ export const useHomeStore = defineStore('home', () => {
     await projectCatalog.loadProjectsByUser(authStore.userId);
   }
 
+  async function generateWeekFillFromLastWeek(): Promise<void> {
+    const previousWeekStart = shiftDateKeyByDays(weekBoard.currentDate.value, -7);
+    const previousWeekEnd = shiftDateKeyByDays(weekBoard.currentDate.value, -1);
+    try {
+      const contentsByWeekday = new Map<string, string[]>();
+      for (const record of await getTimingList(previousWeekStart, previousWeekEnd)) {
+        const content = record.content.trim();
+        if (!content) {
+          continue;
+        }
+
+        const weekday = getWeekdayLabel(record.reportDate);
+        const contents = contentsByWeekday.get(weekday) ?? [];
+        contents.push(content);
+        contentsByWeekday.set(weekday, contents);
+      }
+      const lastWeekContents: PreviousWeekContent[] = [...contentsByWeekday].map(
+        ([weekday, contents]) => ({ weekday, content: contents.join('\n') }),
+      );
+
+      await weekFill.generateFromLastWeek(lastWeekContents);
+    } catch (error) {
+      showToast(getErrorMessage(error, '获取上周填报内容失败。'), 'error');
+    }
+  }
+
   // Expose everything
   return {
     // Week board
@@ -281,6 +308,7 @@ export const useHomeStore = defineStore('home', () => {
     setWeekFillRowHours: weekFill.setRowHours,
     setWeekFillRowContent: weekFill.setRowContent,
     generateWeekFillForDates: weekFill.generateForDates,
+    generateWeekFillFromLastWeek,
     regenerateWeekFillRow: weekFill.regenerateRow,
     setWeekFillDefaultProject: weekFill.setDefaultProject,
     setWeekFillDefaultWorkType: weekFill.setDefaultWorkType,

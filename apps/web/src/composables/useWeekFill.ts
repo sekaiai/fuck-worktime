@@ -5,6 +5,7 @@ import {
   buildBatchPayload,
   deleteEntry,
   generateContent,
+  generateContentFromLastWeek,
   getReportFlowButtons,
   getReportFlowTask,
   handleReportFlow,
@@ -15,6 +16,7 @@ import {
 import type { AutoFillConfig } from '../types/auto-fill';
 import type {
   Project,
+  PreviousWeekContent,
   ReportActionResponse,
   TimesheetEntry,
   WeekDay,
@@ -29,6 +31,7 @@ import type {
   WeekFillSubmitStep,
   WeekFillSubmitStepName,
 } from '../types/week-fill';
+import { getWeekdayLabel } from '../utils/date';
 import { isReadonlyTimesheetStatus, mapDayStatus } from '../utils/timesheet-status';
 import { calculateRemainingHours } from '../utils/week-fill-hours';
 import {
@@ -253,6 +256,45 @@ export function useWeekFill(options: UseWeekFillOptions) {
       content: '',
       ...patch,
     };
+  }
+
+  function fillGeneratedContents(dates: string[], contents: string[]): void {
+    const next = [...draftRows.value];
+    for (const [index, date] of dates.entries()) {
+      const content = contents[index];
+      if (!content) {
+        continue;
+      }
+
+      const blankIndex = next.findIndex(
+        (row) => row.reportDate === date && !row.content.trim(),
+      );
+
+      if (blankIndex === -1) {
+        const hasAnyRow = next.some((row) => row.reportDate === date);
+        if (hasAnyRow) {
+          continue;
+        }
+
+        const remainingHours = getRemainingHours(date);
+        if (remainingHours <= 0) {
+          continue;
+        }
+        next.push(buildRow(date, { content, hours: remainingHours }));
+      } else {
+        next[blankIndex] = { ...next[blankIndex], content };
+      }
+    }
+
+    draftRows.value = next;
+    expandedDates.value = [...new Set([...expandedDates.value, ...dates])];
+  }
+
+  function getBlankEditableDates(): string[] {
+    return editableDates.value.filter((date) => {
+      const rows = draftRows.value.filter((row) => row.reportDate === date);
+      return rows.length === 0 || rows.some((row) => !row.content.trim());
+    });
   }
 
   function getRemainingHours(reportDate: string): number {
@@ -527,36 +569,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
         return;
       }
 
-      const next = [...draftRows.value];
-      for (const [index, date] of dates.entries()) {
-        const content = contents[index];
-        if (!content) {
-          continue;
-        }
-
-        const blankIndex = next.findIndex(
-          (row) => row.reportDate === date && !row.content.trim(),
-        );
-
-        if (blankIndex === -1) {
-          const hasAnyRow = next.some((row) => row.reportDate === date);
-          // 该日期已有行且都填了内容 → 跳过，不覆盖用户已写的内容
-          if (hasAnyRow) {
-            continue;
-          }
-
-          const remainingHours = getRemainingHours(date);
-          if (remainingHours <= 0) {
-            continue;
-          }
-          next.push(buildRow(date, { content, hours: remainingHours }));
-        } else {
-          next[blankIndex] = { ...next[blankIndex], content };
-        }
-      }
-
-      draftRows.value = next;
-      expandedDates.value = [...new Set([...expandedDates.value, ...dates])];
+      fillGeneratedContents(dates, contents);
     } catch (error) {
       showToast(getErrorMessage(error, '生成工时失败。'), 'error');
     } finally {
@@ -564,16 +577,62 @@ export function useWeekFill(options: UseWeekFillOptions) {
     }
   }
 
-  /** 行内 ✨：只重新生成这一行，允许覆盖本行已有内容（用户主动触发） */
+  async function generateFromLastWeek(lastWeekContents: PreviousWeekContent[]): Promise<void> {
+    if (!defaults.value.projectId || !defaults.value.itemId) {
+      showToast('请先选择默认项目和工时类型。');
+      return;
+    }
+
+    const contentByWeekday = new Map<string, string>(
+      lastWeekContents
+        .map((item) => ({ weekday: item.weekday, content: item.content.trim() }))
+        .filter((item) => item.weekday && item.content)
+        .map((item) => [item.weekday, item.content]),
+    );
+    const dates = getBlankEditableDates().filter((date) => contentByWeekday.has(getWeekdayLabel(date)));
+    if (dates.length === 0) {
+      showToast('上周没有与本周待填日期对应的填报内容。');
+      return;
+    }
+
+    const targetWeekdays = dates.map(getWeekdayLabel);
+    const references = [...new Set(targetWeekdays)].map((weekday) => ({
+      weekday,
+      content: contentByWeekday.get(weekday) ?? '',
+    }));
+
+    isGenerating.value = true;
+    try {
+      const contents = await generateContentFromLastWeek(references, targetWeekdays);
+      if (contents.length < dates.length) {
+        showToast('AI 暂时未生成足够内容，请稍后重试。', 'error');
+        return;
+      }
+
+      fillGeneratedContents(dates, contents);
+    } catch (error) {
+      showToast(getErrorMessage(error, '根据上周内容生成工时失败。'), 'error');
+    } finally {
+      isGenerating.value = false;
+    }
+  }
+
+  /** 行内 ✨：优先基于本行已有内容优化；为空时使用默认工作内容生成。 */
   async function regenerateRow(rowId: string): Promise<void> {
-    if (!weekTheme.value.trim()) {
+    const row = draftRows.value.find((item) => item.rowId === rowId);
+    if (!row) {
+      return;
+    }
+
+    const work = row.content.trim() || weekTheme.value.trim();
+    if (!work) {
       showToast('请先填写工作内容。');
       return;
     }
 
     isGenerating.value = true;
     try {
-      const contents = await generateContent(weekTheme.value.trim(), 1);
+      const contents = await generateContent(work, 1);
       const content = contents[0];
       if (!content) {
         showToast('AI 暂时未生成内容，请稍后重试。', 'error');
@@ -916,6 +975,7 @@ export function useWeekFill(options: UseWeekFillOptions) {
     setRowHours,
     setRowContent,
     generateForDates,
+    generateFromLastWeek,
     regenerateRow,
     setDefaultProject,
     setDefaultWorkType,
