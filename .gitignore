@@ -11,3 +11,4 @@ apps/api/.env
 apps/web/.env
 
 /.workbuddy
+/apps/api/data

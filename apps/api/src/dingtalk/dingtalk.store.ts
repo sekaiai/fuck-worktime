@@ -16,7 +16,7 @@ export interface DingtalkUserRecord {
   status: DingtalkLoginStatus;
 }
 
-const DATA_FILE = 'data/user-config.json';
+const DATA_FILE = './data/user-config.json';
 const LEGACY_DATA_FILE = 'dingtalk-users.json';
 
 @Injectable()
@@ -30,11 +30,7 @@ export class DingtalkStore {
   private writeChain: Promise<unknown> = Promise.resolve();
 
   private get apiRootPath(): string {
-    const cwd = process.cwd();
-    if (path.basename(cwd) === 'api') {
-      return cwd;
-    }
-    return path.resolve(cwd, 'api');
+    return path.resolve(__dirname, '..', '..');
   }
 
   private get filePath(): string {

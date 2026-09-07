@@ -25,7 +25,7 @@ export function getErrorMessage(error: unknown, fallback: string): string {
 
 // 使用可选链：Vite dev/build 下 import.meta.env 恒存在，语义与直接取值一致；
 // Node 测试环境（esbuild bundle 不注入 env）下安全回退到 PROD 分支。
-const API_BASE = (import.meta.env.PROD ? 'https://fka.logacg.com/api' : 'http://localhost:10002/api');
+const API_BASE = (import.meta.env.PROD ? '/api' : 'http://localhost:10002/api');
 let authToken = '';
 let authGate: Promise<unknown> | null = null;
 
