@@ -8,11 +8,11 @@ services:
     working_dir: /app
     command: ["node", "dist/main.js"]
     volumes:
-      - ${API_APP_PATH}:/app
+      - /home/xueyang/code/fuck-working/apps/api:/app
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
     environment:
       - NODE_ENV=production
-      - TZ=${TZ}
+      - TZ=Asia/Shanghai
     ports:
-      - 10016:${API_CONTAINER_PORT}
+      - 10016:10002
