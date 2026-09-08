@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import { getQrcode, pollStatus } from '../api/dingtalk-client';
 import { getErrorMessage } from '../api/request';
-import { usePwaDetect } from '../composables/usePwaDetect';
+import { useIsMobile } from '../composables/useIsMobile';
 import { useAuthStore } from '../stores/auth';
 
 type LoginStatus = 'loading' | 'waiting' | 'success' | 'timeout' | 'error';
@@ -14,7 +14,7 @@ const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 const { isLoading } = storeToRefs(authStore);
-const { isPwa } = usePwaDetect();
+const isMobile = useIsMobile();
 
 const qrcode = shallowRef('');
 const taskId = shallowRef('');
@@ -22,60 +22,23 @@ const phone = shallowRef('');
 const status = shallowRef<LoginStatus>('loading');
 const loginState = shallowRef<'qrcode' | 'auto_login'>('qrcode');
 const message = shallowRef('');
-const isMobileDevice = shallowRef(false);
 let pollTimer: number | null = null;
 
-const showInstallGuide = computed(() => isMobileDevice.value && !isPwa.value);
-const isPhoneLoginMode = computed(() => isPwa.value);
-const showHeroEyebrow = computed(() => !isPhoneLoginMode.value);
+const isExpired = computed(() => route.query.reason === 'expired');
 
-const heroTitle = computed(() => {
-  if (showInstallGuide.value) {
-    return '先安装应用';
-  }
+const heroTitle = computed(() =>
+  isExpired.value ? '登录信息已失效' : '云上工时系统，非官方。',
+);
 
-  return route.query.reason === 'expired'
-    ? '登录信息已失效'
-    : '云山工时系统，非官方。';
-});
+const heroCopy = computed(() =>
+  '主要功能是AI填补、自动填报。这玩意儿只是为了方便我自己填报用的，我不会收集你的任何信息，拿来也没用。',
+);
 
-const heroCopy = computed(() => {
-  if (showInstallGuide.value) {
-    return '手机浏览器不提供登录入口，先安装为 PWA 应用。';
-  }
-
-  if (isPhoneLoginMode.value) {
-    return 'PWA 端通过手机号查找已保存的登录记录，最终仍以用户资料返回的 userId 作为本地标识。';
-  }
-
-  return loginState.value === 'auto_login'
-    ? '系统正在复用网页端已有的钉钉授权，成功后会直接恢复登录。'
-    : '主要功能是ai填补，自动填报。这玩意儿只是为了方便我自己填报用的，我不会收集你的任何信息，拿来也没用。';
-});
-
-const accessModeLabel = computed(() => {
-  if (showInstallGuide.value) {
-    return '安装 PWA';
-  }
-
-  return isPhoneLoginMode.value ? '手机号恢复' : '钉钉扫码授权';
-});
-
-const cardTitle = computed(() => {
-  if (showInstallGuide.value) {
-    return '安装指引';
-  }
-
-  return isPhoneLoginMode.value ? '手机号登录' : '扫码登录';
-});
+const cardTitle = computed(() => isMobile.value ? '手机号登录' : '扫码登录');
 
 const statusLabel = computed(() => {
-  if (showInstallGuide.value) {
-    return '';
-  }
-
   if (status.value === 'loading') {
-    return isPhoneLoginMode.value ? '待输入' : '准备中';
+    return isMobile.value ? '待输入' : '准备中';
   }
   if (status.value === 'waiting') {
     return loginState.value === 'auto_login' ? '自动恢复' : '等待处理';
@@ -90,24 +53,20 @@ const statusLabel = computed(() => {
 });
 
 const hintText = computed(() => {
-  if (showInstallGuide.value) {
-    return '安装后从桌面图标打开，再进入登录流程。';
-  }
-
   if (isLoading.value || status.value === 'success') {
     return '登录成功，正在恢复用户信息。';
   }
 
-  if (isPhoneLoginMode.value) {
+  if (isMobile.value) {
     if (status.value === 'error') {
       return message.value || '请输入手机号后重试。';
     }
 
-    if (route.query.reason === 'expired') {
-      return '如果提示已失效，请回到网页端重新扫码登录。';
+    if (isExpired.value) {
+      return '如果提示已失效，请在电脑端重新扫码登录。';
     }
 
-    return '请输入在工时系统中绑定的手机号，系统会先取用户资料，再决定最终使用的 userId。';
+    return '请先在电脑端钉钉扫码登录，然后在这里输入手机号恢复登录状态。';
   }
 
   if (status.value === 'waiting') {
@@ -279,8 +238,8 @@ onUnmounted(() => {
 
 <template>
   <main class="login-page">
-    <section class="login-page__hero">
-      <p v-if="showHeroEyebrow" class="login-page__eyebrow">DingTalk Gateway</p>
+    <section v-if="!isMobile" class="login-page__hero">
+      <p class="login-page__eyebrow">DingTalk Gateway</p>
       <h1 class="login-page__title">{{ heroTitle }}</h1>
       <p class="login-page__copy">{{ heroCopy }}</p>
     </section>
@@ -288,30 +247,20 @@ onUnmounted(() => {
     <section class="login-card">
       <div class="login-card__header">
         <div>
-          <p class="login-card__eyebrow">{{ accessModeLabel }}</p>
           <h2 class="login-card__title">{{ cardTitle }}</h2>
         </div>
         <span v-if="statusLabel" class="login-card__badge" :class="`is-${status}`">{{ statusLabel }}</span>
       </div>
 
-      <div v-if="showInstallGuide" class="install-guide">
-        <div class="install-guide__steps">
-          <article class="install-guide__step">
-            <strong>1. 打开菜单</strong>
-            <p>点击浏览器右上角或底部分享菜单。</p>
-          </article>
-          <article class="install-guide__step">
-            <strong>2. 添加到桌面</strong>
-            <p>选择“安装应用”或“添加到主屏幕”。</p>
-          </article>
-          <article class="install-guide__step">
-            <strong>3. 从桌面进入</strong>
-            <p>安装完成后从应用图标打开。</p>
-          </article>
+      <!-- 手机端：手机号登录 + 前置说明 -->
+      <div v-if="isMobile" class="login-card__form">
+        <div class="login-card__notice">
+          <p class="login-card__notice-title">使用须知</p>
+          <p class="login-card__notice-text">
+            手机端无法直接注册登录。请先在<strong>电脑端浏览器</strong>打开系统，使用钉钉扫码完成首次登录，然后在这里输入手机号恢复登录状态。
+          </p>
         </div>
-      </div>
 
-      <div v-else-if="isPhoneLoginMode" class="login-card__form">
         <label class="login-card__field">
           <span>手机号</span>
           <input
@@ -331,6 +280,7 @@ onUnmounted(() => {
         </button>
       </div>
 
+      <!-- 桌面端：扫码登录 -->
       <div v-else class="login-card__frame">
         <div v-if="status === 'loading'" class="login-card__state">正在获取二维码...</div>
         <img v-else-if="qrcode" :src="`data:image/png;base64,${qrcode}`" alt="钉钉登录二维码" />
@@ -343,7 +293,7 @@ onUnmounted(() => {
       <p class="login-card__hint">{{ hintText }}</p>
 
       <button
-        v-if="!showInstallGuide && !isPhoneLoginMode"
+        v-if="!isMobile"
         class="login-card__button"
         type="button"
         :disabled="status === 'loading'"
@@ -542,6 +492,33 @@ onUnmounted(() => {
   display: grid;
   place-items: center;
   overflow: hidden;
+}
+
+.login-card__notice {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-primary) 6%, white);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, var(--color-border));
+}
+
+.login-card__notice-title {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--color-primary);
+}
+
+.login-card__notice-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+}
+
+.login-card__notice-text strong {
+  color: var(--color-text-primary);
 }
 
 .login-card__frame img {
