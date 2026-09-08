@@ -6,6 +6,7 @@ import { useProjectCatalog } from '../composables/useProjectCatalog';
 import { useAutoFill } from '../composables/useAutoFill';
 import { useWeekFill } from '../composables/useWeekFill';
 import { useMonthCalendar } from '../composables/useMonthCalendar';
+import { useIsMobile } from '../composables/useIsMobile';
 import { showToast } from '../composables/useToast';
 import { getAutoFillConfig, getTimingList } from '../api/timesheet-client';
 import { getErrorMessage } from '../api/request';
@@ -16,6 +17,7 @@ import type { PreviousWeekContent, TimingRecord } from '../types/timesheet';
 
 export const useHomeStore = defineStore('home', () => {
   const authStore = useAuthStore();
+  const isMobile = useIsMobile();
 
   // Create the composables
   const weekBoard = useWeekBoard();
@@ -166,8 +168,10 @@ export const useHomeStore = defineStore('home', () => {
 
     // 必须在三者都完成后再初始化：依赖 days、projects 与 autoFill.config
     await weekFill.initializeWeek();
-    // 日历是填报主流程的辅助视图，失败不阻塞首屏，故不 await
-    void monthCalendar.load();
+    // 日历是填报主流程的辅助视图，失败不阻塞首屏，故不 await；移动端已隐藏侧栏，跳过请求
+    if (!isMobile.value) {
+      void monthCalendar.load();
+    }
   }
 
   async function refreshWeekBoard(silent = false): Promise<void> {
@@ -175,7 +179,9 @@ export const useHomeStore = defineStore('home', () => {
     if (ok) {
       await syncTimingForWeek();
       await weekFill.initializeWeek();
-      void monthCalendar.load({ silent });
+      if (!isMobile.value) {
+        void monthCalendar.load({ silent });
+      }
     }
     if (!ok && weekBoard.errorCode.value === 'TOKEN_EXPIRED') {
       authStore.handleTokenExpired();
@@ -186,7 +192,9 @@ export const useHomeStore = defineStore('home', () => {
     await weekBoard.switchWeek(direction);
     await syncTimingForWeek();
     await weekFill.initializeWeek(false);
-    await monthCalendar.revealDate(weekBoard.currentDate.value);
+    if (!isMobile.value) {
+      await monthCalendar.revealDate(weekBoard.currentDate.value);
+    }
   }
 
   /**

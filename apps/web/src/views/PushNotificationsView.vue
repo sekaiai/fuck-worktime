@@ -356,6 +356,32 @@ onUnmounted(() => {
   }
 }
 
+/* 移动端：隐藏装饰性 eyebrow，标题缩小，overview 改 2 列，收窄间距 */
+@media (max-width: 767px) {
+  .notification-page {
+    padding: 0.75rem;
+  }
+
+  .notification-page__eyebrow {
+    display: none;
+  }
+
+  .notification-page__title {
+    font-size: 1.5rem;
+  }
+
+  .notification-page__overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .notification-page__hero,
+  .notification-panel--warning,
+  .notification-page__overview {
+    padding: 0.75rem;
+  }
+}
+
 @media (max-width: 640px) {
   .notification-panel__header {
     padding-right: 6.5rem;

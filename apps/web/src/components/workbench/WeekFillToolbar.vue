@@ -175,4 +175,44 @@ function onGenerateFromLastWeek(): void {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* 移动端：控件全宽堆叠，按钮等宽 */
+@media (max-width: 767px) {
+  .wf-toolbar {
+    padding: 0.75rem 0.9rem;
+    gap: 0.5rem;
+  }
+
+  .wf-toolbar__defaults {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wf-toolbar select,
+  .wf-toolbar input {
+    min-width: 0;
+    font-size: 1rem;
+    padding: 0.55rem 0.65rem;
+    width: 100%;
+  }
+
+  .wf-toolbar__theme {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wf-toolbar__theme input {
+    min-width: 0;
+  }
+
+  .wf-toolbar__actions {
+    justify-self: stretch;
+    flex-direction: column;
+  }
+
+  .wf-toolbar__generate {
+    min-height: 44px;
+    font-size: 0.9rem;
+  }
+}
 </style>

@@ -485,7 +485,7 @@ function onCancelDisable(): void {
   transform: translateY(20px) scale(0.97);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .afd-enter-from .afd-panel,
   .afd-leave-to .afd-panel {
     transform: translateY(100%);

@@ -7,9 +7,11 @@ import WeekFillSubmitBar from '../components/workbench/WeekFillSubmitBar.vue';
 import WeekFillTable from '../components/workbench/WeekFillTable.vue';
 import WeekFillToolbar from '../components/workbench/WeekFillToolbar.vue';
 import WorkbenchSidebar from '../components/workbench/WorkbenchSidebar.vue';
+import { useIsMobile } from '../composables/useIsMobile';
 import { useHomeStore } from '../stores/home';
 
 const homeStore = useHomeStore();
+const isMobile = useIsMobile();
 
 onMounted(() => {
   void homeStore.initialize();
@@ -22,7 +24,7 @@ onMounted(() => {
 
     <div class="home-shell__scroll">
       <div class="home-shell__grid">
-        <WorkbenchSidebar />
+        <WorkbenchSidebar v-if="!isMobile" />
         <main class="home-shell__main">
           <WeekFillToolbar />
           <WeekFillTable />
@@ -73,8 +75,8 @@ onMounted(() => {
 @media (max-width: 1199px) {
   .home-shell__grid {
     grid-template-columns: minmax(0, 1fr);
-    padding: 1rem;
-    gap: 1rem;
+    padding: 0.4rem;
+    gap: 0.5rem;
   }
 
   /* 填报是主流程，移动端排在前；日历/统计/自动填报随其后 */
@@ -84,6 +86,7 @@ onMounted(() => {
 
   .home-shell__main {
     order: 1;
+    gap:0.5rem;
   }
 }
 </style>

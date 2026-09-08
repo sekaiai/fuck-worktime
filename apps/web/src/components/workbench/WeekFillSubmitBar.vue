@@ -200,4 +200,20 @@ const resultSummary = computed(() => {
   margin: 0;
   color: var(--color-danger);
 }
+
+/* 移动端：safe-area 避让 + 按钮触控目标 ≥ 44px */
+@media (max-width: 767px) {
+  .wf-submit {
+    padding-bottom: calc(0.75rem + var(--safe-bottom));
+    padding-left: 0.8rem;
+    padding-right: 0.8rem;
+  }
+
+  .wf-submit__btn {
+    min-height: 44px;
+    width: 100%;
+    margin-left: 0;
+    font-size: 0.95rem;
+  }
+}
 </style>

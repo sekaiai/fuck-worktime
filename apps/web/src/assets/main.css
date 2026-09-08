@@ -25,6 +25,7 @@
   --radius-lg: 18px;
   --radius-md: 14px;
   --radius-sm: 10px;
+  --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --shadow-soft: 0 18px 48px rgba(15, 23, 42, 0.08);
   --shadow-float: 0 24px 60px rgba(37, 99, 235, 0.14);
@@ -157,4 +158,13 @@ select, input[type='date'], input[type='time'] { appearance: none; }
 .field input:disabled, .field select:disabled {
   background: var(--color-bg-soft);
   color: var(--color-text-tertiary);
+}
+
+/* 移动端表单控件字号 ≥ 16px，防止 iOS Safari 聚焦时强制放大 */
+@media (max-width: 767px) {
+  .field input,
+  .field select,
+  .field textarea {
+    font-size: 1rem;
+  }
 }

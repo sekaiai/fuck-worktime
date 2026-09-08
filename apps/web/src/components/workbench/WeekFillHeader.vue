@@ -2,11 +2,13 @@
 import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 
+import { useIsMobile } from '../../composables/useIsMobile';
 import { useAuthStore } from '../../stores/auth';
 import { useHomeStore } from '../../stores/home';
 
 const homeStore = useHomeStore();
 const authStore = useAuthStore();
+const isMobile = useIsMobile();
 const subtitle = ref('工时填报工作台');
 const {
   board,
@@ -134,7 +136,7 @@ onMounted(async () => {
             <path d="M16 17l5-5-5-5" stroke-linecap="round" stroke-linejoin="round" />
             <path d="M21 12H9" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          退出
+          <span class="wfh-btn-text">退出</span>
         </button>
       </div>
     </div>
@@ -357,11 +359,20 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-/* 窄屏：品牌行与操作行各占一行，周切换保持可点 */
+/* 窄屏：品牌行与操作行各占一行，周切换保持可点；隐藏装饰性元素压缩顶栏 */
 @media (max-width: 767px) {
+  .wfh-bar {
+    padding-top: var(--safe-top);
+  }
+
   .wfh-bar__inner {
-    padding: 0.55rem 0.9rem;
-    gap: 0.5rem;
+    padding: 0.45rem 0.9rem;
+    gap: 0.4rem;
+  }
+
+  /* 隐藏一言副标题，保留「云上工时」品牌 */
+  .wfh-bar__subtitle {
+    display: none;
   }
 
   .wfh-bar__actions {
@@ -371,7 +382,8 @@ onMounted(async () => {
 
   .wfh-nav button {
     padding: 0.35rem 0.6rem;
-    font-size: 0.8rem;
+    min-height: 36px;
+    font-size: 0.85rem;
   }
 
   .wfh-range {
@@ -381,5 +393,36 @@ onMounted(async () => {
   .wfh-divider {
     display: none;
   }
+
+  /* 隐藏用户名·部门 */
+  .wfh-meta {
+    display: none;
+  }
+
+  /* 隐藏「通知」「退出」文字，只保留图标 */
+  .wfh-btn-text {
+    display: none;
+  }
+
+  .wfh-notify{
+    display: none;
+  }
+  
+  .wfh-autofill,
+  .wfh-logout {
+    min-height: 36px;
+    font-size: 0;
+  }
+
+  /* 「自动填报」保留文字，仅缩小徽标字号 */
+  .wfh-autofill {
+    font-size: 0.78rem;
+  }
+
+  .wfh-autofill .wfh-badge {
+    font-size: 0;
+  }
+
+ 
 }
 </style>

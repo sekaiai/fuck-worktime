@@ -594,6 +594,17 @@ onUnmounted(() => {
   }
 }
 
+/* 移动端隐藏 hero 装饰区，登录/安装才是核心操作 */
+@media (max-width: 767px) {
+  .login-page__hero {
+    display: none;
+  }
+
+  .login-page {
+    padding: 1rem;
+  }
+}
+
 @media (max-width: 640px) {
   .login-card__header {
     flex-direction: column;

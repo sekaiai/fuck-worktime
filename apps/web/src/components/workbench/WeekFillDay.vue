@@ -323,4 +323,22 @@ function onConfirmRevoke(): void {
   font-size: 0.82rem;
   cursor: pointer;
 }
+
+/* 移动端：取消缩进，加大触控目标 */
+@media (max-width: 767px) {
+  .wf-day__body {
+    padding-left: 0;
+  }
+
+  .wf-day__revoke {
+    min-height: 36px;
+    padding: 0.45rem 0.6rem;
+    font-size: 0.82rem;
+  }
+
+  .wf-day__add {
+    min-height: 36px;
+    font-size: 0.85rem;
+  }
+}
 </style>

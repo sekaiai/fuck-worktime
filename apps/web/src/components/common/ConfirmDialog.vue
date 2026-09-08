@@ -83,7 +83,7 @@ function onCancel(): void {
   box-shadow: var(--shadow-float);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .cd-backdrop {
     align-items: flex-end;
     padding: 0;

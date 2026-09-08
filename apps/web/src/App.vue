@@ -4,9 +4,11 @@ import { storeToRefs } from 'pinia';
 import { useRoute } from 'vue-router';
 
 import AppToast from './components/common/AppToast.vue';
+import { useIsMobile } from './composables/useIsMobile';
 import { useAuthStore } from './stores/auth';
 
 const route = useRoute();
+const isMobile = useIsMobile();
 const authStore = useAuthStore();
 const { isRestoring, userInfo } = storeToRefs(authStore);
 
@@ -29,9 +31,9 @@ watch(
 
 <template>
   <div class="app-shell">
-    <div class="app-shell__mesh app-shell__mesh--blue"></div>
-    <div class="app-shell__mesh app-shell__mesh--sky"></div>
-    <div class="app-shell__grid"></div>
+    <div v-if="!isMobile" class="app-shell__mesh app-shell__mesh--blue"></div>
+    <div v-if="!isMobile" class="app-shell__mesh app-shell__mesh--sky"></div>
+    <div v-if="!isMobile" class="app-shell__grid"></div>
 
     <RouterView v-slot="{ Component }">
       <Transition name="app-view" mode="out-in">

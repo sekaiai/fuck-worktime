@@ -286,5 +286,20 @@ function onContentInput(event: Event): void {
   .wf-row {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  /* 防 iOS Safari 聚焦放大：控件字号 ≥ 16px */
+  .wf-row__select,
+  .wf-row__hours,
+  .wf-row__content,
+  .wf-row__text {
+    font-size: 1rem;
+  }
+
+  /* 触控目标 ≥ 36px */
+  .wf-row__actions button {
+    min-height: 36px;
+    padding: 0.45rem 0.6rem;
+    font-size: 0.82rem;
+  }
 }
 </style>
