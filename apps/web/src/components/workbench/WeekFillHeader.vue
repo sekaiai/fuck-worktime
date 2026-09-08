@@ -365,13 +365,17 @@ onMounted(async () => {
     padding-top: var(--safe-top);
   }
 
+  .wfh-range{
+    display: none;
+  }
+
   .wfh-bar__inner {
     padding: 0.45rem 0.9rem;
     gap: 0.4rem;
   }
 
   /* 隐藏一言副标题，保留「云上工时」品牌 */
-  .wfh-bar__subtitle {
+  .wfh-bar__brand {
     display: none;
   }
 
@@ -403,10 +407,6 @@ onMounted(async () => {
   .wfh-btn-text {
     display: none;
   }
-
-  .wfh-notify{
-    display: none;
-  }
   
   .wfh-autofill,
   .wfh-logout {
@@ -420,7 +420,7 @@ onMounted(async () => {
   }
 
   .wfh-autofill .wfh-badge {
-    font-size: 0;
+    display: none;
   }
 
  
