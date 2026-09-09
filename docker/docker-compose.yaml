@@ -1,0 +1,18 @@
+version: '3.7'
+
+services:
+  fuck-api:
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/mcr.microsoft.com/playwright:v1.59.1-jammy
+    container_name: fuck-api
+    restart: always
+    working_dir: /app
+    command: ["node", "dist/main.js"]
+    volumes:
+      - /home/xueyang/code/fuck-working/apps/api:/app
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - NODE_ENV=production
+      - TZ=Asia/Shanghai
+    ports:
+      - 10016:10002

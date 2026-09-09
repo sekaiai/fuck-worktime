@@ -1,0 +1,629 @@
+import type { AutoFillConfig } from '../types/auto-fill';
+import type {
+  Project,
+  PreviousWeekContent,
+  ReportBatchRequest,
+  ReportActionResponse,
+  ReportFlowButtonsResponse,
+  ReportFlowStartResponse,
+  TimesheetEntry,
+  TimingRecord,
+  WeekBoardResponse,
+  WeekDay,
+  WorkDetail,
+  WorkTypeNode,
+} from '../types/timesheet';
+import { formatWeekRange, getWeekdayLabel } from '../utils/date';
+import {
+  ApiError,
+  apiRequest,
+  createTimeoutSignal,
+  getAuthToken,
+  unwrapApiData,
+} from './request';
+
+const GZDATA_BASE = 'https://times.gzbdgc.com.cn:8099/prod-api';
+const AI_GENERATION_TIMEOUT_MS = 90_000;
+
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeToken(token: string): string {
+  const trimmed = token.trim().replace(/[\r\n]/g, '');
+  return trimmed.startsWith('Bearer ') ? trimmed : `Bearer ${trimmed}`;
+}
+
+function toStringValue(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : value == null ? fallback : String(value);
+}
+
+function toNumberValue(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  return fallback;
+}
+
+function extractMessage(payload: unknown, fallback: string): string {
+  if (typeof payload === 'string' && payload.trim()) {
+    return payload;
+  }
+
+  if (isRecord(payload)) {
+    const msg = payload.msg;
+    const message = payload.message;
+
+    if (typeof msg === 'string' && msg.trim()) {
+      return msg;
+    }
+
+    if (typeof message === 'string' && message.trim()) {
+      return message;
+    }
+  }
+
+  return fallback;
+}
+
+function normalizeReportResponse(
+  payload: unknown,
+  successFallback: string,
+  failureFallback: string,
+): ReportActionResponse {
+  const record = isRecord(payload) ? payload : null;
+  const code = typeof record?.code === 'number' ? record.code : 200;
+  const data = record && 'data' in record ? record.data ?? null : null;
+
+  return {
+    code,
+    msg: extractMessage(payload, isReportSuccessCode(code) ? successFallback : failureFallback),
+    data,
+  };
+}
+
+async function parseJson<T>(response: Response): Promise<T | null> {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+
+  return JSON.parse(text) as T;
+}
+
+interface GzdataRequestOptions {
+  allowBusinessFailure?: boolean;
+}
+
+async function gzdataRawRequest(
+  path: string,
+  init?: RequestInit,
+  options: GzdataRequestOptions = {},
+): Promise<unknown> {
+  const token = getAuthToken();
+  if (!token) {
+    throw new ApiError('登录已失效，请重新登录', 401, 'TOKEN_EXPIRED');
+  }
+
+  const headers = new Headers(init?.headers);
+  headers.set('Accept', 'application/json, text/plain, */*');
+  headers.set('Authorization', normalizeToken(token));
+
+  if (init?.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  // 若调用方未传 signal，则附加默认超时（与 request.ts 一致）
+  const { signal, cleanup } = createTimeoutSignal(init);
+
+  let response: Response;
+  try {
+    response = await fetch(`${GZDATA_BASE}${path}`, {
+      ...init,
+      mode: 'cors',
+      headers,
+      signal,
+    });
+  } catch (error) {
+    cleanup();
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiError('请求超时，请稍后重试。', undefined, 'TIMEOUT');
+    }
+    throw new ApiError('网络请求失败，请检查网络后重试。');
+  }
+  cleanup();
+
+  const payload = await parseJson<unknown>(response);
+
+  if (response.status === 401) {
+    throw new ApiError('登录已失效，请重新登录', 401, 'TOKEN_EXPIRED');
+  }
+
+  if (!response.ok) {
+    throw new ApiError(
+      extractMessage(payload, `请求失败（${response.status}）`),
+      response.status,
+    );
+  }
+
+  if (isRecord(payload) && typeof payload.code === 'number') {
+    if (payload.code === 401) {
+      throw new ApiError(extractMessage(payload, '登录已失效，请重新登录'), 401, 'TOKEN_EXPIRED');
+    }
+
+    if (
+      payload.code !== 200 &&
+      payload.code !== 0 &&
+      !options.allowBusinessFailure
+    ) {
+      throw new ApiError(extractMessage(payload, '请求失败'), response.status);
+    }
+  }
+
+  return payload;
+}
+
+async function gzdataRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const payload = await gzdataRawRequest(path, init);
+  return unwrapApiData<T>(payload);
+}
+
+/**
+ * 后端 JSON 请求：内部复用 apiRequest，获得 authGate / x-gzdata-token / 401 处理的一致行为。
+ * 在此基础上保留原有语义：数组原样返回；带 code+data 的信封在业务 code 非 200/0 时抛 ApiError，否则解包 data。
+ */
+async function backendJsonRequest<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs?: number,
+): Promise<T> {
+  const { signal, cleanup } = createTimeoutSignal(init, timeoutMs);
+  try {
+    const payload: unknown = await apiRequest<unknown>(path, { ...init, signal });
+
+    if (Array.isArray(payload)) {
+      return payload as T;
+    }
+
+    if (isRecord(payload) && 'code' in payload && 'data' in payload) {
+      if (typeof payload.code === 'number' && payload.code !== 200 && payload.code !== 0) {
+        throw new ApiError(extractMessage(payload, '请求失败'));
+      }
+
+      return payload.data as T;
+    }
+
+    return payload as T;
+  } finally {
+    cleanup();
+  }
+}
+
+function normalizeWorkDetail(detail: unknown): WorkDetail {
+  const record = isRecord(detail) ? detail : {};
+  const projectId = toStringValue(record.projectId ?? record.proId ?? '');
+  const projectTitle = toStringValue(record.projectTitle ?? record.projectName ?? record.title ?? '');
+  const projectStatus = toNumberValue(record.projectStatus, -1);
+  const itemId = toStringValue(record.itemId ?? record.workTypeId ?? '');
+  const itemName = toStringValue(record.itemName ?? record.workTypeName ?? '');
+
+  return {
+    id: toStringValue(record.id ?? record.reportId ?? record.timingId),
+    period: toStringValue(record.period ?? record.timeRange ?? record.reportTime ?? ''),
+    hours: toNumberValue(record.hours ?? record.workHours),
+    content: toStringValue(record.content ?? record.workContent ?? ''),
+    status: toStringValue(record.status ?? record.statusName ?? ''),
+    statusDesc: toStringValue(record.statusDesc ?? record.statusLabel ?? record.status ?? ''),
+    ...(projectId ? { projectId } : {}),
+    ...(projectTitle ? { projectTitle } : {}),
+    ...(projectStatus >= 0 ? { projectStatus } : {}),
+    ...(itemId ? { itemId } : {}),
+    ...(itemName ? { itemName } : {}),
+  };
+}
+
+function normalizeWeekDay(day: unknown): WeekDay {
+  const record = isRecord(day) ? day : {};
+  const detailsSource = record.details ?? record.detailList ?? record.workingTimingList ?? [];
+  const details = Array.isArray(detailsSource) ? detailsSource.map(normalizeWorkDetail) : [];
+  const date = toStringValue(record.date ?? record.reportDate);
+  const totalHours = toNumberValue(
+    record.totalHours ?? record.hours,
+    details.reduce((sum, item) => sum + item.hours, 0),
+  );
+  const status = toStringValue(record.status ?? record.statusDesc ?? '未提交');
+  const displayText = toStringValue(
+    record.displayText ?? record.displayStatus ?? status,
+    status,
+  );
+
+  return {
+    date,
+    dayOfWeek: toStringValue(record.dayOfWeek ?? record.weekDay ?? record.weekName, getWeekdayLabel(date)),
+    isWeekend: Boolean(record.isWeekend),
+    status,
+    displayText,
+    displayStatus: toStringValue(record.displayStatus ?? displayText, displayText),
+    totalHours,
+    details,
+  };
+}
+
+function normalizeWeekBoard(value: unknown): WeekBoardResponse {
+  const record = isRecord(value) ? value : {};
+  const daysSource = Array.isArray(record.days) ? record.days : [];
+  const days = daysSource.map(normalizeWeekDay).filter((day) => day.date);
+  const totalHours = toNumberValue(
+    record.totalHours ?? record.hours,
+    days.reduce((sum, day) => sum + day.totalHours, 0),
+  );
+  const workDays = toNumberValue(record.workDays, -1);
+  const averageHours = toNumberValue(record.averageHours, -1);
+
+  return {
+    days,
+    weekRange: toStringValue(record.weekRange, formatWeekRange(days.map((day) => day.date))),
+    monday: toStringValue(record.monday, ''),
+    sunday: toStringValue(record.sunday, ''),
+    totalHours,
+    userName: toStringValue(record.userName ?? record.username, ''),
+    deptName: toStringValue(record.deptName ?? record.departmentName, ''),
+    workDays: workDays >= 0 ? workDays : undefined,
+    averageHours: averageHours >= 0 ? averageHours : undefined,
+    weekNumber: toNumberValue(record.weekNumber, 0) || undefined,
+    reportPeriod: toStringValue(record.reportPeriod, ''),
+    currentWeek: toStringValue(record.currentWeek, ''),
+  };
+}
+
+function normalizeProject(project: unknown): Project {
+  const record = isRecord(project) ? project : {};
+
+  return {
+    id: toStringValue(record.id ?? record.projectId),
+    title: toStringValue(record.title ?? record.projectTitle ?? record.name),
+    projectStatus: toNumberValue(record.projectStatus, 20),
+  };
+}
+
+function normalizeWorkType(node: unknown, parentId: string | null = null): WorkTypeNode {
+  const record = isRecord(node) ? node : {};
+  const id = toStringValue(record.id ?? record.itemId);
+  const childrenSource = Array.isArray(record.children) ? record.children : [];
+
+  return {
+    id,
+    name: toStringValue(record.name ?? record.title ?? record.itemName),
+    level: toNumberValue(record.level, parentId ? 2 : 1),
+    parentId,
+    children: childrenSource.map((child) => normalizeWorkType(child, id)),
+    extraFields: isRecord(record.extraFields)
+      ? {
+          selected: Boolean(record.extraFields.selected),
+        }
+      : undefined,
+  };
+}
+
+/**
+ * 上游 /working/timing/list 用数字状态码表示审批状态。
+ * 这里翻译成中文状态文案，再交给 mapDayStatus 复用全应用统一的状态判定与配色。
+ * 取值已与 /working/timing/week-board 的同 id 明细逐条对齐验证。
+ */
+const TIMING_STATUS_LABELS: Record<number, string> = {
+  100: '审批通过',
+  10: '待审批',
+  5: '审批不通过',
+};
+
+function normalizeTimingRecord(value: unknown): TimingRecord | null {
+  const record = isRecord(value) ? value : null;
+  if (!record) {
+    return null;
+  }
+
+  const reportDate = toStringValue(record.reportDate ?? record.date);
+  if (!reportDate) {
+    return null;
+  }
+
+  const status = toNumberValue(record.status, -1);
+
+  return {
+    id: toStringValue(record.id ?? record.reportId ?? record.timingId),
+    reportDate,
+    hours: toNumberValue(record.hours ?? record.workHours),
+    content: toStringValue(record.content ?? record.workContent ?? ''),
+    projectId: toStringValue(record.projectId ?? record.proId ?? ''),
+    projectTitle: toStringValue(record.projectTitle ?? record.projectName ?? ''),
+    itemId: toStringValue(record.itemId ?? record.workTypeId ?? ''),
+    status,
+    finishStatus: toNumberValue(record.finishStattus ?? record.finishStatus, -1),
+    reviewStatus: toNumberValue(record.reviewStatus, -1),
+  };
+}
+
+/** 状态码 → 中文状态文案；未知码统一按未提交处理，避免误判为已通过 */
+export function getTimingStatusLabel(status: number): string {
+  return TIMING_STATUS_LABELS[status] ?? '未提交';
+}
+
+/**
+ * 月历视图数据源：拉取 [startTime, endTime] 区间的填报记录。
+ * 与 week-board 同域，复用 gzdataRequest 的鉴权、超时与错误语义。
+ */
+export async function getTimingList(
+  startTime: string,
+  endTime: string,
+  pageSize = 50,
+): Promise<TimingRecord[]> {
+  const query = new URLSearchParams({
+    pageNum: '1',
+    pageSize: String(pageSize),
+    reportStartTime: startTime,
+    reportEndTime: endTime,
+  });
+  const payload = await gzdataRequest<unknown>(`/working/timing/list?${query.toString()}`);
+
+  return unwrapListSource(payload)
+    .map(normalizeTimingRecord)
+    .filter((item): item is TimingRecord => item !== null);
+}
+
+function unwrapListSource(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (isRecord(value)) {
+    if (Array.isArray(value.rows)) {
+      return value.rows;
+    }
+
+    if (Array.isArray(value.list)) {
+      return value.list;
+    }
+  }
+
+  return [];
+}
+
+export async function getWeekBoard(date: string): Promise<WeekBoardResponse> {
+  const payload = await gzdataRequest<unknown>(`/working/timing/week-board?date=${encodeURIComponent(date)}`);
+  return normalizeWeekBoard(payload);
+}
+
+export async function getProjects(): Promise<Project[]> {
+  const payload = await gzdataRequest<unknown>('/working/project/own-list');
+  return unwrapListSource(payload)
+    .map(normalizeProject)
+    .filter((project) => project.id && project.title);
+}
+
+export async function getWorkTypes(projectId: string): Promise<WorkTypeNode[]> {
+  const payload = await gzdataRequest<unknown>(
+    `/admin/working-config/tree?projectId=${encodeURIComponent(projectId)}`,
+  );
+
+  return unwrapListSource(payload)
+    .map((item) => normalizeWorkType(item))
+    .filter((item) => item.id && item.name);
+}
+
+export async function generateContent(work: string, days: number): Promise<string[]> {
+  const payload = await backendJsonRequest<unknown>('/timesheet/generate', {
+    method: 'POST',
+    body: JSON.stringify({ work, days }),
+  }, AI_GENERATION_TIMEOUT_MS);
+
+  if (Array.isArray(payload)) {
+    return payload.map((item) => toStringValue(item)).filter(Boolean);
+  }
+
+  return [];
+}
+
+export async function generateContentFromLastWeek(
+  lastWeekContents: PreviousWeekContent[],
+  targetWeekdays: string[],
+): Promise<string[]> {
+  const payload = await backendJsonRequest<unknown>('/timesheet/generate', {
+    method: 'POST',
+    body: JSON.stringify({
+      work: '根据上周填报内容生成',
+      days: targetWeekdays.length,
+      lastWeekContents,
+      targetWeekdays,
+    }),
+  }, AI_GENERATION_TIMEOUT_MS);
+
+  if (Array.isArray(payload)) {
+    return payload.map((item) => toStringValue(item)).filter(Boolean);
+  }
+
+  return [];
+}
+
+export async function submitBatch(body: ReportBatchRequest): Promise<ReportActionResponse> {
+  const payload = await gzdataRawRequest(
+    '/working/timing/reportBatch',
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+    { allowBusinessFailure: true },
+  );
+  return normalizeReportResponse(payload, '提交成功', '提交失败');
+}
+
+export function isReportSuccessCode(code: number): boolean {
+  return code === 200 || code === 0;
+}
+
+export async function revokeEntry(id: string): Promise<ReportActionResponse> {
+  const payload = await gzdataRawRequest(
+    `/working/timing/revoke?id=${encodeURIComponent(id)}`,
+    { method: 'POST' },
+  );
+  return normalizeReportResponse(payload, '撤回成功', '撤回失败');
+}
+
+const REPORT_FLOW_BUTTON_KEY = 'timing-audit-btn-report';
+
+function findReportFlowButtonKey(data: unknown): string | null {
+  if (!Array.isArray(data)) {
+    return null;
+  }
+
+  const button = data.find(
+    (item) => isRecord(item) && item.key === REPORT_FLOW_BUTTON_KEY,
+  );
+  return isRecord(button) && typeof button.key === 'string' ? button.key : null;
+}
+
+export async function getReportFlowTask(id: string): Promise<ReportFlowStartResponse> {
+  const payload = await gzdataRawRequest(
+    `/working-timing/flow/${encodeURIComponent(id)}`,
+    { method: 'GET' },
+    { allowBusinessFailure: true },
+  );
+  const response = normalizeReportResponse(payload, '操作成功', '获取提交流程失败');
+  const taskId = typeof response.data === 'string' && response.data.trim()
+    ? response.data
+    : null;
+
+  return { ...response, taskId };
+}
+
+export async function getReportFlowButtons(taskId: string): Promise<ReportFlowButtonsResponse> {
+  const payload = await gzdataRawRequest(
+    `/working-timing/flow/buttons?taskId=${encodeURIComponent(taskId)}`,
+    { method: 'GET' },
+    { allowBusinessFailure: true },
+  );
+  const response = normalizeReportResponse(payload, '操作成功', '获取提交按钮失败');
+
+  return {
+    ...response,
+    buttonKey: isReportSuccessCode(response.code) ? findReportFlowButtonKey(response.data) : null,
+  };
+}
+
+export async function handleReportFlow(
+  taskId: string,
+  buttonKey: string,
+  entry: TimesheetEntry,
+): Promise<ReportActionResponse> {
+  const payload = await gzdataRawRequest(
+    '/working-timing/flow/handle',
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json;charset=UTF-8',
+      },
+      body: JSON.stringify({
+        taskId,
+        submitInfo: {
+          buttonKey,
+          decision: 1,
+          opinion: '',
+          data: {
+            form: {
+              reportDate: entry.reportDate,
+              projectId: entry.projectId,
+              projectTitle: entry.projectTitle,
+              projectStatus: entry.projectStatus,
+              itemId: entry.itemId,
+              hours: entry.hours,
+              content: entry.content,
+            },
+          },
+        },
+      }),
+    },
+    { allowBusinessFailure: true },
+  );
+
+  return normalizeReportResponse(payload, '提交成功', '重新提交失败');
+}
+
+export async function deleteEntry(id: string): Promise<ReportActionResponse> {
+  const payload = await gzdataRawRequest(
+    `/working/timing/delete/${encodeURIComponent(id)}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      body: null,
+    },
+    { allowBusinessFailure: true },
+  );
+
+  return normalizeReportResponse(payload, '删除成功', '删除失败');
+}
+
+export async function saveAutoFillConfig(
+  config: Partial<AutoFillConfig> & { userId: string },
+): Promise<{ code: number; msg: string }> {
+  const response = await apiRequest('/timesheet/auto-fill', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  });
+
+  return {
+    code: response.code,
+    msg: response.msg,
+  };
+}
+
+export async function getAutoFillConfig(userId: string): Promise<AutoFillConfig | null> {
+  const response = await apiRequest<AutoFillConfig | null>(
+    `/timesheet/auto-fill?userId=${encodeURIComponent(userId)}`,
+  );
+  return response.data;
+}
+
+export async function disableAutoFill(userId: string): Promise<{ code: number; msg: string }> {
+  const response = await apiRequest(`/timesheet/auto-fill?userId=${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  });
+
+  return {
+    code: response.code,
+    msg: response.msg,
+  };
+}
+
+export async function runAutoFillNow(userId: string): Promise<{ code: number; msg: string }> {
+  const response = await apiRequest('/timesheet/auto-fill/run-now', {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+
+  return {
+    code: response.code,
+    msg: response.msg,
+  };
+}
+
+export function buildBatchPayload(entries: TimesheetEntry[]): ReportBatchRequest {
+  return {
+    workingTimingList: entries.map((entry) => ({
+      reportDate: entry.reportDate,
+      projectId: entry.projectId,
+      projectTitle: entry.projectTitle,
+      projectStatus: entry.projectStatus,
+      itemId: entry.itemId,
+      content: entry.content,
+      hours: entry.hours,
+    })),
+  };
+}

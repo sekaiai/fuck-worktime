@@ -5,7 +5,10 @@ coverage/
 .idea/
 .vscode/
 *.log
+*.tsbuildinfo
 
-api/.env
-web/.env
+apps/api/.env
+apps/web/.env
 
+/.workbuddy
+/apps/api/data

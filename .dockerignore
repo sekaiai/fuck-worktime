@@ -1,0 +1,6 @@
+node_modules
+.git
+.trae
+apps/api/dist
+apps/web/dist
+docker/.env
