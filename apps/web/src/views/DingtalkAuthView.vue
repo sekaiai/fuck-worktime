@@ -78,16 +78,6 @@ const hintText = computed(() => {
   return message.value || '如页面停滞，可手动刷新二维码重试。';
 });
 
-function detectMobileDevice(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  const mobileUserAgent = /Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(navigator.userAgent);
-  const smallScreen = window.matchMedia('(max-width: 768px)').matches;
-  return mobileUserAgent || smallScreen;
-}
-
 function clearTimer(): void {
   if (pollTimer !== null) {
     window.clearInterval(pollTimer);
@@ -171,7 +161,7 @@ async function startPolling(): Promise<void> {
 }
 
 async function loadQrcode(): Promise<void> {
-  if (showInstallGuide.value || isPhoneLoginMode.value) {
+  if (isMobile.value) {
     status.value = 'loading';
     message.value = '';
     qrcode.value = '';
@@ -227,7 +217,6 @@ async function submitPhoneLogin(): Promise<void> {
 }
 
 onMounted(() => {
-  isMobileDevice.value = detectMobileDevice();
   void loadQrcode();
 });
 
@@ -406,37 +395,6 @@ onUnmounted(() => {
 .login-card__badge.is-timeout {
   background: rgba(220, 76, 66, 0.12);
   color: var(--color-danger);
-}
-
-.install-guide {
-  display: grid;
-  gap: 0.9rem;
-}
-
-.install-guide__steps {
-  display: grid;
-  gap: 0.8rem;
-}
-
-.install-guide__step {
-  display: grid;
-  gap: 0.45rem;
-  padding: 1rem;
-  border-radius: var(--radius-xl);
-  background: var(--color-bg-soft);
-}
-
-.install-guide__step strong {
-  color: var(--color-primary-strong);
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  letter-spacing: 0.08em;
-}
-
-.install-guide__step p {
-  margin: 0;
-  color: var(--color-text-tertiary);
-  line-height: 1.65;
 }
 
 .login-card__form {
